@@ -40,12 +40,44 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
         Ok(())
     }
 
-    fn opendir(&mut self, _req: &fuse::Request, _ino: u64, _flags: u32, reply: fuse::ReplyOpen) {
-        debug!("Opening {:?} Inode {}", _req, _ino);
+    // fn opendir(&mut self, _req: &fuse::Request, _ino: u64, _flags: u32, reply: fuse::ReplyOpen) {
+    //     reply.opened(fh: u64, flags: u32)
+    //     debug!("Opening {:?} Inode {}", _req, _ino);
 
-        reply.error(ENOSYS);
+    //     reply.error(ENOSYS);
+    // }
+    fn readdir(
+        &mut self,
+        _req: &Request,
+        _ino: u64,
+        _fh: u64,
+        _offset: i64,
+        mut reply: fuse::ReplyDirectory,
+    ) {
+        let dir = match _ino {
+            1 => self.meta.get_root(),
+            _ => self.meta.get_dir(_ino),
+        };
+
+        let dir = match dir {
+            Ok(dir) => dir,
+            Err(err) => {
+                reply.error(ENOENT);
+                return;
+            }
+        };
+
+        for (index, entry) in dir.entries.iter().enumerate() {
+            reply.add(
+                1, //TODO: use real inode value here.
+                index as i64,
+                fuse::FileType::Directory,
+                OsStr::new(&entry.name),
+            );
+        }
+        reply.ok();
+        //reply.add(ino: u64, offset: i64, kind: FileType, name: T)
     }
-
     /// Look up a directory entry by name and get its attributes.
     fn lookup(&mut self, _req: &Request, _parent: u64, _name: &OsStr, reply: fuse::ReplyEntry) {
         let name = match _name.to_str() {
