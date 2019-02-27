@@ -7,7 +7,8 @@ use std::error;
 use std::fmt;
 
 mod inode;
-mod types;
+pub mod types;
+pub use types::EntryKind;
 
 pub type Result<T> = std::result::Result<T, Box<error::Error>>;
 
@@ -119,8 +120,7 @@ impl Manager {
         stmt.bind(1, inode as i64)?;
 
         if let sqlite::State::Row = stmt.next()? {
-            let inode: u64 = stmt.read::<i64>(0)? as u64;
-            let mut bytes: Vec<u8> = stmt.read(1)?;
+            let mut bytes: Vec<u8> = stmt.read(0)?;
             Self::dir_from(inode, &mut bytes)
         } else {
             Err(Error::boxed(format!(

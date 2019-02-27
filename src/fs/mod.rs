@@ -19,6 +19,21 @@ impl<'a> Filesystem<'a> {
     }
 }
 
+impl<'a> Filesystem<'a> {
+    fn lookup_entry(&mut self, entry: meta::types::Entry, reply: fuse::ReplyEntry) {
+        match entry.kind {
+            meta::EntryKind::Dir(dir) => match self.meta.get_dir_by_key(&dir.key) {
+                Ok(dir) => reply.entry(&self.ttl, &dir.attr(), 1),
+                Err(err) => reply.error(ENOENT),
+            },
+            _ => {
+                reply.error(ENOENT);
+                return;
+            }
+        };
+    }
+}
+
 impl<'a> fuse::Filesystem for Filesystem<'a> {
     fn init(&mut self, _req: &fuse::Request) -> Result<(), c_int> {
         info!("Initializing file system");
@@ -33,6 +48,37 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
 
     /// Look up a directory entry by name and get its attributes.
     fn lookup(&mut self, _req: &Request, _parent: u64, _name: &OsStr, reply: fuse::ReplyEntry) {
+        let name = match _name.to_str() {
+            Some(name) => name,
+            None => {
+                reply.error(ENOENT);
+                return;
+            }
+        };
+
+        let dir = match _parent {
+            1 => self.meta.get_root(),
+            _ => self.meta.get_dir(_parent),
+        };
+
+        let dir = match dir {
+            Ok(dir) => dir,
+            Err(err) => {
+                reply.error(ENOENT);
+                return;
+            }
+        };
+
+        // scan entries for the name
+        for entry in dir.entries {
+            if entry.name != name {
+                continue;
+            }
+
+            self.lookup_entry(entry, reply);
+            return;
+        }
+
         reply.error(ENOSYS);
     }
 
