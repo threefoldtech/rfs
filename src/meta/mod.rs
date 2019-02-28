@@ -7,6 +7,8 @@ use std::error;
 use std::fmt;
 
 mod inode;
+use inode::{Inode, Mask};
+
 pub mod types;
 pub use types::EntryKind;
 
@@ -63,7 +65,7 @@ impl error::Error for Error {}
 
 pub struct Manager {
     con: sqlite::Connection,
-    mask: inode::Mask,
+    mask: Mask,
 }
 
 impl Manager {
@@ -77,6 +79,10 @@ impl Manager {
         })
     }
 
+    pub fn get_inode(&self, ino: u64) -> Inode {
+        Inode::new(self.mask, ino)
+    }
+
     fn get_inode_mask(con: &sqlite::Connection) -> Result<inode::Mask> {
         let mut stmt = con.prepare("select max(rowid) from entries")?;
         if let sqlite::State::Row = stmt.next()? {
@@ -87,15 +93,28 @@ impl Manager {
         }
     }
 
-    fn dir_from(inode: u64, bytes: &mut Vec<u8>) -> Result<types::Dir> {
+    fn dir_inode_from_key(&self, key: &str) -> Option<Inode> {
+        let mut stmt = self
+            .con
+            .prepare("select rowid from entries where key = ?")
+            .ok()?;
+
+        stmt.bind(1, key);
+        if let sqlite::State::Row = stmt.next().ok()? {
+            let id: u64 = stmt.read::<i64>(0).ok()? as u64;
+            Some(Inode::new(self.mask, id))
+        } else {
+            None
+        }
+    }
+
+    fn dir_from(&self, ino: Inode, bytes: &mut Vec<u8>) -> Result<types::Dir> {
         let mut raw: &[u8] = bytes.as_ref();
 
         let msg = serialize::read_message(&mut raw, message::ReaderOptions::default())?;
 
         let dir = msg.get_root::<dir::Reader>()?;
-
-        //println!("Root {:?}", dir.get_location());
-        Ok(types::Dir::from(inode, &dir)?)
+        Ok(types::Dir::from(self, ino, dir)?)
     }
 
     pub fn get_dir_by_key(&self, key: &str) -> Result<types::Dir> {
@@ -105,26 +124,31 @@ impl Manager {
         stmt.bind(1, key)?;
 
         if let sqlite::State::Row = stmt.next()? {
-            let inode: u64 = stmt.read::<i64>(0)? as u64;
+            let id: u64 = stmt.read::<i64>(0)? as u64;
             let mut bytes: Vec<u8> = stmt.read(1)?;
-            Self::dir_from(inode, &mut bytes)
+            self.dir_from(Inode::new(self.mask, id), &mut bytes)
         } else {
             Err(Error::boxed(format!("dir with key '{}' not found", key)))
         }
     }
 
-    pub fn get_dir(&self, inode: u64) -> Result<types::Dir> {
+    pub fn get_dir(&self, inode: Inode) -> Result<types::Dir> {
+        if inode.ino() == 1 {
+            return self.get_root();
+        }
+
         let mut stmt = self
             .con
             .prepare("select value from entries where rowid = ?")?;
-        stmt.bind(1, inode as i64)?;
+        //make sure we use the dir part only for the query
+        stmt.bind(1, inode.dir().ino() as i64)?;
 
         if let sqlite::State::Row = stmt.next()? {
             let mut bytes: Vec<u8> = stmt.read(0)?;
-            Self::dir_from(inode, &mut bytes)
+            self.dir_from(inode.dir(), &mut bytes)
         } else {
             Err(Error::boxed(format!(
-                "dir with inode '{}' not found",
+                "dir with inode '{:?}' not found",
                 inode
             )))
         }
@@ -134,7 +158,7 @@ impl Manager {
         self.get_dir_by_key(format!("{}", Hash::new(loc)).as_str())
     }
 
-    pub fn get_root(&self) -> Result<types::Dir> {
+    fn get_root(&self) -> Result<types::Dir> {
         self.get_dir_by_loc("")
     }
 }

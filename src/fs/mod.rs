@@ -22,7 +22,7 @@ impl<'a> Filesystem<'a> {
 impl<'a> Filesystem<'a> {
     fn lookup_entry(&mut self, entry: meta::types::Entry, reply: fuse::ReplyEntry) {
         match entry.kind {
-            meta::EntryKind::Dir(dir) => match self.meta.get_dir_by_key(&dir.key) {
+            meta::EntryKind::Dir(dir) => match self.meta.get_dir(entry.inode) {
                 Ok(dir) => reply.entry(&self.ttl, &dir.attr(), 1),
                 Err(err) => reply.error(ENOENT),
             },
@@ -51,30 +51,68 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
         _req: &Request,
         _ino: u64,
         _fh: u64,
-        _offset: i64,
+        offset: i64,
         mut reply: fuse::ReplyDirectory,
     ) {
-        let dir = match _ino {
-            1 => self.meta.get_root(),
-            _ => self.meta.get_dir(_ino),
-        };
+        let inode = self.meta.get_inode(_ino);
 
-        let dir = match dir {
+        let dir = match self.meta.get_dir(inode) {
             Ok(dir) => dir,
             Err(err) => {
                 reply.error(ENOENT);
                 return;
             }
         };
+        /*
+            pub inode: Inode,
+            pub name: String,
+            pub size: u64,
+            pub acl: String,
+            pub modification: u32,
+            pub creation: u32,
+            pub kind: EntryKind,
+        */
+        use crate::meta::types::{Entry, EntryKind};
 
-        for (index, entry) in dir.entries.iter().enumerate() {
-            reply.add(
-                1, //TODO: use real inode value here.
+        let header: Vec<Entry> = vec![
+            Entry {
+                inode: dir.inode,
+                name: ".".to_string(),
+                size: 0,
+                acl: String::new(),
+                modification: 0,
+                creation: 0,
+                kind: EntryKind::Unknown,
+            },
+            Entry {
+                inode: dir.parent,
+                name: "..".to_string(),
+                size: 0,
+                acl: String::new(),
+                modification: 0,
+                creation: 0,
+                kind: EntryKind::Unknown,
+            },
+        ];
+
+        let to_skip = if offset == 0 { offset } else { offset + 1 } as usize;
+        for (index, entry) in header
+            .iter()
+            .chain(dir.entries.iter())
+            .enumerate()
+            .skip(to_skip)
+        {
+            if reply.add(
+                entry.inode.ino(),
                 index as i64,
                 fuse::FileType::Directory,
                 OsStr::new(&entry.name),
-            );
+            ) {
+                reply.error(ENOSYS);
+                return;
+            };
         }
+
         reply.ok();
         //reply.add(ino: u64, offset: i64, kind: FileType, name: T)
     }
@@ -88,12 +126,8 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
             }
         };
 
-        let dir = match _parent {
-            1 => self.meta.get_root(),
-            _ => self.meta.get_dir(_parent),
-        };
-
-        let dir = match dir {
+        let inode = self.meta.get_inode(_parent);
+        let dir = match self.meta.get_dir(inode) {
             Ok(dir) => dir,
             Err(err) => {
                 reply.error(ENOENT);
@@ -116,18 +150,17 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
 
     /// Get file attributes.
     fn getattr(&mut self, _req: &Request, _ino: u64, reply: fuse::ReplyAttr) {
-        let node = match _ino {
-            1 => self.meta.get_root(),
-            _ => {
-                reply.error(ENOENT);
-                return;
-            }
-        };
+        let inode = self.meta.get_inode(_ino);
+        if inode.index() != 0 {
+            debug!("we don't support files yet");
+            reply.error(ENOSYS);
+            return;
+        }
 
-        let node = match node {
+        let node = match self.meta.get_dir(inode) {
             Ok(node) => node,
             Err(err) => {
-                debug!("error getting root directory {}", err);
+                debug!("error getting directory {}", err);
                 reply.error(ENOENT);
                 return;
             }
