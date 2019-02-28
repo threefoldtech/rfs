@@ -91,8 +91,7 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
                 entry.node_type(),
                 OsStr::new(&entry.name),
             ) {
-                reply.error(ENOSYS);
-                return;
+                break;
             };
         }
 
@@ -134,21 +133,36 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
     /// Get file attributes.
     fn getattr(&mut self, _req: &Request, _ino: u64, reply: fuse::ReplyAttr) {
         let inode = self.meta.get_inode(_ino);
-        if inode.index() != 0 {
-            debug!("we don't support files yet");
-            reply.error(ENOSYS);
-            return;
-        }
 
         let node = match self.meta.get_node(inode) {
             Ok(node) => node,
             Err(err) => {
-                debug!("error getting directory {}", err);
                 reply.error(ENOENT);
                 return;
             }
         };
 
         reply.attr(&self.ttl, &node.attr());
+    }
+
+    /// Read symbolic link.
+    fn readlink(&mut self, _req: &Request, _ino: u64, reply: fuse::ReplyData) {
+        let inode = self.meta.get_inode(_ino);
+        let node = match self.meta.get_node(inode) {
+            Ok(node) => node,
+            Err(err) => {
+                reply.error(ENOENT);
+                return;
+            }
+        };
+        debug!("Read link {:?}", node.attr());
+        match node.kind() {
+            EntryKind::Link(l) => {
+                let mut target: String = l.target.clone();
+                target.push('\0');
+                reply.data(l.target.as_ref());
+            }
+            _ => reply.error(ENOENT),
+        }
     }
 }

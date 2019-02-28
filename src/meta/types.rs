@@ -10,6 +10,7 @@ const BlockSize: u64 = 4 * 1024;
 pub trait Node {
     fn attr(&self) -> fuse::FileAttr;
     fn node_type(&self) -> fuse::FileType;
+    fn kind(self: Box<Self>) -> EntryKind;
 }
 
 #[derive(Debug, Clone)]
@@ -26,16 +27,21 @@ pub struct FileEntry {
 }
 
 #[derive(Debug, Clone)]
+pub struct LinkEntry {
+    pub target: String,
+}
+
+#[derive(Debug, Clone)]
 pub enum EntryKind {
     Unknown,
     Dir(DirEntry),
     File(FileEntry),
+    Link(LinkEntry),
 }
 
 #[derive(Debug, Clone)]
 pub struct Entry {
     pub inode: Inode,
-    //pub parent: Inode,
     pub name: String,
     pub size: u64,
     pub acl: String,
@@ -45,12 +51,17 @@ pub struct Entry {
 }
 
 impl Node for Entry {
+    fn kind(self: Box<Entry>) -> EntryKind {
+        self.kind
+    }
+
     fn node_type(&self) -> fuse::FileType {
         use fuse::FileType;
 
         match self.kind {
             EntryKind::File(_) => FileType::RegularFile,
             EntryKind::Dir(_) => FileType::Directory,
+            EntryKind::Link(_) => FileType::Symlink,
             _ => FileType::Socket, // this should never happen
         }
     }
@@ -58,7 +69,11 @@ impl Node for Entry {
     fn attr(&self) -> fuse::FileAttr {
         fuse::FileAttr {
             ino: self.inode.ino(),
-            size: self.size,
+            size: if let EntryKind::Link(l) = &self.kind {
+                l.target.len() as u64
+            } else {
+                self.size
+            },
             blocks: self.size / BlockSize + if self.size % BlockSize > 0 { 1 } else { 0 },
             atime: Timespec::new(self.modification as i64, 0),
             mtime: Timespec::new(self.modification as i64, 0),
@@ -116,6 +131,12 @@ impl Dir {
                         blocks: vec![],
                     })
                 }
+                Which::Link(l) => {
+                    let l = l?;
+                    EntryKind::Link(LinkEntry {
+                        target: String::from(l.get_target()?),
+                    })
+                }
                 _ => EntryKind::Unknown,
             };
 
@@ -133,6 +154,8 @@ impl Dir {
                 creation: entry.get_creation_time(),
                 kind: kind,
             };
+
+            debug!("Dir {} entry {:?}", inode, e);
             entries.push(e);
         }
 
@@ -167,6 +190,10 @@ impl Dir {
 }
 
 impl Node for Dir {
+    fn kind(self: Box<Dir>) -> EntryKind {
+        EntryKind::Dir(DirEntry { key: String::new() })
+    }
+
     fn node_type(&self) -> fuse::FileType {
         fuse::FileType::Directory
     }
