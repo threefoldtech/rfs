@@ -1,4 +1,6 @@
 use crate::meta;
+use crate::meta::types::*;
+
 use fuse::Request;
 use libc::{c_int, ENOENT, ENOSYS};
 use std::ffi::OsStr;
@@ -20,16 +22,13 @@ impl<'a> Filesystem<'a> {
 }
 
 impl<'a> Filesystem<'a> {
-    fn lookup_entry(&mut self, entry: meta::types::Entry, reply: fuse::ReplyEntry) {
+    fn lookup_entry(&mut self, entry: Entry, reply: fuse::ReplyEntry) {
         match entry.kind {
-            meta::EntryKind::Dir(dir) => match self.meta.get_dir(entry.inode) {
+            EntryKind::Dir(dir) => match self.meta.get_dir(entry.inode) {
                 Ok(dir) => reply.entry(&self.ttl, &dir.attr(), 1),
                 Err(err) => reply.error(ENOENT),
             },
-            _ => {
-                reply.error(ENOENT);
-                return;
-            }
+            _ => reply.entry(&self.ttl, &entry.attr(), 1),
         };
     }
 }
@@ -40,12 +39,6 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
         Ok(())
     }
 
-    // fn opendir(&mut self, _req: &fuse::Request, _ino: u64, _flags: u32, reply: fuse::ReplyOpen) {
-    //     reply.opened(fh: u64, flags: u32)
-    //     debug!("Opening {:?} Inode {}", _req, _ino);
-
-    //     reply.error(ENOSYS);
-    // }
     fn readdir(
         &mut self,
         _req: &Request,
@@ -63,16 +56,6 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
                 return;
             }
         };
-        /*
-            pub inode: Inode,
-            pub name: String,
-            pub size: u64,
-            pub acl: String,
-            pub modification: u32,
-            pub creation: u32,
-            pub kind: EntryKind,
-        */
-        use crate::meta::types::{Entry, EntryKind};
 
         let header: Vec<Entry> = vec![
             Entry {
@@ -105,7 +88,7 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
             if reply.add(
                 entry.inode.ino(),
                 index as i64,
-                fuse::FileType::Directory,
+                entry.node_type(),
                 OsStr::new(&entry.name),
             ) {
                 reply.error(ENOSYS);
@@ -114,8 +97,8 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
         }
 
         reply.ok();
-        //reply.add(ino: u64, offset: i64, kind: FileType, name: T)
     }
+
     /// Look up a directory entry by name and get its attributes.
     fn lookup(&mut self, _req: &Request, _parent: u64, _name: &OsStr, reply: fuse::ReplyEntry) {
         let name = match _name.to_str() {
@@ -145,7 +128,7 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
             return;
         }
 
-        reply.error(ENOSYS);
+        reply.error(ENOENT);
     }
 
     /// Get file attributes.
@@ -157,7 +140,7 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
             return;
         }
 
-        let node = match self.meta.get_dir(inode) {
+        let node = match self.meta.get_node(inode) {
             Ok(node) => node,
             Err(err) => {
                 debug!("error getting directory {}", err);

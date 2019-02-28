@@ -5,33 +5,34 @@ use capnp::Error;
 use std::time::Instant;
 use time::Timespec;
 
-/*
-    name    @0: Text;
-    size    @1: UInt64;           # in bytes
+const BlockSize: u64 = 4 * 1024;
 
-    attributes: union {
-        dir     @2: SubDir;
-        file    @3: File;
-        link    @4: Link;
-        special @5: Special;
-    }
+pub trait Node {
+    fn attr(&self) -> fuse::FileAttr;
+    fn node_type(&self) -> fuse::FileType;
+}
 
-    aclkey           @6: Text;    # is pointer to ACL # FIXME: need to be int
-    modificationTime @7: UInt32;
-    creationTime     @8: UInt32;
-*/
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DirEntry {
     pub key: String,
 }
+#[derive(Debug, Clone)]
+pub struct FileBlock {}
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+pub struct FileEntry {
+    pub block_size: u16,
+    pub blocks: Vec<FileBlock>,
+}
+
+#[derive(Debug, Clone)]
 pub enum EntryKind {
     Unknown,
     Dir(DirEntry),
+    File(FileEntry),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Entry {
     pub inode: Inode,
     //pub parent: Inode,
@@ -41,6 +42,37 @@ pub struct Entry {
     pub modification: u32,
     pub creation: u32,
     pub kind: EntryKind,
+}
+
+impl Node for Entry {
+    fn node_type(&self) -> fuse::FileType {
+        use fuse::FileType;
+
+        match self.kind {
+            EntryKind::File(_) => FileType::RegularFile,
+            EntryKind::Dir(_) => FileType::Directory,
+            _ => FileType::Socket, // this should never happen
+        }
+    }
+
+    fn attr(&self) -> fuse::FileAttr {
+        fuse::FileAttr {
+            ino: self.inode.ino(),
+            size: self.size,
+            blocks: self.size / BlockSize + if self.size % BlockSize > 0 { 1 } else { 0 },
+            atime: Timespec::new(self.modification as i64, 0),
+            mtime: Timespec::new(self.modification as i64, 0),
+            ctime: Timespec::new(self.creation as i64, 0),
+            crtime: Timespec::new(self.creation as i64, 0),
+            kind: self.node_type(),
+            perm: 0o0755,
+            nlink: 1,
+            uid: 0,
+            gid: 0,
+            rdev: 0,
+            flags: 0,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -76,6 +108,13 @@ impl Dir {
                     let key = String::from(d?.get_key()?);
                     entry_inode = manager.dir_inode_from_key(&key).unwrap_or(entry_inode);
                     EntryKind::Dir(DirEntry { key: key })
+                }
+                Which::File(f) => {
+                    let f = f?;
+                    EntryKind::File(FileEntry {
+                        block_size: f.get_block_size(),
+                        blocks: vec![],
+                    })
                 }
                 _ => EntryKind::Unknown,
             };
@@ -125,8 +164,14 @@ impl Dir {
             entries: entries,
         })
     }
+}
 
-    pub fn attr(&self) -> fuse::FileAttr {
+impl Node for Dir {
+    fn node_type(&self) -> fuse::FileType {
+        fuse::FileType::Directory
+    }
+
+    fn attr(&self) -> fuse::FileAttr {
         fuse::FileAttr {
             ino: self.inode.ino(),
             size: self.size,
@@ -138,7 +183,7 @@ impl Dir {
             kind: fuse::FileType::Directory,
             perm: 0o0755,
             nlink: 1,
-            uid: 1000,
+            uid: 0,
             gid: 0,
             rdev: 0,
             flags: 0,
