@@ -52,7 +52,7 @@ pub struct Entry {
 }
 
 impl Node for Entry {
-    fn kind(self: Box<Entry>) -> EntryKind {
+    fn kind(self: Box<Self>) -> EntryKind {
         self.kind
     }
 
@@ -214,7 +214,7 @@ impl Dir {
 }
 
 impl Node for Dir {
-    fn kind(self: Box<Dir>) -> EntryKind {
+    fn kind(self: Box<Self>) -> EntryKind {
         EntryKind::Dir(DirEntry { key: String::new() })
     }
 

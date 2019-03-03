@@ -6,8 +6,8 @@ use sqlite::{open, Statement};
 use std::error;
 use std::fmt;
 
-mod inode;
-use inode::{Inode, Mask};
+pub mod inode;
+pub use inode::{Inode, Mask};
 
 pub mod types;
 pub use types::EntryKind;

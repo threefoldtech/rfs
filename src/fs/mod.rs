@@ -6,9 +6,12 @@ use libc::{c_int, ENOENT, ENOSYS};
 use std::ffi::OsStr;
 use time::Timespec;
 
+use lru::LruCache;
+
 pub struct Filesystem<'a> {
     meta: &'a meta::Manager,
     ttl: Timespec,
+    cache: LruCache<meta::Inode, Dir>,
 }
 
 impl<'a> Filesystem<'a> {
@@ -17,6 +20,7 @@ impl<'a> Filesystem<'a> {
         Filesystem {
             meta: meta,
             ttl: Timespec::new(30, 0),
+            cache: lru::LruCache::new(1000),
         }
     }
 }
@@ -31,6 +35,20 @@ impl<'a> Filesystem<'a> {
             _ => reply.entry(&self.ttl, &entry.attr(), 1),
         };
     }
+
+    // fn get_dir(&mut self, inode: meta::Inode) -> Option<Dir> {
+    //     if let Some(dir) = self.cache.get(&inode) {
+    //         return Some(dir);
+    //     }
+
+    //     let dir = match self.meta.get_dir(inode) {
+    //         Ok(dir) => dir,
+    //         Err(err) => {
+    //             reply.error(ENOENT);
+    //             return;
+    //         }
+    //     };
+    // }
 }
 
 impl<'a> fuse::Filesystem for Filesystem<'a> {

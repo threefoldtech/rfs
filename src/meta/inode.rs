@@ -1,7 +1,13 @@
 use std::fmt;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash, Eq)]
 pub struct Mask(u8);
+
+impl std::cmp::PartialEq for Mask {
+    fn eq(&self, other: &Mask) -> bool {
+        self.0 == other.0
+    }
+}
 
 impl Mask {
     /// get i node mask
@@ -30,12 +36,18 @@ impl Mask {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash, Eq)]
 pub struct Inode(Mask, u64);
 
 impl fmt::Display for Inode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "0x{:016x}", self.1)
+    }
+}
+
+impl std::cmp::PartialEq for Inode {
+    fn eq(&self, other: &Inode) -> bool {
+        self.1 == other.1
     }
 }
 
