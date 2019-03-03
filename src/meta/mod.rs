@@ -117,7 +117,7 @@ impl Manager {
         if let sqlite::State::Row = stmt.next()? {
             let id: u64 = stmt.read::<i64>(0)? as u64;
             let mut bytes: Vec<u8> = stmt.read(1)?;
-            Ok(types::Dir::new(&self, Inode::new(self.mask, id), bytes)?)
+            Ok(types::Dir::new(Inode::new(self.mask, id), bytes)?)
         } else {
             Err(Error::boxed(format!("dir with key '{}' not found", key)))
         }
@@ -136,7 +136,7 @@ impl Manager {
 
         if let sqlite::State::Row = stmt.next()? {
             let mut bytes: Vec<u8> = stmt.read(0)?;
-            Ok(types::Dir::new(&self, inode.dir(), bytes)?)
+            Ok(types::Dir::new(inode.dir(), bytes)?)
         } else {
             Err(Error::boxed(format!(
                 "dir with inode '{:?}' not found",
@@ -148,7 +148,7 @@ impl Manager {
     pub fn get_node<'a>(&'a self, inode: Inode) -> Result<Box<types::Node + 'a>> {
         let dir = Box::new(self.get_dir(inode.dir())?);
         let index = inode.index();
-        let entries = dir.entries()?;
+        let entries = dir.entries(self)?;
         if index == 0 {
             Ok(dir)
         } else if index <= entries.len() as u64 {

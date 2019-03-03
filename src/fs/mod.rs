@@ -68,7 +68,7 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
                 kind: EntryKind::Unknown,
             },
             Entry {
-                inode: dir.parent(),
+                inode: dir.parent(self.meta),
                 name: "..".to_string(),
                 size: 0,
                 acl: String::new(),
@@ -78,7 +78,7 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
             },
         ];
 
-        let entries = match dir.entries() {
+        let entries = match dir.entries(self.meta) {
             Ok(entries) => entries,
             Err(err) => {
                 reply.error(ENOENT);
@@ -125,7 +125,7 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
             }
         };
 
-        let entries = match dir.entries() {
+        let entries = match dir.entries(self.meta) {
             Ok(entries) => entries,
             Err(err) => {
                 reply.error(ENOENT);

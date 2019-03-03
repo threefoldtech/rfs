@@ -91,33 +91,30 @@ impl Node for Entry {
     }
 }
 
-pub struct Dir<'a> {
+pub struct Dir {
     pub inode: Inode,
-    manager: &'a Manager,
     msg: message::Reader<serialize::OwnedSegments>,
-    //dir: schema_capnp::dir::Reader<'a>,
 }
 
-impl<'a> Dir<'a> {
-    pub fn new(manager: &'a Manager, inode: Inode, data: Vec<u8>) -> Result<Dir<'a>, Error> {
+impl Dir {
+    pub fn new(inode: Inode, data: Vec<u8>) -> Result<Dir, Error> {
         let mut raw: &[u8] = data.as_ref();
 
         let msg = serialize::read_message(&mut raw, message::ReaderOptions::default())?;
 
         Ok(Dir {
             inode: inode,
-            manager: manager,
             msg: msg,
         })
     }
 
-    pub fn parent(&self) -> Inode {
+    pub fn parent(&self, manager: &Manager) -> Inode {
         let reader = self.msg.get_root::<schema_capnp::dir::Reader>().unwrap();
 
         match self.inode.ino() {
             1 => self.inode,
             _ => match reader.get_parent() {
-                Ok(v) => self.manager.dir_inode_from_key(&v).unwrap_or(self.inode),
+                Ok(v) => manager.dir_inode_from_key(&v).unwrap_or(self.inode),
                 Err(_) => self.inode,
             },
         }
@@ -160,7 +157,7 @@ impl<'a> Dir<'a> {
             .get_creation_time()
     }
 
-    pub fn entries(&self) -> Result<Vec<Entry>, Error> {
+    pub fn entries(&self, manager: &Manager) -> Result<Vec<Entry>, Error> {
         use schema_capnp::inode::attributes::Which;
 
         let dir = self.msg.get_root::<schema_capnp::dir::Reader>()?;
@@ -175,7 +172,7 @@ impl<'a> Dir<'a> {
             let kind = match attrs.which()? {
                 Which::Dir(d) => {
                     let key = String::from(d?.get_key()?);
-                    entry_inode = self.manager.dir_inode_from_key(&key).unwrap_or(entry_inode);
+                    entry_inode = manager.dir_inode_from_key(&key).unwrap_or(entry_inode);
                     EntryKind::Dir(DirEntry { key: key })
                 }
                 Which::File(f) => {
@@ -216,8 +213,8 @@ impl<'a> Dir<'a> {
     }
 }
 
-impl<'a> Node for Dir<'a> {
-    fn kind(self: Box<Dir<'a>>) -> EntryKind {
+impl Node for Dir {
+    fn kind(self: Box<Dir>) -> EntryKind {
         EntryKind::Dir(DirEntry { key: String::new() })
     }
 
