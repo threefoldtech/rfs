@@ -108,15 +108,6 @@ impl Manager {
         }
     }
 
-    fn dir_from(&self, ino: Inode, bytes: &mut Vec<u8>) -> Result<types::Dir> {
-        let mut raw: &[u8] = bytes.as_ref();
-
-        let msg = serialize::read_message(&mut raw, message::ReaderOptions::default())?;
-
-        let dir = msg.get_root::<dir::Reader>()?;
-        Ok(types::Dir::from(self, ino, dir)?)
-    }
-
     pub fn get_dir_by_key(&self, key: &str) -> Result<types::Dir> {
         let mut stmt = self
             .con
@@ -126,7 +117,7 @@ impl Manager {
         if let sqlite::State::Row = stmt.next()? {
             let id: u64 = stmt.read::<i64>(0)? as u64;
             let mut bytes: Vec<u8> = stmt.read(1)?;
-            self.dir_from(Inode::new(self.mask, id), &mut bytes)
+            Ok(types::Dir::new(&self, Inode::new(self.mask, id), bytes)?)
         } else {
             Err(Error::boxed(format!("dir with key '{}' not found", key)))
         }
@@ -145,7 +136,7 @@ impl Manager {
 
         if let sqlite::State::Row = stmt.next()? {
             let mut bytes: Vec<u8> = stmt.read(0)?;
-            self.dir_from(inode.dir(), &mut bytes)
+            Ok(types::Dir::new(&self, inode.dir(), bytes)?)
         } else {
             Err(Error::boxed(format!(
                 "dir with inode '{:?}' not found",
@@ -154,13 +145,14 @@ impl Manager {
         }
     }
 
-    pub fn get_node(&self, inode: Inode) -> Result<Box<types::Node>> {
-        let dir = self.get_dir(inode.dir())?;
+    pub fn get_node<'a>(&'a self, inode: Inode) -> Result<Box<types::Node + 'a>> {
+        let dir = Box::new(self.get_dir(inode.dir())?);
         let index = inode.index();
+        let entries = dir.entries()?;
         if index == 0 {
-            Ok(Box::new(dir))
-        } else if index <= dir.entries.len() as u64 {
-            let entry = &dir.entries[(index - 1) as usize];
+            Ok(dir)
+        } else if index <= entries.len() as u64 {
+            let entry = &entries[(index - 1) as usize];
             Ok(Box::new(entry.clone()))
         } else {
             Err(Error::boxed(format!("entry {} not found", inode)))

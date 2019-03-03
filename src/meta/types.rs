@@ -2,6 +2,7 @@ use super::inode::Inode;
 use super::Manager;
 use crate::schema_capnp;
 use capnp::Error;
+use capnp::{message, serialize};
 use std::time::Instant;
 use time::Timespec;
 
@@ -90,38 +91,91 @@ impl Node for Entry {
     }
 }
 
-#[derive(Debug)]
-pub struct Dir {
+pub struct Dir<'a> {
     pub inode: Inode,
-    pub parent: Inode,
-    pub name: String,
-    pub location: String,
-    pub size: u64,
-    pub acl: String,
-    pub modification: u32,
-    pub creation: u32,
-    pub entries: Vec<Entry>,
+    manager: &'a Manager,
+    msg: message::Reader<serialize::OwnedSegments>,
+    //dir: schema_capnp::dir::Reader<'a>,
 }
 
-impl Dir {
-    fn entries(
-        manager: &Manager,
-        inode: Inode,
-        dir: &schema_capnp::dir::Reader,
-    ) -> Result<Vec<Entry>, Error> {
+impl<'a> Dir<'a> {
+    pub fn new(manager: &'a Manager, inode: Inode, data: Vec<u8>) -> Result<Dir<'a>, Error> {
+        let mut raw: &[u8] = data.as_ref();
+
+        let msg = serialize::read_message(&mut raw, message::ReaderOptions::default())?;
+
+        Ok(Dir {
+            inode: inode,
+            manager: manager,
+            msg: msg,
+        })
+    }
+
+    pub fn parent(&self) -> Inode {
+        let reader = self.msg.get_root::<schema_capnp::dir::Reader>().unwrap();
+
+        match self.inode.ino() {
+            1 => self.inode,
+            _ => match reader.get_parent() {
+                Ok(v) => self.manager.dir_inode_from_key(&v).unwrap_or(self.inode),
+                Err(_) => self.inode,
+            },
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        self.msg
+            .get_root::<schema_capnp::dir::Reader>()
+            .unwrap()
+            .get_name()
+            .unwrap()
+    }
+
+    pub fn location(&self) -> &str {
+        self.msg
+            .get_root::<schema_capnp::dir::Reader>()
+            .unwrap()
+            .get_location()
+            .unwrap()
+    }
+
+    pub fn size(&self) -> u64 {
+        self.msg
+            .get_root::<schema_capnp::dir::Reader>()
+            .unwrap()
+            .get_size()
+    }
+
+    pub fn modification(&self) -> u32 {
+        self.msg
+            .get_root::<schema_capnp::dir::Reader>()
+            .unwrap()
+            .get_modification_time()
+    }
+
+    pub fn creation(&self) -> u32 {
+        self.msg
+            .get_root::<schema_capnp::dir::Reader>()
+            .unwrap()
+            .get_creation_time()
+    }
+
+    pub fn entries(&self) -> Result<Vec<Entry>, Error> {
         use schema_capnp::inode::attributes::Which;
+
+        let dir = self.msg.get_root::<schema_capnp::dir::Reader>()?;
 
         let mut entries: Vec<Entry> = vec![];
         let mut x = 0;
 
         for entry in dir.get_contents()? {
             x += 1;
-            let mut entry_inode = inode.at(x);
+            let mut entry_inode = self.inode.at(x);
             let attrs = entry.get_attributes();
             let kind = match attrs.which()? {
                 Which::Dir(d) => {
                     let key = String::from(d?.get_key()?);
-                    entry_inode = manager.dir_inode_from_key(&key).unwrap_or(entry_inode);
+                    entry_inode = self.manager.dir_inode_from_key(&key).unwrap_or(entry_inode);
                     EntryKind::Dir(DirEntry { key: key })
                 }
                 Which::File(f) => {
@@ -155,42 +209,15 @@ impl Dir {
                 kind: kind,
             };
 
-            debug!("Dir {} entry {:?}", inode, e);
             entries.push(e);
         }
 
         Ok(entries)
     }
-
-    pub fn from(
-        manager: &Manager,
-        inode: Inode,
-        dir: schema_capnp::dir::Reader,
-    ) -> Result<Dir, Error> {
-        let entries = Self::entries(manager, inode, &dir)?;
-
-        Ok(Dir {
-            inode: inode,
-            name: String::from(dir.get_name()?),
-            location: String::from(dir.get_location()?),
-            parent: match inode.ino() {
-                1 => inode,
-                _ => match dir.get_parent() {
-                    Ok(v) => manager.dir_inode_from_key(&v).unwrap_or(inode),
-                    Err(_) => inode,
-                },
-            },
-            size: dir.get_size(),
-            acl: String::from(dir.get_aclkey()?),
-            modification: dir.get_modification_time(),
-            creation: dir.get_creation_time(),
-            entries: entries,
-        })
-    }
 }
 
-impl Node for Dir {
-    fn kind(self: Box<Dir>) -> EntryKind {
+impl<'a> Node for Dir<'a> {
+    fn kind(self: Box<Dir<'a>>) -> EntryKind {
         EntryKind::Dir(DirEntry { key: String::new() })
     }
 
@@ -199,14 +226,17 @@ impl Node for Dir {
     }
 
     fn attr(&self) -> fuse::FileAttr {
+        let mtime = self.modification();
+        let ctime = self.creation();
+
         fuse::FileAttr {
             ino: self.inode.ino(),
-            size: self.size,
+            size: self.size(),
             blocks: 0,
-            atime: Timespec::new(self.modification as i64, 0),
-            mtime: Timespec::new(self.modification as i64, 0),
-            ctime: Timespec::new(self.creation as i64, 0),
-            crtime: Timespec::new(self.creation as i64, 0),
+            atime: Timespec::new(mtime as i64, 0),
+            mtime: Timespec::new(mtime as i64, 0),
+            ctime: Timespec::new(ctime as i64, 0),
+            crtime: Timespec::new(ctime as i64, 0),
             kind: fuse::FileType::Directory,
             perm: 0o0755,
             nlink: 1,

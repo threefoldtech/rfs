@@ -68,7 +68,7 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
                 kind: EntryKind::Unknown,
             },
             Entry {
-                inode: dir.parent,
+                inode: dir.parent(),
                 name: "..".to_string(),
                 size: 0,
                 acl: String::new(),
@@ -78,10 +78,18 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
             },
         ];
 
+        let entries = match dir.entries() {
+            Ok(entries) => entries,
+            Err(err) => {
+                reply.error(ENOENT);
+                return;
+            }
+        };
+
         let to_skip = if offset == 0 { offset } else { offset + 1 } as usize;
         for (index, entry) in header
             .iter()
-            .chain(dir.entries.iter())
+            .chain(entries.iter())
             .enumerate()
             .skip(to_skip)
         {
@@ -117,8 +125,16 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
             }
         };
 
+        let entries = match dir.entries() {
+            Ok(entries) => entries,
+            Err(err) => {
+                reply.error(ENOENT);
+                return;
+            }
+        };
+
         // scan entries for the name
-        for entry in dir.entries {
+        for entry in entries {
             if entry.name != name {
                 continue;
             }
