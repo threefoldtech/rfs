@@ -58,7 +58,7 @@ pub mod schema_capnp;
 fn main() {
     let mgr = meta::Manager::new("/tmp/flistdb.sqlite3".to_string()).unwrap();
     //let root = mgr.get_root().unwrap();
-    simple_logger::init_with_level(log::Level::Debug).unwrap();
+    //simple_logger::init_with_level(log::Level::Debug).unwrap();
     let p = path::Path::new("/tmp/mnt");
 
     let o: [&ffi::OsStr; 0] = [];

@@ -11,7 +11,8 @@ use lru::LruCache;
 pub struct Filesystem<'a> {
     meta: &'a meta::Manager,
     ttl: Timespec,
-    cache: LruCache<meta::Inode, Dir>,
+    dirs: LruCache<meta::Inode, Dir>,
+    entries: LruCache<meta::Inode, Vec<Entry>>,
 }
 
 impl<'a> Filesystem<'a> {
@@ -20,37 +21,42 @@ impl<'a> Filesystem<'a> {
         Filesystem {
             meta: meta,
             ttl: Timespec::new(30, 0),
-            cache: lru::LruCache::new(1000),
+            dirs: lru::LruCache::new(10),
+            entries: lru::LruCache::new(100),
         }
     }
 }
 
-impl<'a> Filesystem<'a> {
-    fn lookup_entry(&mut self, entry: Entry, reply: fuse::ReplyEntry) {
-        match entry.kind {
-            EntryKind::Dir(dir) => match Self::get_dir(self.meta, &mut self.cache, entry.inode) {
-                Some(dir) => reply.entry(&self.ttl, &dir.attr(), 1),
-                None => reply.error(ENOENT),
-            },
-            _ => reply.entry(&self.ttl, &entry.attr(), 1),
-        };
-    }
+fn lookup_entry(
+    meta: &meta::Manager,
+    cache: &mut lru::LruCache<meta::Inode, Dir>,
+    entry: &Entry,
+    ttl: &Timespec,
+    reply: fuse::ReplyEntry,
+) {
+    match &entry.kind {
+        EntryKind::Dir(dir) => match get_dir(meta, cache, entry.inode) {
+            Some(dir) => reply.entry(ttl, &dir.attr(), 1),
+            None => reply.error(ENOENT),
+        },
+        _ => reply.entry(ttl, &entry.attr(), 1),
+    };
+}
 
-    fn get_dir<'c>(
-        meta: &meta::Manager,
-        cache: &'c mut lru::LruCache<meta::Inode, Dir>,
-        inode: meta::Inode,
-    ) -> Option<&'c Dir> {
-        if cache.get(&inode).is_none() {
-            if let Ok(dir) = meta.get_dir(inode) {
-                cache.put(inode, dir);
-            } else {
-                return None;
-            }
+fn get_dir<'c>(
+    meta: &meta::Manager,
+    cache: &'c mut lru::LruCache<meta::Inode, Dir>,
+    inode: meta::Inode,
+) -> Option<&'c Dir> {
+    if cache.get(&inode).is_none() {
+        if let Ok(dir) = meta.get_dir(inode) {
+            cache.put(inode, dir);
+        } else {
+            return None;
         }
-
-        return cache.get(&inode);
     }
+
+    return cache.get(&inode);
 }
 
 impl<'a> fuse::Filesystem for Filesystem<'a> {
@@ -69,7 +75,7 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
     ) {
         let inode = self.meta.get_inode(_ino);
 
-        let dir = match Self::get_dir(self.meta, &mut self.cache, inode) {
+        let dir = match get_dir(self.meta, &mut self.dirs, inode) {
             Some(dir) => dir,
             None => {
                 reply.error(ENOENT);
@@ -137,7 +143,7 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
         };
 
         let inode = self.meta.get_inode(_parent);
-        let dir = match Self::get_dir(self.meta, &mut self.cache, inode) {
+        let dir = match get_dir(self.meta, &mut self.dirs, inode) {
             Some(dir) => dir,
             None => {
                 reply.error(ENOENT);
@@ -145,21 +151,32 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
             }
         };
 
-        let entries = match dir.entries(self.meta) {
-            Ok(entries) => entries,
-            Err(err) => {
+        if self.entries.get(&inode).is_none() {
+            let entries = match dir.entries(self.meta) {
+                Ok(entries) => entries,
+                Err(err) => {
+                    reply.error(ENOENT);
+                    return;
+                }
+            };
+            self.entries.put(inode, entries);
+        }
+
+        let entries = match self.entries.get(&inode) {
+            Some(entries) => entries,
+            None => {
                 reply.error(ENOENT);
                 return;
             }
         };
 
         // scan entries for the name
-        for entry in entries {
+        for entry in entries.iter() {
             if entry.name != name {
                 continue;
             }
 
-            self.lookup_entry(entry, reply);
+            lookup_entry(self.meta, &mut self.dirs, entry, &self.ttl, reply);
             return;
         }
 
@@ -167,32 +184,106 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
     }
 
     /// Get file attributes.
-    fn getattr(&mut self, _req: &Request, _ino: u64, reply: fuse::ReplyAttr) {
-        let inode = self.meta.get_inode(_ino);
-
-        let node = match self.meta.get_node(inode) {
-            Ok(node) => node,
-            Err(err) => {
+    fn getattr(&mut self, _req: &Request, ino: u64, reply: fuse::ReplyAttr) {
+        let inode = self.meta.get_inode(ino);
+        let dir = match get_dir(self.meta, &mut self.dirs, inode) {
+            Some(dir) => dir,
+            None => {
                 reply.error(ENOENT);
                 return;
             }
         };
 
-        reply.attr(&self.ttl, &node.attr());
+        let index = inode.index() as usize;
+        if index == 0 {
+            //dir inode
+            reply.attr(&self.ttl, &dir.attr());
+            return;
+        }
+
+        if self.entries.get(&inode).is_none() {
+            let entries = match dir.entries(self.meta) {
+                Ok(entries) => entries,
+                Err(err) => {
+                    reply.error(ENOENT);
+                    return;
+                }
+            };
+            self.entries.put(inode, entries);
+        }
+
+        let entries = match self.entries.get(&inode) {
+            Some(entries) => entries,
+            None => {
+                reply.error(ENOENT);
+                return;
+            }
+        };
+
+        if index > entries.len() {
+            reply.error(ENOENT);
+            return;
+        }
+
+        reply.attr(&self.ttl, &entries[index - 1].attr());
     }
 
     /// Read symbolic link.
-    fn readlink(&mut self, _req: &Request, _ino: u64, reply: fuse::ReplyData) {
-        let inode = self.meta.get_inode(_ino);
-        let node = match self.meta.get_node(inode) {
-            Ok(node) => node,
-            Err(err) => {
+    fn readlink(&mut self, _req: &Request, ino: u64, reply: fuse::ReplyData) {
+        let inode = self.meta.get_inode(ino);
+        let index = inode.index() as usize;
+
+        if index == 0 {
+            //dir inode
+            reply.error(ENOENT);
+            return;
+        }
+
+        let dir = match get_dir(self.meta, &mut self.dirs, inode) {
+            Some(dir) => dir,
+            None => {
                 reply.error(ENOENT);
                 return;
             }
         };
+
+        if self.entries.get(&inode).is_none() {
+            let entries = match dir.entries(self.meta) {
+                Ok(entries) => entries,
+                Err(err) => {
+                    reply.error(ENOENT);
+                    return;
+                }
+            };
+            self.entries.put(inode, entries);
+        }
+
+        let entries = match self.entries.get(&inode) {
+            Some(entries) => entries,
+            None => {
+                reply.error(ENOENT);
+                return;
+            }
+        };
+
+        if index > entries.len() {
+            reply.error(ENOENT);
+            return;
+        }
+
+        let node = &entries[index - 1];
+
+        // reply.attr(&self.ttl, &entries[index].attr());
+
+        // let node = match self.meta.get_node(inode) {
+        //     Ok(node) => node,
+        //     Err(err) => {
+        //         reply.error(ENOENT);
+        //         return;
+        //     }
+        // };
         debug!("Read link {:?}", node.attr());
-        match node.kind() {
+        match &node.kind {
             EntryKind::Link(l) => {
                 let mut target: String = l.target.clone();
                 target.push('\0');

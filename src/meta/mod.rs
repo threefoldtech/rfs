@@ -145,19 +145,19 @@ impl Manager {
         }
     }
 
-    pub fn get_node<'a>(&'a self, inode: Inode) -> Result<Box<types::Node + 'a>> {
-        let dir = Box::new(self.get_dir(inode.dir())?);
-        let index = inode.index();
-        let entries = dir.entries(self)?;
-        if index == 0 {
-            Ok(dir)
-        } else if index <= entries.len() as u64 {
-            let entry = &entries[(index - 1) as usize];
-            Ok(Box::new(entry.clone()))
-        } else {
-            Err(Error::boxed(format!("entry {} not found", inode)))
-        }
-    }
+    // pub fn get_node<'a>(&'a self, inode: Inode) -> Result<Box<types::Node + 'a>> {
+    //     let dir = Box::new(self.get_dir(inode.dir())?);
+    //     let index = inode.index();
+    //     let entries = dir.entries(self)?;
+    //     if index == 0 {
+    //         Ok(dir)
+    //     } else if index <= entries.len() as u64 {
+    //         let entry = &entries[(index - 1) as usize];
+    //         Ok(Box::new(entry.clone()))
+    //     } else {
+    //         Err(Error::boxed(format!("entry {} not found", inode)))
+    //     }
+    // }
 
     pub fn get_dir_by_loc(&self, loc: &str) -> Result<types::Dir> {
         self.get_dir_by_key(format!("{}", Hash::new(loc)).as_str())
