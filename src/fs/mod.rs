@@ -261,4 +261,32 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
             _ => reply.error(ENOENT),
         }
     }
+
+    fn open(&mut self, _req: &Request, ino: u64, _flags: u32, reply: fuse::ReplyOpen) {
+        let inode = self.meta.get_inode(ino);
+        let (_, entry) = match self.get_entry(inode) {
+            Ok(result) => result,
+            Err(err) => {
+                reply.error(err);
+                return;
+            }
+        };
+
+        let entry = match entry {
+            Some(entry) => entry,
+            None => {
+                reply.error(ENOSYS);
+                return;
+            }
+        };
+
+        match &entry.kind {
+            EntryKind::File(f) => {
+                //download parts
+
+                reply.error(ENOSYS);
+            }
+            _ => reply.error(ENOENT),
+        }
+    }
 }
