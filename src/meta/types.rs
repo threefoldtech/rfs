@@ -19,7 +19,10 @@ pub struct DirEntry {
     pub key: String,
 }
 #[derive(Debug, Clone)]
-pub struct FileBlock {}
+pub struct FileBlock {
+    Hash: Vec<u8>,
+    Key: Vec<u8>,
+}
 
 #[derive(Debug, Clone)]
 pub struct FileEntry {
@@ -158,6 +161,9 @@ impl Dir {
     }
 
     pub fn entries(&self, manager: &Manager) -> Result<Vec<Entry>, Error> {
+        /*
+        This definitely needs refactoring
+        */
         use schema_capnp::inode::attributes::Which;
 
         let dir = self.msg.get_root::<schema_capnp::dir::Reader>()?;
@@ -177,9 +183,22 @@ impl Dir {
                 }
                 Which::File(f) => {
                     let f = f?;
+
                     EntryKind::File(FileEntry {
                         block_size: f.get_block_size(),
-                        blocks: vec![],
+                        blocks: match f.get_blocks() {
+                            Ok(blocks) => {
+                                let mut result = vec![];
+                                for block in blocks {
+                                    result.push(FileBlock {
+                                        Hash: Vec::from(block.get_hash()?),
+                                        Key: Vec::from(block.get_key()?),
+                                    });
+                                }
+                                result
+                            }
+                            Err(err) => return Err(err),
+                        },
                     })
                 }
                 Which::Link(l) => {
