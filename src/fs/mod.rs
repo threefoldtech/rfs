@@ -283,7 +283,9 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
         match &entry.kind {
             EntryKind::File(f) => {
                 //download parts
-
+                for block in f.blocks.iter() {
+                    println!("Block Hash({:?}), Key({:?})", block.Hash, block.Key);
+                }
                 reply.error(ENOSYS);
             }
             _ => reply.error(ENOENT),

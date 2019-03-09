@@ -20,8 +20,8 @@ pub struct DirEntry {
 }
 #[derive(Debug, Clone)]
 pub struct FileBlock {
-    Hash: Vec<u8>,
-    Key: Vec<u8>,
+    pub Hash: Vec<u8>,
+    pub Key: Vec<u8>,
 }
 
 #[derive(Debug, Clone)]
