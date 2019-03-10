@@ -4,6 +4,7 @@ extern crate libc;
 extern crate log;
 extern crate blake2;
 extern crate capnp;
+extern crate crossbeam;
 extern crate lru;
 extern crate simple_logger;
 extern crate sqlite;
