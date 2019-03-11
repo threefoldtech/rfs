@@ -2,11 +2,12 @@ use crate::meta;
 use crate::meta::types::*;
 
 use fuse::Request;
-use libc::{c_int, ENOENT, ENOSYS};
+use libc::{c_int, EBADF, ENOENT, ENOSYS};
+use lru::LruCache;
 use std::ffi::OsStr;
 use time::Timespec;
 
-use lru::LruCache;
+mod dn;
 
 pub struct Filesystem<'a> {
     meta: &'a meta::Manager,
@@ -282,10 +283,21 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
 
         match &entry.kind {
             EntryKind::File(f) => {
-                //download parts
-                for block in f.blocks.iter() {
-                    println!("Block Hash({:?}), Key({:?})", block.Hash, block.Key);
-                }
+                let client = match redis::Client::open("redis://hub.grid.tf:9900") {
+                    Ok(client) => client,
+                    Err(err) => {
+                        error!("failed to create redis client {}", err);
+                        reply.error(EBADF);
+                        return;
+                    }
+                };
+
+                let manager = dn::Manager::new(5, &client);
+                manager.download(&f);
+                // //download parts
+                // for block in f.blocks.iter() {
+                //     println!("Block Hash({:?}), Key({:?})", block.Hash, block.Key);
+                // }
                 reply.error(ENOSYS);
             }
             _ => reply.error(ENOENT),
