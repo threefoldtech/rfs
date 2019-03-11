@@ -9,8 +9,10 @@ extern crate fs2;
 extern crate lru;
 extern crate redis;
 extern crate simple_logger;
+extern crate snappy;
 extern crate sqlite;
 extern crate time;
+extern crate xxtea;
 
 use std::ffi;
 use std::path;

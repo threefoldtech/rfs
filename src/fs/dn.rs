@@ -1,7 +1,8 @@
 use crate::meta::types;
 use crossbeam::scope;
 use fs2::FileExt;
-use redis;
+//use redis;
+use snappy::uncompress;
 use std::fmt;
 use std::fs;
 use std::io::{Seek, SeekFrom, Write};
@@ -75,7 +76,10 @@ impl<'a> Manager<'a> {
             .arg(block.Hash.to_vec())
             .query(&con)
             .unwrap();
-
+        //let key: &str = block.Key.as_ref();
+        //let key = std::str::from_utf8(&block.Key).unwrap();
+        let key = unsafe { std::str::from_utf8_unchecked(&block.Key) };
+        let mut result = uncompress(&xxtea::decrypt(&result, key)).unwrap();
         debug!(
             "writing file chunk {} (size: {})",
             block.Hash.hex(),
