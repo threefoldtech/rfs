@@ -30,7 +30,7 @@ fn main() {
 
     let o: [&ffi::OsStr; 0] = [];
 
-    let f = fs::Filesystem::new(&mgr);
+    let f = fs::Filesystem::new(&mgr, "redis://hub.grid.tf:9900").unwrap();
 
     fuse::mount(f, &p, &o).unwrap();
 }

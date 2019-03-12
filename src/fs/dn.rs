@@ -5,10 +5,112 @@ use fs2::FileExt;
 use snappy::uncompress;
 use std::fmt;
 use std::fs;
-use std::io::{Seek, SeekFrom, Write};
+use std::io::{Error, ErrorKind};
+use std::io::{Read, Result, Seek, SeekFrom, Write};
 use std::path;
 use std::thread;
 use std::time;
+
+pub struct Chain {
+    fds: Vec<fs::File>,
+    sizes: Vec<u64>,
+    fsize: u64,
+    file: usize,
+    offset: u64,
+}
+
+impl Chain {
+    fn new(fds: Vec<fs::File>) -> Result<Chain> {
+        let mut sizes = vec![];
+        let mut fsize = 0;
+        for fd in fds.iter() {
+            let s = fd.metadata()?.len();
+            fsize += s;
+            sizes.push(s);
+        }
+
+        Ok(Chain {
+            fds,
+            sizes,
+            fsize: fsize,
+            file: 0,
+            offset: 0,
+        })
+    }
+}
+
+impl Chain {
+    fn seek(&mut self, offset: u64) -> Result<()> {
+        let mut offset = offset;
+        let o = offset;
+        for (index, size) in self.sizes.iter().enumerate() {
+            if *size <= offset {
+                offset -= size;
+                continue;
+            }
+            // else, seek inside the file
+            self.fds[index].seek(SeekFrom::Start(offset))?;
+            self.file = index;
+            break;
+        }
+
+        if self.file < self.fds.len() - 1 {
+            //we need to make sure all successive files are seeked to beginning
+            for fd in self.fds[self.file + 1..].iter_mut() {
+                fd.seek(SeekFrom::Start(0))?;
+            }
+        }
+
+        self.offset = o;
+        Ok(())
+    }
+
+    pub fn read_offset(&mut self, offset: u64, buf: &mut [u8]) -> Result<usize> {
+        //move to offset, then read to buf
+        debug!("buffer size {}", buf.len());
+        if offset >= self.fsize {
+            return Ok(0);
+        } else if offset != self.offset {
+            self.seek(offset)?;
+        }
+
+        let mut read = 0;
+        loop {
+            let n = self.read(&mut buf[read..])?;
+            if n == 0 {
+                break;
+            }
+            read += n;
+            if read == buf.len() {
+                break;
+            }
+        }
+
+        Ok(read)
+    }
+}
+
+impl Read for Chain {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+        let mut count = 0;
+        for (index, fd) in self.fds.iter_mut().enumerate().skip(self.file) {
+            debug!("reading from chunk {}", index);
+            count += match fd.read(&mut buf[count..]) {
+                Ok(size) => size,
+                Err(err) => {
+                    return Err(err);
+                }
+            };
+            debug!("read {} bytes", count);
+            self.file = index;
+            if count >= buf.len() {
+                break;
+            }
+        }
+        self.offset += count as u64;
+        Ok(count)
+    }
+}
 
 trait Hex {
     fn hex(self: &Self) -> String;
@@ -37,15 +139,15 @@ impl fmt::Display for DownloadError {
 
 impl std::error::Error for DownloadError {}
 
-type Result<T> = std::result::Result<T, DownloadError>;
+//type Result<T> = std::result::Result<T, DownloadError>;
 
-pub struct Manager<'a> {
+pub struct Manager {
     size: usize,
-    client: &'a redis::Client,
+    client: redis::Client,
 }
 
-impl<'a> Manager<'a> {
-    pub fn new(size: usize, client: &'a redis::Client) -> Manager<'a> {
+impl Manager {
+    pub fn new(size: usize, client: redis::Client) -> Manager {
         Manager { size, client }
     }
 
@@ -94,7 +196,7 @@ impl<'a> Manager<'a> {
         file
     }
 
-    pub fn download(&self, object: &types::FileEntry) -> Result<Vec<fs::File>> {
+    fn download(&self, object: &types::FileEntry) -> Result<Vec<fs::File>> {
         let blocks = &object.blocks;
         let mut w = blocks.len() / self.size;
         if blocks.len() % self.size > 0 {
@@ -131,19 +233,25 @@ impl<'a> Manager<'a> {
                 match h.join() {
                     Ok(mut fds) => files.append(&mut fds),
                     Err(_) => {
-                        //do nothing here.
+                        //do nothing here. the scope will fail anyway
+                        //so error can be handled later.
                     }
                 }
             }
 
             files
         });
-
+        //std::io::Error::new(, error: E)
         match result {
             Ok(files) => Ok(files),
-            Err(err) => Err(DownloadError {
-                message: format!("{:?}", err),
-            }),
+            Err(err) => {
+                error!("failed to open file: {:?}", err);
+                Err(Error::from(ErrorKind::Other))
+            }
         }
+    }
+
+    pub fn open(&self, object: &types::FileEntry) -> Result<Chain> {
+        Chain::new(self.download(object)?)
     }
 }

@@ -2,8 +2,9 @@ use crate::meta;
 use crate::meta::types::*;
 
 use fuse::Request;
-use libc::{c_int, EBADF, ENOENT, ENOSYS};
+use libc::{c_int, EBADF, EIO, ENOENT, ENOSYS};
 use lru::LruCache;
+use std::collections::HashMap;
 use std::ffi::OsStr;
 use time::Timespec;
 
@@ -14,6 +15,8 @@ pub struct Filesystem<'a> {
     ttl: Timespec,
     dirs: LruCache<meta::Inode, Dir>,
     entries: LruCache<meta::Inode, Vec<Entry>>,
+    dn: dn::Manager,
+    fds: HashMap<u64, dn::Chain>,
 }
 
 fn get_dir<'c>(
@@ -34,13 +37,21 @@ fn get_dir<'c>(
 
 impl<'a> Filesystem<'a> {
     /// creates a new instance of the filesystem
-    pub fn new(meta: &'a meta::Manager) -> Filesystem<'a> {
-        Filesystem {
+    pub fn new(
+        meta: &'a meta::Manager,
+        hub: &str,
+    ) -> Result<Filesystem<'a>, Box<std::error::Error>> {
+        let client = redis::Client::open(hub)?;
+        let downloader = dn::Manager::new(10, client);
+
+        Ok(Filesystem {
             meta: meta,
             ttl: Timespec::new(30, 0),
             dirs: lru::LruCache::new(100),
             entries: lru::LruCache::new(100),
-        }
+            dn: downloader,
+            fds: HashMap::new(),
+        })
     }
 
     fn get_entries(&mut self, inode: meta::Inode) -> Result<(&Dir, &Vec<Entry>), c_int> {
@@ -263,7 +274,7 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
         }
     }
 
-    fn open(&mut self, _req: &Request, ino: u64, _flags: u32, reply: fuse::ReplyOpen) {
+    fn open(&mut self, _req: &Request, ino: u64, flags: u32, reply: fuse::ReplyOpen) {
         let inode = self.meta.get_inode(ino);
         let (_, entry) = match self.get_entry(inode) {
             Ok(result) => result,
@@ -279,28 +290,72 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
                 reply.error(ENOSYS);
                 return;
             }
-        };
+        }
+        .clone(); //we clone to end mut borrow of `self` so we can borrow again for download and open handlers
+                  //there must be a better way!
 
         match &entry.kind {
             EntryKind::File(f) => {
-                let client = match redis::Client::open("redis://hub.grid.tf:9900") {
-                    Ok(client) => client,
-                    Err(err) => {
-                        error!("failed to create redis client {}", err);
+                let fd = match self.dn.open(&f) {
+                    Ok(fd) => fd,
+                    Err(_) => {
                         reply.error(EBADF);
                         return;
                     }
                 };
 
-                let manager = dn::Manager::new(5, &client);
-                manager.download(&f);
-                // //download parts
-                // for block in f.blocks.iter() {
-                //     println!("Block Hash({:?}), Key({:?})", block.Hash, block.Key);
-                // }
-                reply.error(ENOSYS);
+                self.fds.insert(inode.ino(), fd);
+                reply.opened(inode.ino(), flags);
             }
             _ => reply.error(ENOENT),
         }
+    }
+
+    fn release(
+        &mut self,
+        _req: &Request,
+        _ino: u64,
+        fh: u64,
+        _flags: u32,
+        _lock_owner: u64,
+        _flush: bool,
+        reply: fuse::ReplyEmpty,
+    ) {
+        if let Some(fd) = self.fds.remove(&fh) {
+            debug!("releasing file handler {}", fh);
+        }
+
+        reply.ok();
+    }
+
+    fn read(
+        &mut self,
+        _req: &Request,
+        _ino: u64,
+        fh: u64,
+        offset: i64,
+        size: u32,
+        reply: fuse::ReplyData,
+    ) {
+        let mut fd = match self.fds.get_mut(&fh) {
+            Some(fd) => fd,
+            None => {
+                reply.error(EBADF);
+                return;
+            }
+        };
+
+        //let mut buf = [0; size];
+        let mut buf: Vec<u8> = vec![0; size as usize]; //Vec::with_capacity(size as usize);
+
+        let read = match fd.read_offset(offset as u64, &mut buf) {
+            Ok(read) => read,
+            Err(_) => {
+                reply.error(EIO); //probably change to something else
+                return;
+            }
+        };
+        debug!("read {} bytes", read);
+        reply.data(&buf[..read]);
     }
 }
