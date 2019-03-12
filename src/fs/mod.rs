@@ -6,9 +6,42 @@ use libc::{c_int, EBADF, EIO, ENOENT, ENOSYS};
 use lru::LruCache;
 use std::collections::HashMap;
 use std::ffi::OsStr;
+use std::ops::{Deref, DerefMut};
 use time::Timespec;
-
 mod dn;
+
+struct Counter<T> {
+    t: T,
+    count: u32,
+}
+
+impl<T> Counter<T> {
+    fn from(t: T) -> Counter<T> {
+        Counter { t, count: 1 }
+    }
+
+    fn incr(c: &mut Counter<T>) {
+        c.count += 1;
+    }
+
+    fn decr(c: &mut Counter<T>) -> u32 {
+        c.count -= 1;
+        c.count
+    }
+}
+
+impl<T> Deref for Counter<T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        &self.t
+    }
+}
+
+impl<T> DerefMut for Counter<T> {
+    fn deref_mut(&mut self) -> &mut T {
+        &mut self.t
+    }
+}
 
 pub struct Filesystem<'a> {
     meta: &'a meta::Manager,
@@ -16,7 +49,7 @@ pub struct Filesystem<'a> {
     dirs: LruCache<meta::Inode, Dir>,
     entries: LruCache<meta::Inode, Vec<Entry>>,
     dn: dn::Manager,
-    fds: HashMap<u64, dn::Chain>,
+    fds: HashMap<u64, Counter<dn::Chain>>,
 }
 
 fn get_dir<'c>(
@@ -276,6 +309,12 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
 
     fn open(&mut self, _req: &Request, ino: u64, flags: u32, reply: fuse::ReplyOpen) {
         let inode = self.meta.get_inode(ino);
+        if let Some(fd) = self.fds.get_mut(&inode.ino()) {
+            Counter::incr(fd);
+            reply.opened(inode.ino(), flags);
+            return;
+        }
+
         let (_, entry) = match self.get_entry(inode) {
             Ok(result) => result,
             Err(err) => {
@@ -304,7 +343,7 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
                     }
                 };
 
-                self.fds.insert(inode.ino(), fd);
+                self.fds.insert(inode.ino(), Counter::from(fd));
                 reply.opened(inode.ino(), flags);
             }
             _ => reply.error(ENOENT),
@@ -321,8 +360,17 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
         _flush: bool,
         reply: fuse::ReplyEmpty,
     ) {
-        if let Some(fd) = self.fds.remove(&fh) {
+        let count = match self.fds.get_mut(&fh) {
+            Some(fd) => Counter::decr(fd),
+            None => {
+                reply.ok();
+                return;
+            }
+        };
+
+        if count == 0 {
             debug!("releasing file handler {}", fh);
+            self.fds.remove(&fh);
         }
 
         reply.ok();

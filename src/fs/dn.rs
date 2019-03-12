@@ -67,7 +67,6 @@ impl Chain {
 
     pub fn read_offset(&mut self, offset: u64, buf: &mut [u8]) -> Result<usize> {
         //move to offset, then read to buf
-        debug!("buffer size {}", buf.len());
         if offset >= self.fsize {
             return Ok(0);
         } else if offset != self.offset {
@@ -94,14 +93,12 @@ impl Read for Chain {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         let mut count = 0;
         for (index, fd) in self.fds.iter_mut().enumerate().skip(self.file) {
-            debug!("reading from chunk {}", index);
             count += match fd.read(&mut buf[count..]) {
                 Ok(size) => size,
                 Err(err) => {
                     return Err(err);
                 }
             };
-            debug!("read {} bytes", count);
             self.file = index;
             if count >= buf.len() {
                 break;
