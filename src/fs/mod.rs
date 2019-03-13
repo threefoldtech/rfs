@@ -73,9 +73,10 @@ impl<'a> Filesystem<'a> {
     pub fn new(
         meta: &'a meta::Manager,
         hub: &str,
+        cache: &str,
     ) -> Result<Filesystem<'a>, Box<std::error::Error>> {
         let client = redis::Client::open(hub)?;
-        let downloader = dn::Manager::new(10, client);
+        let downloader = dn::Manager::new(num_cpus::get(), cache, client);
 
         Ok(Filesystem {
             meta: meta,

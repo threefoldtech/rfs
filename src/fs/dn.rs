@@ -121,8 +121,6 @@ impl Hex for Vec<u8> {
     }
 }
 
-const cache_dir: &str = "/tmp/cache";
-
 #[derive(Debug)]
 pub struct DownloadError {
     message: String,
@@ -136,16 +134,20 @@ impl fmt::Display for DownloadError {
 
 impl std::error::Error for DownloadError {}
 
-//type Result<T> = std::result::Result<T, DownloadError>;
-
 pub struct Manager {
     size: usize,
     client: redis::Client,
+    cache_dir: String,
 }
 
 impl Manager {
-    pub fn new(size: usize, client: redis::Client) -> Manager {
-        Manager { size, client }
+    pub fn new(size: usize, cache: &str, client: redis::Client) -> Manager {
+        fs::create_dir_all(cache);
+        Manager {
+            size,
+            client,
+            cache_dir: String::from(cache),
+        }
     }
 
     fn get_chunk(&self, name: String) -> std::io::Result<fs::File> {
@@ -154,7 +156,7 @@ impl Manager {
             .read(true)
             .write(true)
             .truncate(false)
-            .open(path::Path::new(cache_dir).join(name))
+            .open(path::Path::new(&self.cache_dir).join(name))
     }
 
     /// check_and_get runs inside a scoped thread, it communicate
@@ -200,7 +202,7 @@ impl Manager {
             w += 1;
         }
 
-        let result = scope(|sc| -> Vec<fs::File> {
+        let result = scope(|sc| -> Result<Vec<fs::File>> {
             let mut handlers = vec![];
             for id in 0..self.size {
                 let s = id * w;
@@ -229,18 +231,19 @@ impl Manager {
             for h in handlers {
                 match h.join() {
                     Ok(mut fds) => files.append(&mut fds),
-                    Err(_) => {
+                    Err(err) => {
                         //do nothing here. the scope will fail anyway
                         //so error can be handled later.
+                        return Err(Error::from(ErrorKind::Other));
                     }
                 }
             }
 
-            files
+            Ok(files)
         });
-        //std::io::Error::new(, error: E)
+
         match result {
-            Ok(files) => Ok(files),
+            Ok(files) => files,
             Err(err) => {
                 error!("failed to open file: {:?}", err);
                 Err(Error::from(ErrorKind::Other))
