@@ -1,18 +1,13 @@
-use crate::schema_capnp::dir;
+use anyhow::Result;
 use blake2::digest::{Input, VariableOutput};
 use blake2::VarBlake2b;
-use capnp::{message, serialize};
-use sqlite::{open, Statement};
-use std::error;
-use std::fmt;
-
+use sqlite::Statement;
+use std::fmt::{Error, Write};
 pub mod inode;
 pub use inode::{Inode, Mask};
 
 pub mod types;
-pub use types::EntryKind;
-
-pub type Result<T> = std::result::Result<T, Box<error::Error>>;
+pub use types::{Either, EntryKind};
 
 struct Hash(Vec<u8>);
 impl Hash {
@@ -22,15 +17,19 @@ impl Hash {
 
         Hash(hasher.vec_result())
     }
+
+    fn hex(&self) -> String {
+        let mut result = String::new();
+        for i in self.0.as_slice() {
+            write!(&mut result, "{:02x}", i).unwrap();
+        }
+        result
+    }
 }
 
 impl std::fmt::Display for Hash {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), fmt::Error> {
-        for i in self.0.as_slice() {
-            write!(f, "{:02x}", i)?;
-        }
-
-        Ok(())
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), Error> {
+        write!(f, "{}", self.hex())
     }
 }
 
@@ -39,29 +38,6 @@ impl sqlite::Bindable for Hash {
         stmt.bind(i, format!("{}", self).as_str())
     }
 }
-
-#[derive(Debug)]
-struct Error {
-    details: String,
-}
-
-impl Error {
-    fn new(msg: String) -> Error {
-        Error { details: msg }
-    }
-
-    fn boxed(msg: String) -> Box<Error> {
-        Box::new(Self::new(msg))
-    }
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.details)
-    }
-}
-
-impl error::Error for Error {}
 
 pub struct Manager {
     con: sqlite::Connection,
@@ -89,22 +65,21 @@ impl Manager {
             let max: i64 = stmt.read(0)?;
             Ok(inode::Mask::from(max as u64))
         } else {
-            Err(Error::boxed("failed to get inode count".to_string()))
+            bail!("failed to get inode count")
         }
     }
 
-    fn dir_inode_from_key(&self, key: &str) -> Option<Inode> {
+    fn dir_inode_from_key(&self, key: &str) -> Result<Inode> {
         let mut stmt = self
             .con
-            .prepare("select rowid from entries where key = ?")
-            .ok()?;
+            .prepare("select rowid from entries where key = ?")?;
 
-        stmt.bind(1, key);
-        if let sqlite::State::Row = stmt.next().ok()? {
-            let id: u64 = stmt.read::<i64>(0).ok()? as u64;
-            Some(Inode::new(self.mask, id))
+        stmt.bind(1, key)?;
+        if let sqlite::State::Row = stmt.next()? {
+            let id: u64 = stmt.read::<i64>(0)? as u64;
+            Ok(Inode::new(self.mask, id))
         } else {
-            None
+            bail!("not found")
         }
     }
 
@@ -116,10 +91,10 @@ impl Manager {
 
         if let sqlite::State::Row = stmt.next()? {
             let id: u64 = stmt.read::<i64>(0)? as u64;
-            let mut bytes: Vec<u8> = stmt.read(1)?;
-            Ok(types::Dir::new(Inode::new(self.mask, id), bytes)?)
+            let bytes: Vec<u8> = stmt.read(1)?;
+            Ok(types::Dir::new(&self, &bytes, Inode::new(self.mask, id))?)
         } else {
-            Err(Error::boxed(format!("dir with key '{}' not found", key)))
+            bail!("dir with key '{}' not found", key)
         }
     }
 
@@ -135,18 +110,15 @@ impl Manager {
         stmt.bind(1, inode.dir().ino() as i64)?;
 
         if let sqlite::State::Row = stmt.next()? {
-            let mut bytes: Vec<u8> = stmt.read(0)?;
-            Ok(types::Dir::new(inode.dir(), bytes)?)
+            let bytes: Vec<u8> = stmt.read(0)?;
+            Ok(types::Dir::new(&self, &bytes, inode.dir())?)
         } else {
-            Err(Error::boxed(format!(
-                "dir with inode '{:?}' not found",
-                inode
-            )))
+            bail!("dir with inode '{:?}' not found", inode)
         }
     }
 
     pub fn get_dir_by_loc(&self, loc: &str) -> Result<types::Dir> {
-        self.get_dir_by_key(format!("{}", Hash::new(loc)).as_str())
+        self.get_dir_by_key(&Hash::new(loc).hex())
     }
 
     fn get_root(&self) -> Result<types::Dir> {

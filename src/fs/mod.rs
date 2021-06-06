@@ -1,8 +1,9 @@
 use crate::meta;
 use crate::meta::types::*;
 
+use anyhow::Result;
 use fuse::Request;
-use libc::{c_int, EBADF, EIO, ENOENT, ENOSYS};
+use libc::{c_int, EBADF, EIO, ENOENT};
 use lru::LruCache;
 use std::collections::HashMap;
 use std::ffi::OsStr;
@@ -47,7 +48,7 @@ pub struct Filesystem<'a> {
     meta: &'a meta::Manager,
     ttl: Timespec,
     dirs: LruCache<meta::Inode, Dir>,
-    entries: LruCache<meta::Inode, Vec<Entry>>,
+    //entries: LruCache<meta::Inode, Vec<Entry>>,
     dn: dn::Manager,
     fds: HashMap<u64, Counter<dn::Chain>>,
 }
@@ -70,25 +71,21 @@ fn get_dir<'c>(
 
 impl<'a> Filesystem<'a> {
     /// creates a new instance of the filesystem
-    pub fn new(
-        meta: &'a meta::Manager,
-        hub: &str,
-        cache: &str,
-    ) -> Result<Filesystem<'a>, Box<std::error::Error>> {
+    pub fn new(meta: &'a meta::Manager, hub: &str, cache: &str) -> Result<Filesystem<'a>> {
         let client = redis::Client::open(hub)?;
-        let downloader = dn::Manager::new(num_cpus::get(), cache, client);
+        let downloader = dn::Manager::new(num_cpus::get(), cache, client)?;
 
         Ok(Filesystem {
             meta: meta,
             ttl: Timespec::new(30, 0),
             dirs: lru::LruCache::new(100),
-            entries: lru::LruCache::new(100),
+            //entries: lru::LruCache::new(100),
             dn: downloader,
             fds: HashMap::new(),
         })
     }
 
-    fn get_entries(&mut self, inode: meta::Inode) -> Result<(&Dir, &Vec<Entry>), c_int> {
+    fn get_dir(&mut self, inode: meta::Inode) -> std::result::Result<Dir, c_int> {
         let inode = inode.dir();
         let dir = match get_dir(self.meta, &mut self.dirs, inode) {
             Some(dir) => dir,
@@ -97,40 +94,22 @@ impl<'a> Filesystem<'a> {
             }
         };
 
-        if self.entries.get(&inode).is_none() {
-            let entries = match dir.entries(self.meta) {
-                Ok(entries) => entries,
-                Err(err) => {
-                    return Err(ENOENT);
-                }
-            };
-            self.entries.put(inode, entries);
-        }
-
-        let entries = match self.entries.get(&inode) {
-            Some(entries) => entries,
-            None => {
-                //reply.error(ENOENT);
-                return Err(ENOENT);
-            }
-        };
-
-        Ok((dir, entries))
+        Ok(dir.clone())
     }
 
-    fn get_entry(&mut self, inode: meta::Inode) -> Result<(&Dir, Option<&Entry>), c_int> {
-        let (dir, entries) = self.get_entries(inode.dir())?;
+    fn get_entry(&mut self, inode: meta::Inode) -> Result<meta::Either, c_int> {
+        let dir = self.get_dir(inode)?;
         let index = inode.index() as usize;
         match index {
-            0 => Ok((dir, None)),
-            _ if index <= entries.len() => Ok((dir, Some(&entries[index - 1]))),
+            0 => Ok(Either::dir(dir)),
+            _ if index <= dir.entries.len() => Ok(Either::entry(dir.entries[index - 1].clone())),
             _ => Err(ENOENT),
         }
     }
 
     fn get_entry_by_name(&mut self, parent: meta::Inode, name: &str) -> Result<Entry, c_int> {
-        let (_, entries) = self.get_entries(parent)?;
-        for entry in entries.iter() {
+        let dir = self.get_dir(parent)?;
+        for entry in dir.entries.iter() {
             if entry.name != name {
                 continue;
             }
@@ -157,8 +136,8 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
         mut reply: fuse::ReplyDirectory,
     ) {
         let inode = self.meta.get_inode(ino);
-        let (dir, entries) = match self.get_entries(inode) {
-            Ok(entries) => entries,
+        let dir = match self.get_dir(inode) {
+            Ok(dir) => dir,
             Err(err) => {
                 reply.error(err);
                 return;
@@ -176,7 +155,7 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
                 kind: EntryKind::Unknown,
             },
             Entry {
-                inode: dir.parent(self.meta),
+                inode: dir.parent,
                 name: "..".to_string(),
                 size: 0,
                 acl: String::new(),
@@ -189,7 +168,7 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
         let to_skip = if offset == 0 { offset } else { offset + 1 } as usize;
         for (index, entry) in header
             .iter()
-            .chain(entries.iter())
+            .chain(dir.entries.iter())
             .enumerate()
             .skip(to_skip)
         {
@@ -226,7 +205,7 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
         };
 
         match &entry.kind {
-            EntryKind::Dir(dir) => match get_dir(self.meta, &mut self.dirs, entry.inode) {
+            EntryKind::Dir(_dir) => match get_dir(self.meta, &mut self.dirs, entry.inode) {
                 Some(dir) => reply.entry(&self.ttl, &dir.attr(), 1),
                 None => reply.error(ENOENT),
             },
@@ -237,52 +216,23 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
     /// Get file attributes.
     fn getattr(&mut self, _req: &Request, ino: u64, reply: fuse::ReplyAttr) {
         let inode = self.meta.get_inode(ino);
-        let dir = match get_dir(self.meta, &mut self.dirs, inode) {
-            Some(dir) => dir,
-            None => {
-                reply.error(ENOENT);
+
+        let entry = match self.get_entry(inode) {
+            Ok(entry) => entry,
+            Err(code) => {
+                reply.error(code);
                 return;
             }
         };
 
-        let index = inode.index() as usize;
-        if index == 0 {
-            //dir inode
-            reply.attr(&self.ttl, &dir.attr());
-            return;
-        }
-
-        if self.entries.get(&inode).is_none() {
-            let entries = match dir.entries(self.meta) {
-                Ok(entries) => entries,
-                Err(err) => {
-                    reply.error(ENOENT);
-                    return;
-                }
-            };
-            self.entries.put(inode, entries);
-        }
-
-        let entries = match self.entries.get(&inode) {
-            Some(entries) => entries,
-            None => {
-                reply.error(ENOENT);
-                return;
-            }
-        };
-
-        if index > entries.len() {
-            reply.error(ENOENT);
-            return;
-        }
-
-        reply.attr(&self.ttl, &entries[index - 1].attr());
+        reply.attr(&self.ttl, &entry.attr());
+        return;
     }
 
     /// Read symbolic link.
     fn readlink(&mut self, _req: &Request, ino: u64, reply: fuse::ReplyData) {
         let inode = self.meta.get_inode(ino);
-        let (_, entry) = match self.get_entry(inode) {
+        let entry = match self.get_entry(inode) {
             Ok(result) => result,
             Err(err) => {
                 reply.error(err);
@@ -290,15 +240,7 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
             }
         };
 
-        let entry = match entry {
-            Some(entry) => entry,
-            None => {
-                reply.error(ENOSYS);
-                return;
-            }
-        };
-
-        match &entry.kind {
+        match entry.kind() {
             EntryKind::Link(l) => {
                 let mut target: String = l.target.clone();
                 target.push('\0');
@@ -316,7 +258,7 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
             return;
         }
 
-        let (_, entry) = match self.get_entry(inode) {
+        let entry = match self.get_entry(inode) {
             Ok(result) => result,
             Err(err) => {
                 reply.error(err);
@@ -324,17 +266,7 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
             }
         };
 
-        let entry = match entry {
-            Some(entry) => entry,
-            None => {
-                reply.error(ENOSYS);
-                return;
-            }
-        }
-        .clone(); //we clone to end mut borrow of `self` so we can borrow again for download and open handlers
-                  //there must be a better way!
-
-        match &entry.kind {
+        match entry.kind() {
             EntryKind::File(f) => {
                 let fd = match self.dn.open(&f) {
                     Ok(fd) => fd,
@@ -386,7 +318,7 @@ impl<'a> fuse::Filesystem for Filesystem<'a> {
         size: u32,
         reply: fuse::ReplyData,
     ) {
-        let mut fd = match self.fds.get_mut(&fh) {
+        let fd = match self.fds.get_mut(&fh) {
             Some(fd) => fd,
             None => {
                 reply.error(EBADF);

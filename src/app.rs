@@ -1,12 +1,10 @@
 use crate::fs;
 use crate::meta;
+use anyhow::Result;
 use clap;
 use log;
-use std::error::Error;
 use std::ffi::OsStr;
 use std::path;
-
-type Result<T> = std::result::Result<T, Box<Error>>;
 
 pub fn run(matches: &clap::ArgMatches) -> Result<()> {
     let meta_dir = matches.value_of("meta").unwrap(); //it is required

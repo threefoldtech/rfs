@@ -15,12 +15,14 @@ extern crate snappy;
 extern crate sqlite;
 extern crate time;
 extern crate xxtea;
-
+#[macro_use]
+extern crate anyhow;
 use clap::{App, Arg};
 
 mod app;
 mod fs;
 mod meta;
+#[allow(dead_code)]
 mod schema_capnp;
 
 fn main() {

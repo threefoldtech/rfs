@@ -56,10 +56,6 @@ impl Inode {
         Inode(mask, ino)
     }
 
-    pub fn mask(&self) -> Mask {
-        self.0
-    }
-
     pub fn ino(&self) -> u64 {
         self.1
     }

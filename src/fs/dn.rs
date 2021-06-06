@@ -8,8 +8,6 @@ use std::fs;
 use std::io::{Error, ErrorKind};
 use std::io::{Read, Result, Seek, SeekFrom, Write};
 use std::path;
-use std::thread;
-use std::time;
 
 pub struct Chain {
     fds: Vec<fs::File>,
@@ -141,13 +139,13 @@ pub struct Manager {
 }
 
 impl Manager {
-    pub fn new(size: usize, cache: &str, client: redis::Client) -> Manager {
-        fs::create_dir_all(cache);
-        Manager {
+    pub fn new(size: usize, cache: &str, client: redis::Client) -> Result<Manager> {
+        fs::create_dir_all(cache)?;
+        Ok(Manager {
             size,
             client,
             cache_dir: String::from(cache),
-        }
+        })
     }
 
     fn get_chunk(&self, name: String) -> std::io::Result<fs::File> {
@@ -162,7 +160,7 @@ impl Manager {
     /// check_and_get runs inside a scoped thread, it communicate
     /// errors with panics!
     fn check_and_get(&self, block: &types::FileBlock) -> fs::File {
-        let name = block.Hash.hex();
+        let name = block.hash.hex();
         let mut file = self.get_chunk(name).unwrap();
         file.lock_exclusive().unwrap();
         //TODO: check hash ?
@@ -171,19 +169,19 @@ impl Manager {
             return file;
         }
 
-        debug!("getting file chunk {}", block.Hash.hex());
+        debug!("getting file chunk {}", block.hash.hex());
         let con = self.client.get_connection().unwrap();
-        let mut result: Vec<u8> = redis::cmd("get")
-            .arg(block.Hash.to_vec())
+        let result: Vec<u8> = redis::cmd("get")
+            .arg(block.hash.to_vec())
             .query(&con)
             .unwrap();
         //let key: &str = block.Key.as_ref();
         //let key = std::str::from_utf8(&block.Key).unwrap();
-        let key = unsafe { std::str::from_utf8_unchecked(&block.Key) };
+        let key = unsafe { std::str::from_utf8_unchecked(&block.key) };
         let mut result = uncompress(&xxtea::decrypt(&result, key)).unwrap();
         debug!(
             "writing file chunk {} (size: {})",
-            block.Hash.hex(),
+            block.hash.hex(),
             result.len()
         );
 
@@ -231,7 +229,7 @@ impl Manager {
             for h in handlers {
                 match h.join() {
                     Ok(mut fds) => files.append(&mut fds),
-                    Err(err) => {
+                    Err(_) => {
                         //do nothing here. the scope will fail anyway
                         //so error can be handled later.
                         return Err(Error::from(ErrorKind::Other));
