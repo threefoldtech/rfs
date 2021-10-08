@@ -17,6 +17,14 @@ impl Hex for Vec<u8> {
     }
 }
 
+impl Hex for &[u8] {
+    fn hex(&self) -> String {
+        self.iter()
+            .map(|x| -> String { format!("{:02x}", x) })
+            .collect()
+    }
+}
+
 #[derive(Clone)]
 pub struct Cache {
     con: redis::aio::ConnectionManager,
@@ -62,7 +70,7 @@ impl Cache {
         Ok(data.len() as u64)
     }
 
-    async fn prepare(&self, id: &Vec<u8>) -> Result<File> {
+    async fn prepare(&self, id: &[u8]) -> Result<File> {
         let name = id.hex();
         if name.len() < 4 {
             bail!("invalid chunk hash");
