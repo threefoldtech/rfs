@@ -105,8 +105,6 @@ impl Metadata {
 
             return Self::new(dir.join("flistdb.sqlite3")).await;
         }
-
-        bail!("unknown metadata file extension");
     }
 
     pub async fn root(&self) -> Result<Arc<types::Entry>> {

@@ -162,10 +162,6 @@ pub enum EntryKind {
 }
 
 impl Entry {
-    pub fn node(&self) -> &Node {
-        &self.node
-    }
-
     pub async fn fill(&self, meta: &Metadata, attr: &mut FileAttr) -> Result<Inode> {
         use std::time::Duration;
 
@@ -187,7 +183,7 @@ impl Entry {
 
         let inode = match &self.kind {
             EntryKind::Unknown => bail!("unkown entry"),
-            EntryKind::Dir(dir) => {
+            EntryKind::Dir(_) => {
                 attr.nlink(2);
                 attr.mode(libc::S_IFDIR | mode);
                 inode
@@ -200,7 +196,7 @@ impl Entry {
                 attr.mode(libc::S_IFDIR | mode);
                 inode
             }
-            EntryKind::File(file) => {
+            EntryKind::File(_) => {
                 attr.nlink(1);
                 attr.mode(libc::S_IFREG | mode);
                 attr.blksize(4 * 1024);

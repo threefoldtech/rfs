@@ -65,10 +65,6 @@ impl Inode {
         self.1
     }
 
-    pub fn mask(&self) -> Mask {
-        return self.0;
-    }
-
     /// split this value into (dir, index)
     pub fn split(&self) -> (u64, u64) {
         self.0.split(self.1)
@@ -79,12 +75,6 @@ impl Inode {
     pub fn dir(&self) -> Inode {
         let (dir, _) = self.split();
         Inode::new(self.0, dir)
-    }
-
-    /// index of inode, 0 means the directory entry, all sub entries start with 1
-    pub fn index(&self) -> u64 {
-        let (_, index) = self.split();
-        index
     }
 
     /// gets the inode value of an entry under this inode directory
