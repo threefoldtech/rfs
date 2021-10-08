@@ -1,31 +1,30 @@
-extern crate fuse;
-extern crate libc;
-#[macro_use]
-extern crate log;
-extern crate blake2;
-extern crate capnp;
-extern crate clap;
-extern crate crossbeam;
-extern crate fs2;
-extern crate lru;
-extern crate num_cpus;
-extern crate redis;
-extern crate simple_logger;
-extern crate snappy;
-extern crate sqlite;
-extern crate time;
-extern crate xxtea;
 #[macro_use]
 extern crate anyhow;
+#[macro_use]
+extern crate thiserror;
+#[macro_use]
+extern crate log;
+use anyhow::Result;
 use clap::{App, Arg};
 
-mod app;
+mod cache;
 mod fs;
 mod meta;
-#[allow(dead_code)]
-mod schema_capnp;
+pub mod schema_capnp {
+    include!(concat!(env!("OUT_DIR"), "/schema_capnp.rs"));
+}
 
-fn main() {
+/*
+"-cache", f.cache,
+"-meta", flistPath,
+"-storage-url", storage,
+"-daemon",
+"-log", logPath,
+// this is always read-only
+"-ro",
+*/
+#[tokio::main]
+async fn main() -> Result<()> {
     let matches = App::new("Mount Flists")
         .version("0.1")
         .author("Muhamad Azmy")
@@ -62,10 +61,21 @@ fn main() {
         )
         .get_matches();
 
-    match app::run(&matches) {
-        Err(err) => eprintln!("{}", err),
-        _ => {
-            return;
-        }
-    };
+    if matches.is_present("debug") {
+        simple_logger::init_with_level(log::Level::Debug)?;
+    } else {
+        simple_logger::init_with_level(log::Level::Info)?;
+    }
+
+    let cache = cache::Cache::new(
+        matches.value_of("hub").unwrap(),
+        matches.value_of("cache").unwrap(),
+    )
+    .await?;
+
+    let mgr = meta::Metadata::open(matches.value_of("meta").unwrap()).await?;
+
+    let filesystem = fs::Filesystem::new(mgr, cache);
+
+    filesystem.mount(matches.value_of("target").unwrap()).await
 }

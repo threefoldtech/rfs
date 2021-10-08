@@ -1,22 +1,27 @@
 use super::inode::Inode;
-use super::Manager;
+use super::Metadata;
 use crate::schema_capnp;
 use anyhow::Result;
 use capnp::{message, serialize};
-use time::Timespec;
+use nix::unistd::{Group, User};
+use polyfuse::reply::FileAttr;
+use std::sync::Arc;
 
-const BLOCK_SIZE: u64 = 4 * 1024;
-
-pub trait Node {
-    fn attr(&self) -> fuse::FileAttr;
-    fn node_type(&self) -> fuse::FileType;
-    fn kind(&self) -> EntryKind;
+#[derive(Debug, Clone)]
+pub struct Node {
+    pub inode: Inode,
+    pub name: String,
+    pub size: u64,
+    pub acl: String,
+    pub modification: u32,
+    pub creation: u32,
 }
 
 #[derive(Debug, Clone)]
-pub struct DirEntry {
+pub struct SubDir {
     pub key: String,
 }
+
 #[derive(Debug, Clone)]
 pub struct FileBlock {
     pub hash: Vec<u8>,
@@ -24,129 +29,56 @@ pub struct FileBlock {
 }
 
 #[derive(Debug, Clone)]
-pub struct FileEntry {
+pub struct File {
     pub block_size: u16,
     pub blocks: Vec<FileBlock>,
 }
 
 #[derive(Debug, Clone)]
-pub struct LinkEntry {
+pub struct Link {
     pub target: String,
 }
 
 #[derive(Debug, Clone)]
-pub enum EntryKind {
-    Unknown,
-    Dir(DirEntry),
-    File(FileEntry),
-    Link(LinkEntry),
-}
-
-#[derive(Debug, Clone)]
-pub struct Entry {
-    pub inode: Inode,
-    pub name: String,
-    pub size: u64,
-    pub acl: String,
-    pub modification: u32,
-    pub creation: u32,
-    pub kind: EntryKind,
-}
-
-impl Node for Entry {
-    fn kind(&self) -> EntryKind {
-        self.kind.clone()
-    }
-
-    fn node_type(&self) -> fuse::FileType {
-        use fuse::FileType;
-
-        match self.kind {
-            EntryKind::File(_) => FileType::RegularFile,
-            EntryKind::Dir(_) => FileType::Directory,
-            EntryKind::Link(_) => FileType::Symlink,
-            _ => FileType::Socket, // this should never happen
-        }
-    }
-
-    fn attr(&self) -> fuse::FileAttr {
-        fuse::FileAttr {
-            ino: self.inode.ino(),
-            size: if let EntryKind::Link(l) = &self.kind {
-                l.target.len() as u64
-            } else {
-                self.size
-            },
-            blocks: self.size / BLOCK_SIZE + if self.size % BLOCK_SIZE > 0 { 1 } else { 0 },
-            atime: Timespec::new(self.modification as i64, 0),
-            mtime: Timespec::new(self.modification as i64, 0),
-            ctime: Timespec::new(self.creation as i64, 0),
-            crtime: Timespec::new(self.creation as i64, 0),
-            kind: self.node_type(),
-            perm: 0o0755,
-            nlink: 1,
-            uid: 0,
-            gid: 0,
-            rdev: 0,
-            flags: 0,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
 pub struct Dir {
-    pub inode: Inode,
-    pub name: String,
-    pub location: String,
-    pub size: u64,
-    pub modification_time: u32,
-    pub creation_time: u32,
-    pub parent: Inode,
-    pub entries: Vec<Entry>,
+    pub key: String,
+    pub parent: String,
+    // we use arch for shallow clone of directory
+    pub entries: Arc<Vec<Entry>>,
 }
 
 impl Dir {
-    pub fn new(mgr: &Manager, data: &Vec<u8>, inode: Inode) -> Result<Dir> {
+    pub fn new<S: AsRef<str>>(key: S, inode: Inode, data: Vec<u8>) -> Result<Entry> {
         let mut raw: &[u8] = data.as_ref();
 
         let msg = serialize::read_message(&mut raw, message::ReaderOptions::default())?;
 
         let root = msg.get_root::<schema_capnp::dir::Reader>()?;
         let name: String = root.get_name()?.into();
-        let location: String = root.get_location()?.into();
+        let parent: String = root.get_parent()?.into();
         let size = root.get_size();
-        let modification_time = root.get_modification_time();
-        let creation_time = root.get_creation_time();
-        let entries = Dir::entries(inode, root, mgr)?;
-        let parent = Dir::parent(inode, root, mgr)?;
+        let modification = root.get_modification_time();
+        let creation = root.get_creation_time();
+        let entries = Dir::entries(inode, root)?;
 
-        Ok(Dir {
-            inode,
-            name,
-            location,
-            size,
-            modification_time,
-            creation_time,
-            parent,
-            entries,
+        Ok(Entry {
+            node: Node {
+                inode,
+                name,
+                size,
+                acl: "".into(),
+                modification,
+                creation,
+            },
+            kind: EntryKind::Dir(Dir {
+                key: key.as_ref().into(),
+                parent: parent,
+                entries: Arc::new(entries),
+            }),
         })
     }
 
-    fn parent(inode: Inode, dir: schema_capnp::dir::Reader, manager: &Manager) -> Result<Inode> {
-        match inode.ino() {
-            1 => Ok(inode),
-            _ => {
-                let key = dir.get_parent()?;
-                manager.dir_inode_from_key(&key)
-            }
-        }
-    }
-
-    fn entries(
-        ino: Inode,
-        dir: schema_capnp::dir::Reader,
-        manager: &Manager,
-    ) -> Result<Vec<Entry>> {
+    fn entries(ino: Inode, dir: schema_capnp::dir::Reader) -> Result<Vec<Entry>> {
         /*
         This definitely needs refactoring
         */
@@ -157,18 +89,27 @@ impl Dir {
 
         for entry in dir.get_contents()? {
             x += 1;
-            let mut entry_inode = ino.at(x);
+            let inode = ino.at(x);
+            let node = Node {
+                inode: inode,
+                //parent: inode,
+                name: String::from(entry.get_name()?),
+                size: entry.get_size(),
+                acl: String::from(entry.get_aclkey()?),
+                modification: entry.get_modification_time(),
+                creation: entry.get_creation_time(),
+            };
+
             let attrs = entry.get_attributes();
             let kind = match attrs.which()? {
                 Which::Dir(d) => {
                     let key = String::from(d?.get_key()?);
-                    entry_inode = manager.dir_inode_from_key(&key).unwrap_or(entry_inode);
-                    EntryKind::Dir(DirEntry { key: key })
+                    EntryKind::SubDir(SubDir { key })
                 }
                 Which::File(f) => {
                     let f = f?;
 
-                    EntryKind::File(FileEntry {
+                    EntryKind::File(File {
                         block_size: f.get_block_size(),
                         blocks: match f.get_blocks() {
                             Ok(blocks) => {
@@ -187,7 +128,7 @@ impl Dir {
                 }
                 Which::Link(l) => {
                     let l = l?;
-                    EntryKind::Link(LinkEntry {
+                    EntryKind::Link(Link {
                         target: String::from(l.get_target()?),
                     })
                 }
@@ -198,90 +139,132 @@ impl Dir {
                 continue;
             }
 
-            let e = Entry {
-                inode: entry_inode,
-                //parent: inode,
-                name: String::from(entry.get_name()?),
-                size: entry.get_size(),
-                acl: String::from(entry.get_aclkey()?),
-                modification: entry.get_modification_time(),
-                creation: entry.get_creation_time(),
-                kind: kind,
-            };
-
-            entries.push(e);
+            entries.push(Entry { node, kind });
         }
 
         Ok(entries)
     }
 }
 
-impl Node for Dir {
-    fn kind(&self) -> EntryKind {
-        EntryKind::Dir(DirEntry { key: String::new() })
-    }
-
-    fn node_type(&self) -> fuse::FileType {
-        fuse::FileType::Directory
-    }
-
-    fn attr(&self) -> fuse::FileAttr {
-        let mtime = self.modification_time as i64;
-        let ctime = self.creation_time as i64;
-
-        fuse::FileAttr {
-            ino: self.inode.ino(),
-            size: self.size,
-            blocks: 0,
-            atime: Timespec::new(mtime, 0),
-            mtime: Timespec::new(mtime, 0),
-            ctime: Timespec::new(ctime, 0),
-            crtime: Timespec::new(ctime, 0),
-            kind: fuse::FileType::Directory,
-            perm: 0o0755,
-            nlink: 1,
-            uid: 0,
-            gid: 0,
-            rdev: 0,
-            flags: 0,
-        }
-    }
+#[derive(Debug, Clone)]
+pub struct Entry {
+    pub node: Node,
+    pub kind: EntryKind,
 }
 
-pub enum Either {
-    Entry(Entry),
+#[derive(Debug, Clone)]
+pub enum EntryKind {
+    Unknown,
     Dir(Dir),
+    SubDir(SubDir),
+    File(File),
+    Link(Link),
 }
 
-impl Either {
-    pub fn dir(dir: Dir) -> Either {
-        Either::Dir(dir)
+impl Entry {
+    pub fn node(&self) -> &Node {
+        &self.node
     }
 
-    pub fn entry(entry: Entry) -> Either {
-        Either::Entry(entry)
+    pub async fn fill(&self, meta: &Metadata, attr: &mut FileAttr) -> Result<Inode> {
+        use std::time::Duration;
+
+        let mode = match meta.aci(&self.node.acl).await {
+            Ok(aci) => {
+                attr.uid(aci.user);
+                attr.gid(aci.group);
+                println!("mode({:#o})", aci.mode);
+                aci.mode & 0o777
+            }
+            Err(_) => 0o444,
+        };
+
+        let inode = self.node.inode;
+        attr.ino(inode.ino());
+        attr.ctime(Duration::from_secs(self.node.creation as u64));
+        attr.mtime(Duration::from_secs(self.node.modification as u64));
+        attr.size(self.node.size);
+
+        let inode = match &self.kind {
+            EntryKind::Unknown => bail!("unkown entry"),
+            EntryKind::Dir(dir) => {
+                attr.nlink(2);
+                attr.mode(libc::S_IFDIR | mode);
+                inode
+            }
+            EntryKind::SubDir(sub) => {
+                let inode = meta.dir_inode(&sub.key).await?;
+                // reset inode
+                attr.ino(inode.ino());
+                attr.nlink(2);
+                attr.mode(libc::S_IFDIR | mode);
+                inode
+            }
+            EntryKind::File(file) => {
+                attr.nlink(1);
+                attr.mode(libc::S_IFREG | mode);
+                attr.blksize(4 * 1024);
+                inode
+            }
+            EntryKind::Link(link) => {
+                attr.nlink(1);
+                attr.size(link.target.len() as u64);
+                attr.mode(libc::S_IFLNK | 0o555);
+                inode
+            }
+        };
+
+        Ok(inode)
     }
 }
 
-impl Node for Either {
-    fn kind(&self) -> EntryKind {
-        match self {
-            Either::Entry(ref entry) => entry.kind(),
-            Either::Dir(ref dir) => dir.kind(),
-        }
-    }
+#[derive(Clone)]
+pub struct ACI {
+    pub user: u32,
+    pub group: u32,
+    pub mode: u32,
+}
 
-    fn node_type(&self) -> fuse::FileType {
-        match self {
-            Either::Entry(ref entry) => entry.node_type(),
-            Either::Dir(ref dir) => dir.node_type(),
-        }
-    }
+impl ACI {
+    pub fn new(data: Vec<u8>) -> Result<ACI> {
+        let mut raw: &[u8] = data.as_ref();
+        let msg = serialize::read_message(&mut raw, message::ReaderOptions::default())?;
 
-    fn attr(&self) -> fuse::FileAttr {
-        match self {
-            Either::Entry(ref entry) => entry.attr(),
-            Either::Dir(ref dir) => dir.attr(),
+        let root = msg.get_root::<schema_capnp::a_c_i::Reader>()?;
+        let mut uid = root.get_uid();
+        let mut gid = root.get_gid();
+        let mode = root.get_mode();
+
+        if uid == -1 {
+            // backward compatibility with older flist
+            uid = if root.has_uname() {
+                let uname = root.get_uname().unwrap();
+                match User::from_name(uname) {
+                    Ok(Some(user)) => user.uid.as_raw() as i64,
+                    _ => 1000,
+                }
+            } else {
+                1000
+            };
         }
+
+        if gid == -1 {
+            // backward compatibility with older flist
+            gid = if root.has_gname() {
+                let gname = root.get_gname().unwrap();
+                match Group::from_name(gname) {
+                    Ok(Some(group)) => group.gid.as_raw() as i64,
+                    _ => 1000,
+                }
+            } else {
+                1000
+            };
+        }
+
+        Ok(ACI {
+            user: uid as u32,
+            group: gid as u32,
+            mode: mode as u32,
+        })
     }
 }
