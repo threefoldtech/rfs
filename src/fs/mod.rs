@@ -42,9 +42,7 @@ impl Filesystem {
         ));
 
         let session = AsyncSession::mount(mountpoint, options).await?;
-
-        //let fs = Arc::new(Hello::new());
-
+        // release here
         while let Some(req) = session.next_request().await? {
             let fs = self.clone();
 
@@ -60,6 +58,7 @@ impl Filesystem {
                         Ok(req.reply_error(libc::ENOSYS)?)
                     }
                 };
+
                 if result.is_err() {
                     req.reply_error(libc::ENOENT)?;
                 }

@@ -14,17 +14,14 @@ pub mod schema_capnp {
     include!(concat!(env!("OUT_DIR"), "/schema_capnp.rs"));
 }
 
-/*
-"-cache", f.cache,
-"-meta", flistPath,
-"-storage-url", storage,
-"-daemon",
-"-log", logPath,
-// this is always read-only
-"-ro",
-*/
-#[tokio::main]
-async fn main() -> Result<()> {
+struct Options {
+    hub: String,
+    meta: String,
+    cache: String,
+    target: String,
+}
+
+fn main() -> Result<()> {
     let matches = App::new("Mount Flists")
         .version("0.1")
         .author("Muhamad Azmy")
@@ -54,6 +51,12 @@ async fn main() -> Result<()> {
                 .default_value("/tmp/cache"),
         )
         .arg(
+            Arg::with_name("daemon")
+                .short("d")
+                .long("daemon")
+                .help("daemonize process"),
+        )
+        .arg(
             Arg::with_name("target")
                 .required(true)
                 .value_name("TARGET")
@@ -67,15 +70,32 @@ async fn main() -> Result<()> {
         simple_logger::init_with_level(log::Level::Info)?;
     }
 
-    let cache = cache::Cache::new(
-        matches.value_of("hub").unwrap(),
-        matches.value_of("cache").unwrap(),
-    )
-    .await?;
+    let opt = Options {
+        hub: matches.value_of("hub").unwrap().into(),
+        meta: matches.value_of("meta").unwrap().into(),
+        cache: matches.value_of("cache").unwrap().into(),
+        target: matches.value_of("target").unwrap().into(),
+    };
 
-    let mgr = meta::Metadata::open(matches.value_of("meta").unwrap()).await?;
+    // if matches.is_present("daemon") {
+    //     let out = std::fs::File::create("/tmp/fs.out.log")?;
+    //     let err = out.try_clone()?;
+    //     daemonize::Daemonize::new()
+    //         .stdout(out)
+    //         .stderr(err)
+    //         .exit_action(|| println!("forked, should wait for mount"))
+    //         .start()?;
+    // }
 
+    let rt = tokio::runtime::Runtime::new()?;
+
+    rt.block_on(app(opt))
+}
+
+async fn app(opts: Options) -> Result<()> {
+    let cache = cache::Cache::new(opts.hub, opts.cache).await?;
+    let mgr = meta::Metadata::open(opts.meta).await?;
     let filesystem = fs::Filesystem::new(mgr, cache);
 
-    filesystem.mount(matches.value_of("target").unwrap()).await
+    filesystem.mount(opts.target).await
 }
