@@ -6,7 +6,7 @@ use tokio::fs::{self, File, OpenOptions};
 use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 
 trait Hex {
-    fn hex(self: &Self) -> String;
+    fn hex(&self) -> String;
 }
 
 impl Hex for Vec<u8> {
@@ -38,9 +38,9 @@ impl Cache {
     }
 
     // get content from redis
-    async fn get_data(&mut self, id: &Vec<u8>, key: &Vec<u8>) -> Result<Vec<u8>> {
+    async fn get_data(&mut self, id: &[u8], key: &[u8]) -> Result<Vec<u8>> {
         let result: Vec<u8> = redis::cmd("GET").arg(id).query_async(&mut self.con).await?;
-        if result.len() == 0 {
+        if result.is_empty() {
             bail!("invalid chunk length downloaded");
         }
 

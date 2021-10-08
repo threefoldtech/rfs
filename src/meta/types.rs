@@ -48,7 +48,7 @@ pub struct Dir {
 }
 
 impl Dir {
-    pub fn new<S: AsRef<str>>(key: S, inode: Inode, data: Vec<u8>) -> Result<Entry> {
+    pub fn from<S: AsRef<str>>(key: S, inode: Inode, data: Vec<u8>) -> Result<Entry> {
         let mut raw: &[u8] = data.as_ref();
 
         let msg = serialize::read_message(&mut raw, message::ReaderOptions::default())?;
@@ -71,8 +71,8 @@ impl Dir {
                 creation,
             },
             kind: EntryKind::Dir(Dir {
+                parent,
                 key: key.as_ref().into(),
-                parent: parent,
                 entries: Arc::new(entries),
             }),
         })
@@ -91,7 +91,7 @@ impl Dir {
             x += 1;
             let inode = ino.at(x);
             let node = Node {
-                inode: inode,
+                inode,
                 //parent: inode,
                 name: String::from(entry.get_name()?),
                 size: entry.get_size(),
@@ -215,14 +215,14 @@ impl Entry {
 }
 
 #[derive(Clone)]
-pub struct ACI {
+pub struct Aci {
     pub user: u32,
     pub group: u32,
     pub mode: u32,
 }
 
-impl ACI {
-    pub fn new(data: Vec<u8>) -> Result<ACI> {
+impl Aci {
+    pub fn new(data: Vec<u8>) -> Result<Aci> {
         let mut raw: &[u8] = data.as_ref();
         let msg = serialize::read_message(&mut raw, message::ReaderOptions::default())?;
 
@@ -257,7 +257,7 @@ impl ACI {
             };
         }
 
-        Ok(ACI {
+        Ok(Aci {
             user: uid as u32,
             group: gid as u32,
             mode: mode as u32,

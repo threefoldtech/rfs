@@ -60,7 +60,7 @@ impl Filesystem {
                         Ok(req.reply_error(libc::ENOSYS)?)
                     }
                 };
-                if let Err(_) = result {
+                if result.is_err() {
                     req.reply_error(libc::ENOENT)?;
                 }
 
@@ -145,7 +145,7 @@ impl Filesystem {
         let entry = self.meta.entry(op.ino()).await?;
         let mut attr = AttrOut::default();
 
-        if let Err(_) = entry.fill(&self.meta, attr.attr()).await {
+        if entry.fill(&self.meta, attr.attr()).await.is_err() {
             req.reply_error(libc::ENOENT)?;
         }
 
@@ -181,7 +181,7 @@ impl Filesystem {
         } else {
             // we don't add the . and .. but
             // we also need to change the offset to
-            offset = offset - 2;
+            offset -= 2;
         }
 
         for (i, entry) in dir.entries.iter().enumerate().skip(offset as usize) {

@@ -54,7 +54,7 @@ pub struct Metadata {
     pool: SqlitePool,
     mask: inode::Mask,
     lru: Arc<Mutex<lru::LruCache<String, Arc<types::Entry>>>>,
-    acis: Arc<Mutex<lru::LruCache<String, types::ACI>>>,
+    acis: Arc<Mutex<lru::LruCache<String, types::Aci>>>,
 }
 
 impl Metadata {
@@ -161,7 +161,7 @@ impl Metadata {
 
         // that's only place where we create a directory
         // so we can cache it in lru now.
-        let dir = types::Dir::new(key.as_ref(), inode::Inode::new(self.mask, id), data)?;
+        let dir = types::Dir::from(key.as_ref(), inode::Inode::new(self.mask, id), data)?;
         let dir = Arc::new(dir);
         lru.put(key.as_ref().into(), dir.clone());
 
@@ -191,7 +191,7 @@ impl Metadata {
         Ok(Inode::new(self.mask, id as u64))
     }
 
-    async fn aci<S: AsRef<str>>(&self, key: S) -> Result<types::ACI> {
+    async fn aci<S: AsRef<str>>(&self, key: S) -> Result<types::Aci> {
         let mut acis = self.acis.lock().await;
         if let Some(aci) = acis.get(key.as_ref()) {
             return Ok(aci.clone());
@@ -204,7 +204,7 @@ impl Metadata {
 
         // that's only place where we create a directory
         // so we can cache it in lru now.
-        let aci = types::ACI::new(data)?;
+        let aci = types::Aci::new(data)?;
         acis.put(key.as_ref().into(), aci.clone());
         Ok(aci)
     }

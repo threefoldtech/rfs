@@ -1,6 +1,6 @@
 use std::fmt;
 
-#[derive(Debug, Clone, Copy, Hash, Eq)]
+#[derive(Debug, Clone, Copy, Eq)]
 pub struct Mask(u8);
 
 impl std::cmp::PartialEq for Mask {
@@ -16,7 +16,7 @@ impl Mask {
         let mut width: u8 = 0;
         while hold != 0 {
             width += 1;
-            hold = hold >> 8;
+            hold >>= 8;
         }
         // width is how many bytes can hold the max
         // number of directories
@@ -25,7 +25,7 @@ impl Mask {
 
     /// split an inode into (dir, index)
     pub fn split(&self, i: u64) -> (u64, u64) {
-        let index: u64 = i >> self.0 * 8;
+        let index: u64 = i >> (self.0 * 8);
         let shift = (std::mem::size_of::<u64>() - self.0 as usize) * 8;
         let dir: u64 = (i << shift) >> shift;
 
@@ -37,11 +37,11 @@ impl Mask {
         // mask, right? so we can shift the index to the lift
         // to make a free space at the right to the directory id
 
-        index << self.0 * 8 | dir
+        index << (self.0 * 8) | dir
     }
 }
 
-#[derive(Debug, Clone, Copy, Hash, Eq)]
+#[derive(Debug, Clone, Copy, Eq)]
 pub struct Inode(Mask, u64);
 
 impl fmt::Display for Inode {
