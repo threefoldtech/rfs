@@ -32,7 +32,10 @@ impl Filesystem {
         Filesystem { meta, cache }
     }
 
-    pub async fn mount<S: Into<PathBuf>>(&self, mnt: S) -> Result<()> {
+    pub async fn mount<S>(&self, mnt: S) -> Result<()>
+    where
+        S: Into<PathBuf>,
+    {
         let mountpoint: PathBuf = mnt.into();
         ensure!(mountpoint.is_dir(), "mountpoint must be a directory");
         let mut options = KernelConfig::default();
@@ -42,6 +45,7 @@ impl Filesystem {
         ));
 
         let session = AsyncSession::mount(mountpoint, options).await?;
+
         // release here
         while let Some(req) = session.next_request().await? {
             let fs = self.clone();

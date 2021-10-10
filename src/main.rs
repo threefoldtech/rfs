@@ -4,7 +4,7 @@ extern crate anyhow;
 extern crate thiserror;
 #[macro_use]
 extern crate log;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{App, Arg};
 
 mod cache;
@@ -19,6 +19,7 @@ struct Options {
     meta: String,
     cache: String,
     target: String,
+    daemon: bool,
 }
 
 fn main() -> Result<()> {
@@ -57,6 +58,12 @@ fn main() -> Result<()> {
                 .help("daemonize process"),
         )
         .arg(
+            Arg::with_name("log")
+                .long("log")
+                .takes_value(true)
+                .help("log file only in daemon mode"),
+        )
+        .arg(
             Arg::with_name("target")
                 .required(true)
                 .value_name("TARGET")
@@ -75,27 +82,58 @@ fn main() -> Result<()> {
         meta: matches.value_of("meta").unwrap().into(),
         cache: matches.value_of("cache").unwrap().into(),
         target: matches.value_of("target").unwrap().into(),
+        daemon: matches.is_present("daemon"),
     };
 
-    // if matches.is_present("daemon") {
-    //     let out = std::fs::File::create("/tmp/fs.out.log")?;
-    //     let err = out.try_clone()?;
-    //     daemonize::Daemonize::new()
-    //         .stdout(out)
-    //         .stderr(err)
-    //         .exit_action(|| println!("forked, should wait for mount"))
-    //         .start()?;
-    // }
+    if is_mountpoint(&opt.target)? {
+        eprintln!("target {} is already a mount point", opt.target);
+        std::process::exit(1);
+    }
+
+    if opt.daemon {
+        let target = opt.target.clone();
+        let mut daemon = daemonize::Daemonize::new().exit_action(move || wait_child(target));
+        if matches.is_present("log") {
+            let out = std::fs::File::create(matches.value_of("log").unwrap())?;
+            let err = out.try_clone()?;
+            daemon = daemon.stdout(out).stderr(err);
+        }
+
+        daemon.start()?;
+    }
 
     let rt = tokio::runtime::Runtime::new()?;
 
     rt.block_on(app(opt))
 }
 
+fn is_mountpoint<S: AsRef<str>>(target: S) -> Result<bool> {
+    use std::process::Command;
+
+    let output = Command::new("mountpoint")
+        .arg("-q")
+        .arg(target.as_ref())
+        .output()
+        .context("failed to check mount pooint")?;
+
+    Ok(output.status.success())
+}
+
+fn wait_child(target: String) {
+    for _ in 0..5 {
+        if is_mountpoint(&target).unwrap() {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+
+    eprintln!("failed to mount in under 5 seconds, please check logs for more information");
+    std::process::exit(1);
+}
+
 async fn app(opts: Options) -> Result<()> {
     let cache = cache::Cache::new(opts.hub, opts.cache).await?;
     let mgr = meta::Metadata::open(opts.meta).await?;
     let filesystem = fs::Filesystem::new(mgr, cache);
-
     filesystem.mount(opts.target).await
 }
