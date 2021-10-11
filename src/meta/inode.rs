@@ -1,6 +1,6 @@
 use std::fmt;
 
-#[derive(Debug, Clone, Copy, Hash, Eq)]
+#[derive(Debug, Clone, Copy, Eq)]
 pub struct Mask(u8);
 
 impl std::cmp::PartialEq for Mask {
@@ -11,32 +11,37 @@ impl std::cmp::PartialEq for Mask {
 
 impl Mask {
     /// get i node mask
-    pub fn from(hold: u64) -> Mask {
-        let mut hold = hold;
-        let mut shift: u8 = 0;
+    pub fn from(max: u64) -> Mask {
+        let mut hold = max;
+        let mut width: u8 = 0;
         while hold != 0 {
-            shift += 1;
-            hold = hold >> shift * 8;
+            width += 1;
+            hold >>= 8;
         }
-
-        Mask(shift)
+        // width is how many bytes can hold the max
+        // number of directories
+        Mask(width)
     }
 
     /// split an inode into (dir, index)
     pub fn split(&self, i: u64) -> (u64, u64) {
-        let index: u64 = i >> self.0 * 8;
-        let shift = (8 - self.0) * 8;
+        let index: u64 = i >> (self.0 * 8);
+        let shift = (std::mem::size_of::<u64>() - self.0 as usize) * 8;
         let dir: u64 = (i << shift) >> shift;
 
         (dir, index)
     }
 
     pub fn merge(&self, dir: u64, index: u64) -> u64 {
-        index << self.0 * 8 | dir
+        // to build an id of the dir+entry we now the width of the
+        // mask, right? so we can shift the index to the lift
+        // to make a free space at the right to the directory id
+
+        index << (self.0 * 8) | dir
     }
 }
 
-#[derive(Debug, Clone, Copy, Hash, Eq)]
+#[derive(Debug, Clone, Copy, Eq)]
 pub struct Inode(Mask, u64);
 
 impl fmt::Display for Inode {
@@ -56,10 +61,6 @@ impl Inode {
         Inode(mask, ino)
     }
 
-    pub fn mask(&self) -> Mask {
-        self.0
-    }
-
     pub fn ino(&self) -> u64 {
         self.1
     }
@@ -76,15 +77,33 @@ impl Inode {
         Inode::new(self.0, dir)
     }
 
-    /// index of inode, 0 means the directory entry, all sub entries start with 1
-    pub fn index(&self) -> u64 {
-        let (_, index) = self.split();
-        index
-    }
-
     /// gets the inode value of an entry under this inode directory
     pub fn at(&self, index: u64) -> Inode {
         let value = self.0.merge(self.dir().ino(), index);
         Self::new(self.0, value)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn mask() {
+        let mask = Mask::from(0xff);
+        assert_eq!(mask.0, 1);
+        let inode = mask.merge(0xf1, 1000);
+        let (dir, index) = mask.split(inode);
+        assert_eq!(0xf1, dir);
+        assert_eq!(1000, index);
+    }
+
+    #[test]
+    fn mask_big() {
+        let mask = Mask::from(0xffff);
+        assert_eq!(2, mask.0);
+        let inode = mask.merge(0xabcd, 0x1234);
+        let (dir, index) = mask.split(inode);
+        assert_eq!(0xabcd, dir);
+        assert_eq!(0x1234, index);
     }
 }

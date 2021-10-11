@@ -1,410 +1,291 @@
+#![allow(clippy::unnecessary_mut_passed)]
+#![deny(clippy::unimplemented, clippy::todo)]
+
+use crate::cache;
 use crate::meta;
-use crate::meta::types::*;
 
-use fuse::Request;
-use libc::{c_int, EBADF, EIO, ENOENT, ENOSYS};
-use lru::LruCache;
-use std::collections::HashMap;
-use std::ffi::OsStr;
-use std::ops::{Deref, DerefMut};
-use time::Timespec;
-mod dn;
+use anyhow::{ensure, Result};
+use meta::types::EntryKind;
+use polyfuse::{
+    op,
+    reply::{AttrOut, EntryOut, ReaddirOut},
+    KernelConfig, Operation, Request, Session,
+};
+use std::io::SeekFrom;
+use std::{io, os::unix::prelude::*, path::PathBuf, time::Duration};
+use tokio::{
+    io::{unix::AsyncFd, AsyncReadExt, AsyncSeekExt, Interest},
+    task::{self, JoinHandle},
+};
 
-struct Counter<T> {
-    t: T,
-    count: u32,
+const CHUNK_SIZE: usize = 512 * 1024; // 512k and is hardcoded in the hub. the block_size value is not used
+const TTL: Duration = Duration::from_secs(60 * 60 * 24 * 365);
+
+#[derive(Clone)]
+pub struct Filesystem {
+    meta: meta::Metadata,
+    cache: cache::Cache,
 }
 
-impl<T> Counter<T> {
-    fn from(t: T) -> Counter<T> {
-        Counter { t, count: 1 }
+impl Filesystem {
+    pub fn new(meta: meta::Metadata, cache: cache::Cache) -> Filesystem {
+        Filesystem { meta, cache }
     }
 
-    fn incr(c: &mut Counter<T>) {
-        c.count += 1;
-    }
+    pub async fn mount<S>(&self, mnt: S) -> Result<()>
+    where
+        S: Into<PathBuf>,
+    {
+        let mountpoint: PathBuf = mnt.into();
+        ensure!(mountpoint.is_dir(), "mountpoint must be a directory");
+        let mut options = KernelConfig::default();
+        options.mount_option(&format!(
+            "ro,allow_other,fsname={},subtype=g8ufs,default_permissions",
+            std::process::id()
+        ));
 
-    fn decr(c: &mut Counter<T>) -> u32 {
-        c.count -= 1;
-        c.count
-    }
-}
+        let session = AsyncSession::mount(mountpoint, options).await?;
 
-impl<T> Deref for Counter<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        &self.t
-    }
-}
+        // release here
+        while let Some(req) = session.next_request().await? {
+            let fs = self.clone();
 
-impl<T> DerefMut for Counter<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.t
-    }
-}
+            let _: JoinHandle<Result<()>> = task::spawn(async move {
+                let result = match req.operation()? {
+                    Operation::Lookup(op) => fs.lookup(&req, op).await,
+                    Operation::Getattr(op) => fs.getattr(&req, op).await,
+                    Operation::Read(op) => fs.read(&req, op).await,
+                    Operation::Readdir(op) => fs.readdir(&req, op).await,
+                    Operation::Readlink(op) => fs.readlink(&req, op).await,
+                    _ => Ok(req.reply_error(libc::ENOSYS)?),
+                };
 
-pub struct Filesystem<'a> {
-    meta: &'a meta::Manager,
-    ttl: Timespec,
-    dirs: LruCache<meta::Inode, Dir>,
-    entries: LruCache<meta::Inode, Vec<Entry>>,
-    dn: dn::Manager,
-    fds: HashMap<u64, Counter<dn::Chain>>,
-}
-
-fn get_dir<'c>(
-    meta: &meta::Manager,
-    cache: &'c mut lru::LruCache<meta::Inode, Dir>,
-    inode: meta::Inode,
-) -> Option<&'c Dir> {
-    if cache.get(&inode).is_none() {
-        if let Ok(dir) = meta.get_dir(inode) {
-            cache.put(inode, dir);
-        } else {
-            return None;
-        }
-    }
-
-    return cache.get(&inode);
-}
-
-impl<'a> Filesystem<'a> {
-    /// creates a new instance of the filesystem
-    pub fn new(
-        meta: &'a meta::Manager,
-        hub: &str,
-        cache: &str,
-    ) -> Result<Filesystem<'a>, Box<std::error::Error>> {
-        let client = redis::Client::open(hub)?;
-        let downloader = dn::Manager::new(num_cpus::get(), cache, client);
-
-        Ok(Filesystem {
-            meta: meta,
-            ttl: Timespec::new(30, 0),
-            dirs: lru::LruCache::new(100),
-            entries: lru::LruCache::new(100),
-            dn: downloader,
-            fds: HashMap::new(),
-        })
-    }
-
-    fn get_entries(&mut self, inode: meta::Inode) -> Result<(&Dir, &Vec<Entry>), c_int> {
-        let inode = inode.dir();
-        let dir = match get_dir(self.meta, &mut self.dirs, inode) {
-            Some(dir) => dir,
-            None => {
-                return Err(ENOENT);
-            }
-        };
-
-        if self.entries.get(&inode).is_none() {
-            let entries = match dir.entries(self.meta) {
-                Ok(entries) => entries,
-                Err(err) => {
-                    return Err(ENOENT);
+                if result.is_err() {
+                    req.reply_error(libc::ENOENT)?;
                 }
-            };
-            self.entries.put(inode, entries);
+
+                Ok(())
+            });
         }
 
-        let entries = match self.entries.get(&inode) {
-            Some(entries) => entries,
-            None => {
-                //reply.error(ENOENT);
-                return Err(ENOENT);
-            }
-        };
-
-        Ok((dir, entries))
-    }
-
-    fn get_entry(&mut self, inode: meta::Inode) -> Result<(&Dir, Option<&Entry>), c_int> {
-        let (dir, entries) = self.get_entries(inode.dir())?;
-        let index = inode.index() as usize;
-        match index {
-            0 => Ok((dir, None)),
-            _ if index <= entries.len() => Ok((dir, Some(&entries[index - 1]))),
-            _ => Err(ENOENT),
-        }
-    }
-
-    fn get_entry_by_name(&mut self, parent: meta::Inode, name: &str) -> Result<Entry, c_int> {
-        let (_, entries) = self.get_entries(parent)?;
-        for entry in entries.iter() {
-            if entry.name != name {
-                continue;
-            }
-
-            return Ok(entry.clone());
-        }
-
-        Err(ENOENT)
-    }
-}
-
-impl<'a> fuse::Filesystem for Filesystem<'a> {
-    fn init(&mut self, _req: &fuse::Request) -> Result<(), c_int> {
-        info!("Initializing file system");
         Ok(())
     }
 
-    fn readdir(
-        &mut self,
-        _req: &Request,
-        ino: u64,
-        _fh: u64,
-        offset: i64,
-        mut reply: fuse::ReplyDirectory,
-    ) {
-        let inode = self.meta.get_inode(ino);
-        let (dir, entries) = match self.get_entries(inode) {
-            Ok(entries) => entries,
-            Err(err) => {
-                reply.error(err);
-                return;
+    async fn readlink(&self, req: &Request, op: op::Readlink<'_>) -> Result<()> {
+        let entry = self.meta.entry(op.ino()).await?;
+        let link = match entry.kind {
+            EntryKind::Link(l) => l,
+            _ => {
+                return Ok(req.reply_error(libc::ENOLINK)?);
             }
         };
 
-        let header: Vec<Entry> = vec![
-            Entry {
-                inode: dir.inode,
-                name: ".".to_string(),
-                size: 0,
-                acl: String::new(),
-                modification: 0,
-                creation: 0,
-                kind: EntryKind::Unknown,
-            },
-            Entry {
-                inode: dir.parent(self.meta),
-                name: "..".to_string(),
-                size: 0,
-                acl: String::new(),
-                modification: 0,
-                creation: 0,
-                kind: EntryKind::Unknown,
-            },
-        ];
-
-        let to_skip = if offset == 0 { offset } else { offset + 1 } as usize;
-        for (index, entry) in header
-            .iter()
-            .chain(entries.iter())
-            .enumerate()
-            .skip(to_skip)
-        {
-            if reply.add(
-                entry.inode.ino(),
-                index as i64,
-                entry.node_type(),
-                OsStr::new(&entry.name),
-            ) {
-                break;
-            };
-        }
-
-        reply.ok();
+        req.reply(link.target)?;
+        Ok(())
     }
 
-    /// Look up a directory entry by name and get its attributes.
-    fn lookup(&mut self, _req: &Request, parent: u64, name: &OsStr, reply: fuse::ReplyEntry) {
-        let name = match name.to_str() {
-            Some(name) => name,
-            None => {
-                reply.error(ENOENT);
-                return;
+    async fn read(&self, req: &Request, op: op::Read<'_>) -> Result<()> {
+        let entry = self.meta.entry(op.ino()).await?;
+        let file = match entry.kind {
+            EntryKind::File(file) => file,
+            _ => {
+                return Ok(req.reply_error(libc::EISDIR)?);
             }
         };
 
-        let inode = self.meta.get_inode(parent);
-        let entry = match self.get_entry_by_name(inode, name) {
-            Ok(entry) => entry,
-            Err(err) => {
-                reply.error(err);
-                return;
-            }
-        };
+        let offset = op.offset() as usize;
+        let size = op.size() as usize;
+        let chunk_size = CHUNK_SIZE; // file.block_size as usize;
+        let chunk_index = offset / chunk_size;
 
-        match &entry.kind {
-            EntryKind::Dir(dir) => match get_dir(self.meta, &mut self.dirs, entry.inode) {
-                Some(dir) => reply.entry(&self.ttl, &dir.attr(), 1),
-                None => reply.error(ENOENT),
-            },
-            _ => reply.entry(&self.ttl, &entry.attr(), 1),
-        };
-    }
-
-    /// Get file attributes.
-    fn getattr(&mut self, _req: &Request, ino: u64, reply: fuse::ReplyAttr) {
-        let inode = self.meta.get_inode(ino);
-        let dir = match get_dir(self.meta, &mut self.dirs, inode) {
-            Some(dir) => dir,
-            None => {
-                reply.error(ENOENT);
-                return;
-            }
-        };
-
-        let index = inode.index() as usize;
-        if index == 0 {
-            //dir inode
-            reply.attr(&self.ttl, &dir.attr());
-            return;
+        if chunk_index >= file.blocks.len() || op.size() == 0 {
+            // reading after the end of the file
+            let data: &[u8] = &[];
+            return Ok(req.reply(data)?);
         }
 
-        if self.entries.get(&inode).is_none() {
-            let entries = match dir.entries(self.meta) {
-                Ok(entries) => entries,
-                Err(err) => {
-                    reply.error(ENOENT);
-                    return;
+        // offset inside the file
+        let mut offset = offset - (chunk_index * chunk_size);
+        let mut cache = self.cache.clone();
+        let mut buf: Vec<u8> = vec![0; size];
+        let mut total = 0;
+
+        'blocks: for block in file.blocks.iter().skip(chunk_index) {
+            let (_, mut fd) = match cache.get(block).await {
+                Ok(out) => out,
+                Err(_) => {
+                    return Ok(req.reply_error(libc::EIO)?);
                 }
             };
-            self.entries.put(inode, entries);
-        }
+            fd.seek(SeekFrom::Start(offset as u64)).await?;
 
-        let entries = match self.entries.get(&inode) {
-            Some(entries) => entries,
-            None => {
-                reply.error(ENOENT);
-                return;
-            }
-        };
-
-        if index > entries.len() {
-            reply.error(ENOENT);
-            return;
-        }
-
-        reply.attr(&self.ttl, &entries[index - 1].attr());
-    }
-
-    /// Read symbolic link.
-    fn readlink(&mut self, _req: &Request, ino: u64, reply: fuse::ReplyData) {
-        let inode = self.meta.get_inode(ino);
-        let (_, entry) = match self.get_entry(inode) {
-            Ok(result) => result,
-            Err(err) => {
-                reply.error(err);
-                return;
-            }
-        };
-
-        let entry = match entry {
-            Some(entry) => entry,
-            None => {
-                reply.error(ENOSYS);
-                return;
-            }
-        };
-
-        match &entry.kind {
-            EntryKind::Link(l) => {
-                let mut target: String = l.target.clone();
-                target.push('\0');
-                reply.data(l.target.as_ref());
-            }
-            _ => reply.error(ENOENT),
-        }
-    }
-
-    fn open(&mut self, _req: &Request, ino: u64, flags: u32, reply: fuse::ReplyOpen) {
-        let inode = self.meta.get_inode(ino);
-        if let Some(fd) = self.fds.get_mut(&inode.ino()) {
-            Counter::incr(fd);
-            reply.opened(inode.ino(), flags);
-            return;
-        }
-
-        let (_, entry) = match self.get_entry(inode) {
-            Ok(result) => result,
-            Err(err) => {
-                reply.error(err);
-                return;
-            }
-        };
-
-        let entry = match entry {
-            Some(entry) => entry,
-            None => {
-                reply.error(ENOSYS);
-                return;
-            }
-        }
-        .clone(); //we clone to end mut borrow of `self` so we can borrow again for download and open handlers
-                  //there must be a better way!
-
-        match &entry.kind {
-            EntryKind::File(f) => {
-                let fd = match self.dn.open(&f) {
-                    Ok(fd) => fd,
+            loop {
+                let read = match fd.read(&mut buf[total..]).await {
+                    Ok(n) => n,
                     Err(_) => {
-                        reply.error(EBADF);
-                        return;
+                        return Ok(req.reply_error(libc::EIO)?);
                     }
                 };
+                total += read;
+                if total >= size {
+                    break 'blocks;
+                }
 
-                self.fds.insert(inode.ino(), Counter::from(fd));
-                reply.opened(inode.ino(), flags);
+                if read == 0 {
+                    break;
+                }
             }
-            _ => reply.error(ENOENT),
-        }
-    }
-
-    fn release(
-        &mut self,
-        _req: &Request,
-        _ino: u64,
-        fh: u64,
-        _flags: u32,
-        _lock_owner: u64,
-        _flush: bool,
-        reply: fuse::ReplyEmpty,
-    ) {
-        let count = match self.fds.get_mut(&fh) {
-            Some(fd) => Counter::decr(fd),
-            None => {
-                reply.ok();
-                return;
-            }
-        };
-
-        if count == 0 {
-            debug!("releasing file handler {}", fh);
-            self.fds.remove(&fh);
+            offset = 0;
         }
 
-        reply.ok();
+        Ok(req.reply(&buf[..size])?)
     }
 
-    fn read(
-        &mut self,
-        _req: &Request,
-        _ino: u64,
-        fh: u64,
-        offset: i64,
-        size: u32,
-        reply: fuse::ReplyData,
-    ) {
-        let mut fd = match self.fds.get_mut(&fh) {
-            Some(fd) => fd,
-            None => {
-                reply.error(EBADF);
-                return;
+    async fn getattr(&self, req: &Request, op: op::Getattr<'_>) -> Result<()> {
+        let entry = self.meta.entry(op.ino()).await?;
+        let mut attr = AttrOut::default();
+
+        let mut fill = attr.attr();
+        if entry.fill(&self.meta, &mut fill).await.is_err() {
+            req.reply_error(libc::ENOENT)?;
+        }
+
+        if op.ino() == 1 {
+            fill.mode(libc::S_IFDIR | 0o755);
+        }
+        req.reply(attr)?;
+
+        Ok(())
+    }
+
+    async fn readdir(&self, req: &Request, op: op::Readdir<'_>) -> Result<()> {
+        let entry = self.meta.entry(op.ino()).await?;
+
+        let dir = match entry.kind {
+            EntryKind::Dir(dir) => dir,
+            _ => {
+                req.reply_error(libc::ENOTDIR)?;
+                return Ok(());
             }
         };
 
-        //let mut buf = [0; size];
-        let mut buf: Vec<u8> = vec![0; size as usize]; //Vec::with_capacity(size as usize);
+        let mut out = ReaddirOut::new(op.size() as usize);
+        let mut offset = op.offset();
+        if offset == 0 {
+            out.entry(".".as_ref(), op.ino(), libc::DT_DIR as u32, 1);
+            out.entry(
+                "..".as_ref(),
+                match op.ino() {
+                    1 => 1,
+                    _ => self.meta.dir_inode(dir.parent).await?.ino(),
+                },
+                libc::DT_DIR as u32,
+                2,
+            );
+        } else {
+            // we don't add the . and .. but
+            // we also need to change the offset to
+            offset -= 2;
+        }
 
-        let read = match fd.read_offset(offset as u64, &mut buf) {
-            Ok(read) => read,
-            Err(_) => {
-                reply.error(EIO); //probably change to something else
-                return;
+        for (i, entry) in dir.entries.iter().enumerate().skip(offset as usize) {
+            let offset = i as u64 + 3;
+            let full = match &entry.kind {
+                EntryKind::SubDir(sub) => {
+                    let inode = self.meta.dir_inode(&sub.key).await?;
+                    out.entry(
+                        entry.node.name.as_ref(),
+                        inode.ino(),
+                        libc::DT_DIR as u32,
+                        offset,
+                    )
+                }
+                EntryKind::File(_) => out.entry(
+                    entry.node.name.as_ref(),
+                    entry.node.inode.ino(),
+                    libc::DT_REG as u32,
+                    offset,
+                ),
+                EntryKind::Link(_) => out.entry(
+                    entry.node.name.as_ref(),
+                    entry.node.inode.ino(),
+                    libc::DT_LNK as u32,
+                    offset,
+                ),
+                _ => {
+                    warn!("unkonwn entry");
+                    false
+                }
+            };
+
+            if full {
+                break;
+            }
+        }
+
+        Ok(req.reply(out)?)
+    }
+
+    async fn lookup(&self, req: &Request, op: op::Lookup<'_>) -> Result<()> {
+        let parent = self.meta.entry(op.parent()).await?;
+
+        let dir = match parent.kind {
+            EntryKind::Dir(dir) => dir,
+            _ => {
+                req.reply_error(libc::ENOENT)?;
+                return Ok(());
             }
         };
-        debug!("read {} bytes", read);
-        reply.data(&buf[..read]);
+
+        for entry in dir.entries.iter() {
+            if entry.node.name.as_bytes() == op.name().as_bytes() {
+                let mut out = EntryOut::default();
+                let inode = entry.fill(&self.meta, out.attr()).await?;
+                out.ino(inode.ino());
+                out.ttl_attr(TTL);
+                out.ttl_entry(TTL);
+                return Ok(req.reply(out)?);
+            }
+        }
+
+        Ok(req.reply_error(libc::ENOENT)?)
+    }
+}
+
+// ==== AsyncSession ====
+
+struct AsyncSession {
+    inner: AsyncFd<Session>,
+}
+
+impl AsyncSession {
+    async fn mount(mountpoint: PathBuf, config: KernelConfig) -> io::Result<Self> {
+        tokio::task::spawn_blocking(move || {
+            let session = Session::mount(mountpoint, config)?;
+            Ok(Self {
+                inner: AsyncFd::with_interest(session, Interest::READABLE)?,
+            })
+        })
+        .await
+        .expect("join error")
+    }
+
+    async fn next_request(&self) -> io::Result<Option<Request>> {
+        use futures::{future::poll_fn, ready, task::Poll};
+
+        poll_fn(|cx| {
+            let mut guard = ready!(self.inner.poll_read_ready(cx))?;
+            match self.inner.get_ref().next_request() {
+                Err(err) if err.kind() == io::ErrorKind::WouldBlock => {
+                    guard.clear_ready();
+                    Poll::Pending
+                }
+                res => {
+                    guard.retain_ready();
+                    Poll::Ready(res)
+                }
+            }
+        })
+        .await
     }
 }
