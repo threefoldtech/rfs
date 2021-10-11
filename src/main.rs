@@ -23,9 +23,9 @@ struct Options {
 }
 
 fn main() -> Result<()> {
-    let matches = App::new("Mount Flists")
-        .version("0.1")
-        .author("Muhamad Azmy")
+    let matches = App::new("Mount flists")
+        .version("0.2")
+        .author("Threefold Tech")
         .arg(
             Arg::with_name("debug")
                 .long("debug")
@@ -37,7 +37,7 @@ fn main() -> Result<()> {
                 .required(true)
                 .takes_value(true)
                 .value_name("META")
-                .help("meta directory that has a .sqlite file from the flist"),
+                .help("metadata file, can be a .flist file, a .sqlite3 file or a directory with a `flistdb.sqlite3` inside"),
         )
         .arg(
             Arg::with_name("hub")
