@@ -463,12 +463,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gcc"
-version = "0.3.55"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f5f3913fa0bfe7ee1fd8248b6b9f42a5af4b9d65ec2dd2c3c26132b950ecfc2"
-
-[[package]]
 name = "generic-array"
 version = "0.14.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -910,7 +904,7 @@ dependencies = [
  "polyfuse",
  "redis",
  "simple_logger",
- "snappy",
+ "snap",
  "sqlx",
  "tar",
  "thiserror",
@@ -1017,25 +1011,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ecab6c735a6bb4139c0caafd0cc3635748bbb3acf4550e8138122099251f309"
 
 [[package]]
-name = "snappy"
-version = "0.4.0"
+name = "snap"
+version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b570b1d39e2fcb136a07e46d15a1fe962ba71c151e4d8d6888f59f1fcd185bb1"
-dependencies = [
- "libc",
- "snappy-sys",
-]
-
-[[package]]
-name = "snappy-sys"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f873053ef085548b0b924db3aa2ce38d9389fb3be353bf7fcec4ababc99a307"
-dependencies = [
- "gcc",
- "libc",
- "pkg-config",
-]
+checksum = "45456094d1983e2ee2a18fdfebce3189fa451699d0502cb8e3b49dba5ba41451"
 
 [[package]]
 name = "spin"

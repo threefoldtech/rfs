@@ -56,7 +56,8 @@ impl Cache {
         }
 
         let key = unsafe { std::str::from_utf8_unchecked(key) };
-        let result = match snappy::uncompress(&xxtea::decrypt(&result, key)) {
+        let mut decoder = snap::raw::Decoder::new();
+        let result = match decoder.decompress_vec(&xxtea::decrypt(&result, key)) {
             Ok(data) => data,
             Err(_) => bail!("invalid chunk"),
         };
