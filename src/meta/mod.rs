@@ -82,6 +82,10 @@ impl Metadata {
 
     pub async fn open<P: AsRef<Path>>(p: P) -> Result<Metadata> {
         let p = p.as_ref();
+        if !p.exists() {
+            bail!("provided metadata path does not exist");
+        }
+
         if p.is_dir() {
             return Self::new(p.join("flistdb.sqlite3")).await;
         }

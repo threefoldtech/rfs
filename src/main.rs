@@ -71,11 +71,15 @@ fn main() -> Result<()> {
         )
         .get_matches();
 
+    let mut logger = simple_logger::SimpleLogger::new()
+        .with_level(log::Level::Info.to_level_filter())
+        .with_module_level("sqlx", log::Level::Error.to_level_filter());
+
     if matches.is_present("debug") {
-        simple_logger::init_with_level(log::Level::Debug)?;
-    } else {
-        simple_logger::init_with_level(log::Level::Info)?;
+        logger = logger.with_level(log::Level::Debug.to_level_filter())
     }
+
+    logger.init()?;
 
     let opt = Options {
         hub: matches.value_of("hub").unwrap().into(),
@@ -132,8 +136,12 @@ fn wait_child(target: String) {
 }
 
 async fn app(opts: Options) -> Result<()> {
-    let cache = cache::Cache::new(opts.hub, opts.cache).await?;
-    let mgr = meta::Metadata::open(opts.meta).await?;
+    let cache = cache::Cache::new(opts.hub, opts.cache)
+        .await
+        .context("failed to initialize cache")?;
+    let mgr = meta::Metadata::open(opts.meta)
+        .await
+        .context("failed to initialize metadata database")?;
     let filesystem = fs::Filesystem::new(mgr, cache);
     filesystem.mount(opts.target).await
 }

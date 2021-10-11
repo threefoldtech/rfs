@@ -40,7 +40,7 @@ impl Filesystem {
         ensure!(mountpoint.is_dir(), "mountpoint must be a directory");
         let mut options = KernelConfig::default();
         options.mount_option(&format!(
-            "ro,allow_other,fsname={},subtype=g8ufs",
+            "ro,allow_other,fsname={},subtype=g8ufs,default_permissions",
             std::process::id()
         ));
 
@@ -57,10 +57,7 @@ impl Filesystem {
                     Operation::Read(op) => fs.read(&req, op).await,
                     Operation::Readdir(op) => fs.readdir(&req, op).await,
                     Operation::Readlink(op) => fs.readlink(&req, op).await,
-                    op => {
-                        error!("got unknown operation: {:?}", op);
-                        Ok(req.reply_error(libc::ENOSYS)?)
-                    }
+                    _ => Ok(req.reply_error(libc::ENOSYS)?),
                 };
 
                 if result.is_err() {
@@ -148,10 +145,14 @@ impl Filesystem {
         let entry = self.meta.entry(op.ino()).await?;
         let mut attr = AttrOut::default();
 
-        if entry.fill(&self.meta, attr.attr()).await.is_err() {
+        let mut fill = attr.attr();
+        if entry.fill(&self.meta, &mut fill).await.is_err() {
             req.reply_error(libc::ENOENT)?;
         }
 
+        if op.ino() == 1 {
+            fill.mode(libc::S_IFDIR | 0o755);
+        }
         req.reply(attr)?;
 
         Ok(())

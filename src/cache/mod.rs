@@ -1,5 +1,5 @@
 use crate::meta::types::FileBlock;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use redis::Client;
 use std::path::PathBuf;
 use tokio::fs::{self, File, OpenOptions};
@@ -38,7 +38,10 @@ impl Cache {
         P: Into<PathBuf>,
     {
         let client = Client::open(url.as_ref())?;
-        let mgr = client.get_tokio_connection_manager().await?;
+        let mgr = client
+            .get_tokio_connection_manager()
+            .await
+            .context("failed to open connection to storage")?;
         Ok(Cache {
             con: mgr,
             root: root.into(),
@@ -98,9 +101,11 @@ impl Cache {
         let meta = file.metadata().await?;
         if meta.len() > 0 {
             // chunk is already downloaded
-            debug!("cache hit: {}", block.hash.hex());
+            debug!("block cache hit: {}", block.hash.hex());
             return Ok((meta.len(), file));
         }
+
+        debug!("downloading block: {}", block.hash.hex());
         let size = self.download(&mut file, block).await?;
         //file.rewind().await?;
 

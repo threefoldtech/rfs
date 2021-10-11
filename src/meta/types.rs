@@ -169,7 +169,6 @@ impl Entry {
             Ok(aci) => {
                 attr.uid(aci.user);
                 attr.gid(aci.group);
-                println!("mode({:#o})", aci.mode);
                 aci.mode & 0o777
             }
             Err(_) => 0o444,
