@@ -64,6 +64,12 @@ fn main() -> Result<()> {
                 .help("log file only in daemon mode"),
         )
         .arg(
+            Arg::with_name("ro")
+            .long("ro")
+            .hidden(true)
+            .help("only for compatibility with command line interface of g8ufs")
+        )
+        .arg(
             Arg::with_name("target")
                 .required(true)
                 .value_name("TARGET")

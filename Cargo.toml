@@ -30,3 +30,7 @@ tar = "0.4"
 flate2 = "1.0"
 daemonize = "0.4.1"
 snap = "1.0.5"
+
+[profile.release]
+lto = true
+codegen-units = 1

@@ -92,7 +92,7 @@ impl Metadata {
 
         let ext = match p.extension() {
             Some(ext) => ext,
-            None => bail!("unknown metadata file"),
+            None => std::ffi::OsStr::new(""),
         };
 
         if ext == "sqlite3" {
