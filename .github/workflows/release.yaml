@@ -9,7 +9,8 @@ name: Create Release
 jobs:
   build:
     name: Releasing rfs
-    runs-on: ubuntu-latest
+    # we use 18.04 to be compatible with libc version on zos
+    runs-on: ubuntu-18.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
@@ -24,6 +25,9 @@ jobs:
         with:
           command: build
           args: --release
+      - name: Strip
+        run: |
+          strip target/release/rfs
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1
