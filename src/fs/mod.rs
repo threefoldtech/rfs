@@ -8,7 +8,7 @@ use anyhow::{ensure, Result};
 use meta::types::EntryKind;
 use polyfuse::{
     op,
-    reply::{AttrOut, EntryOut, ReaddirOut},
+    reply::{AttrOut, EntryOut, ReaddirOut, StatfsOut},
     KernelConfig, Operation, Request, Session,
 };
 use std::io::SeekFrom;
@@ -49,7 +49,6 @@ impl Filesystem {
         // release here
         while let Some(req) = session.next_request().await? {
             let fs = self.clone();
-
             let _: JoinHandle<Result<()>> = task::spawn(async move {
                 let result = match req.operation()? {
                     Operation::Lookup(op) => fs.lookup(&req, op).await,
@@ -57,7 +56,11 @@ impl Filesystem {
                     Operation::Read(op) => fs.read(&req, op).await,
                     Operation::Readdir(op) => fs.readdir(&req, op).await,
                     Operation::Readlink(op) => fs.readlink(&req, op).await,
-                    _ => Ok(req.reply_error(libc::ENOSYS)?),
+                    Operation::Statfs(op) => fs.statfs(&req, op).await,
+                    op => {
+                        debug!("function is not implemented: {:?}", op);
+                        Ok(req.reply_error(libc::ENOSYS)?)
+                    }
                 };
 
                 if result.is_err() {
@@ -68,6 +71,11 @@ impl Filesystem {
             });
         }
 
+        Ok(())
+    }
+    async fn statfs(&self, req: &Request, _op: op::Statfs<'_>) -> Result<()> {
+        let out = StatfsOut::default();
+        req.reply(out)?;
         Ok(())
     }
 
