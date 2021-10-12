@@ -1,6 +1,8 @@
 use crate::meta::types::FileBlock;
 use anyhow::{Context, Result};
+//use fs2::FileExt;
 use redis::Client;
+use std::os::unix::io::AsRawFd;
 use std::path::PathBuf;
 use tokio::fs::{self, File, OpenOptions};
 use tokio::io::{AsyncSeekExt, AsyncWriteExt};
@@ -98,18 +100,53 @@ impl Cache {
         let mut file = self.prepare(&block.hash).await?;
         // TODO: locking must happen here so no
         // other processes start downloading the same chunk
+        let locker = Locker::new(&file);
+        locker.lock().await?;
 
         let meta = file.metadata().await?;
         if meta.len() > 0 {
             // chunk is already downloaded
             debug!("block cache hit: {}", block.hash.hex());
+            locker.unlock().await?;
             return Ok((meta.len(), file));
         }
 
         debug!("downloading block: {}", block.hash.hex());
         let size = self.download(&mut file, block).await?;
-        //file.rewind().await?;
 
+        locker.unlock().await?;
         Ok((size, file))
+    }
+}
+
+pub struct Locker {
+    fd: std::os::unix::io::RawFd,
+}
+
+impl Locker {
+    pub fn new(f: &File) -> Locker {
+        Locker { fd: f.as_raw_fd() }
+    }
+
+    pub async fn lock(&self) -> Result<()> {
+        let fd = self.fd.clone();
+        tokio::task::spawn_blocking(move || {
+            nix::fcntl::flock(fd, nix::fcntl::FlockArg::LockExclusive)
+        })
+        .await
+        .context("failed to spawn file locking")?
+        .context("failed to lock file")?;
+
+        Ok(())
+    }
+
+    pub async fn unlock(&self) -> Result<()> {
+        let fd = self.fd.clone();
+        tokio::task::spawn_blocking(move || nix::fcntl::flock(fd, nix::fcntl::FlockArg::Unlock))
+            .await
+            .context("failed to spawn file lunlocking")?
+            .context("failed to unlock file")?;
+
+        Ok(())
     }
 }
