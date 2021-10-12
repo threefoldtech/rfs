@@ -8,11 +8,15 @@ name: Create Release
 
 jobs:
   build:
-    name: Upload Release Asset
+    name: Releasing rfs
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
+      - name: Get Dependencies
+        run: |
+          apt-get update
+          apt-get install capnproto
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
