@@ -102,7 +102,9 @@ fn main() -> Result<()> {
 
     if opt.daemon {
         let target = opt.target.clone();
-        let mut daemon = daemonize::Daemonize::new().exit_action(move || wait_child(target));
+        let mut daemon = daemonize::Daemonize::new()
+            .working_directory(std::env::current_dir()?)
+            .exit_action(move || wait_child(target));
         if matches.is_present("log") {
             let out = std::fs::File::create(matches.value_of("log").unwrap())?;
             let err = out.try_clone()?;
