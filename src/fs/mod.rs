@@ -3,6 +3,7 @@
 
 use crate::cache;
 use crate::meta;
+use crate::meta::types::File;
 
 use anyhow::{ensure, Result};
 use meta::types::EntryKind;
@@ -12,7 +13,9 @@ use polyfuse::{
     KernelConfig, Operation, Request, Session,
 };
 use std::io::SeekFrom;
+use std::sync::Arc;
 use std::{io, os::unix::prelude::*, path::PathBuf, time::Duration};
+use tokio::sync::Mutex;
 use tokio::{
     io::{unix::AsyncFd, AsyncReadExt, AsyncSeekExt, Interest},
     task::{self, JoinHandle},
@@ -20,16 +23,23 @@ use tokio::{
 
 const CHUNK_SIZE: usize = 512 * 1024; // 512k and is hardcoded in the hub. the block_size value is not used
 const TTL: Duration = Duration::from_secs(60 * 60 * 24 * 365);
+const LRUFCAP: usize = 20; // Least Recently Used File Capacity
+type Ino = usize;
 
 #[derive(Clone)]
 pub struct Filesystem {
     meta: meta::Metadata,
     cache: cache::Cache,
+    lruf: Arc<Mutex<lru::LruCache<Ino, File>>>,
 }
 
 impl Filesystem {
     pub fn new(meta: meta::Metadata, cache: cache::Cache) -> Filesystem {
-        Filesystem { meta, cache }
+        Filesystem {
+            meta,
+            cache,
+            lruf: Arc::new(Mutex::new(lru::LruCache::new(LRUFCAP))),
+        }
     }
 
     pub async fn mount<S>(&self, mnt: S) -> Result<()>
@@ -49,6 +59,7 @@ impl Filesystem {
         // release here
         while let Some(req) = session.next_request().await? {
             let fs = self.clone();
+
             let _: JoinHandle<Result<()>> = task::spawn(async move {
                 let result = match req.operation()? {
                     Operation::Lookup(op) => fs.lookup(&req, op).await,
@@ -93,13 +104,32 @@ impl Filesystem {
     }
 
     async fn read(&self, req: &Request, op: op::Read<'_>) -> Result<()> {
-        let entry = self.meta.entry(op.ino()).await?;
-        let file = match entry.kind {
-            EntryKind::File(file) => file,
-            _ => {
-                return Ok(req.reply_error(libc::EISDIR)?);
-            }
+        let file = {
+            let mut lruf = self.lruf.lock().await;
+            let inode_num = op.ino() as usize;
+
+            // if the file is not in the cache -> create it and put the file handle into the lru
+            if !lruf.contains(Box::new(inode_num).as_ref()) {
+                let entry = self.meta.entry(op.ino()).await?;
+                let file = match entry.kind {
+                    EntryKind::File(file) => file,
+                    _ => {
+                        return Ok(req.reply_error(libc::EISDIR)?);
+                    }
+                };
+                lruf.put(inode_num, file);
+            };
+            //return the file handle
+            lruf.get(&inode_num).unwrap().clone()
         };
+
+        // let entry = self.meta.entry(op.ino()).await?;
+        // let file = match entry.kind {
+        //     EntryKind::File(file) => file,
+        //     _ => {
+        //         return Ok(req.reply_error(libc::EISDIR)?);
+        //     }
+        // };
 
         let offset = op.offset() as usize;
         let size = op.size() as usize;
