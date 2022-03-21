@@ -104,7 +104,6 @@ impl Filesystem {
     }
 
     async fn read(&self, req: &Request, op: op::Read<'_>) -> Result<()> {
-
         let entry = self.meta.entry(op.ino()).await?;
         let file_metadata = match entry.kind {
             EntryKind::File(file) => file,
@@ -117,6 +116,7 @@ impl Filesystem {
         let size = op.size() as usize;
         let chunk_size = CHUNK_SIZE; // file.block_size as usize;
         let chunk_index = offset / chunk_size;
+        let last_chunk_index_to_read = (offset + size) / CHUNK_SIZE;
 
         if chunk_index >= file_metadata.blocks.len() || op.size() == 0 {
             // reading after the end of the file
@@ -125,12 +125,12 @@ impl Filesystem {
         }
 
         // offset inside the file
-        let mut offset = offset - (chunk_index * chunk_size);
+        let mut internal_offset = offset - (chunk_index * chunk_size);
         let mut cache = self.cache.clone();
         let mut buf: Vec<u8> = vec![0; size];
         let mut total = 0;
 
-        'blocks: for block in file_metadata.blocks.iter().skip(chunk_index) {
+        'blocks: for (index, block) in file_metadata.blocks.iter().skip(chunk_index).enumerate() {
             // fhash works as a key inside the LRU
             let fhash = block.hash.clone();
             let mut lruf = self.lruf.lock().await;
@@ -149,9 +149,9 @@ impl Filesystem {
                 };
                 file_descriptor
             };
-            
+
             // seek to the position <offset>
-            fd.seek(SeekFrom::Start(offset as u64)).await?;
+            fd.seek(SeekFrom::Start(internal_offset as u64)).await?;
 
             loop {
                 // read the file bytes into buf
@@ -162,25 +162,30 @@ impl Filesystem {
                     }
                 };
 
-                // calculate the total size and break if the whole file downloaded
+                
+
+                // calculate the total size and break if the required bytes (=size) downloaded
                 total += read;
                 if total >= size {
-                    break 'blocks;
-                }
 
-                // read = 0 means that the file not totally read
-                if read == 0 {
-                    
-                    // if this true it means that the last chunk is not totally read
-                    // so we push it inside the LRU
-                    if total%CHUNK_SIZE > 0 {
+                    // if this is the last chunk and the cusrsor in the middle of a chunk -> chache the fd
+                    if (index == last_chunk_index_to_read) && ((offset + total) % CHUNK_SIZE > 0){
                         let mut lruf = self.lruf.lock().await;
                         lruf.put(fhash, fd);
                     }
+
+                    break 'blocks;
+                }
+
+                // read = 0 means the EOF (end of the block)
+                if read == 0 {
                     break;
                 }
             }
-            offset = 0;
+
+            
+
+            internal_offset = 0;
         }
 
         Ok(req.reply(&buf[..size])?)
