@@ -3,7 +3,6 @@
 
 use crate::cache;
 use crate::meta;
-use crate::meta::types::File;
 
 use anyhow::{ensure, Result};
 use meta::types::EntryKind;
@@ -15,6 +14,7 @@ use polyfuse::{
 use std::io::SeekFrom;
 use std::sync::Arc;
 use std::{io, os::unix::prelude::*, path::PathBuf, time::Duration};
+use tokio::fs::File;
 use tokio::sync::Mutex;
 use tokio::{
     io::{unix::AsyncFd, AsyncReadExt, AsyncSeekExt, Interest},
@@ -24,13 +24,13 @@ use tokio::{
 const CHUNK_SIZE: usize = 512 * 1024; // 512k and is hardcoded in the hub. the block_size value is not used
 const TTL: Duration = Duration::from_secs(60 * 60 * 24 * 365);
 const LRUFCAP: usize = 20; // Least Recently Used File Capacity
-type Ino = usize;
+type FHash = Vec<u8>;
 
 #[derive(Clone)]
 pub struct Filesystem {
     meta: meta::Metadata,
     cache: cache::Cache,
-    lruf: Arc<Mutex<lru::LruCache<Ino, File>>>,
+    lruf: Arc<Mutex<lru::LruCache<FHash, File>>>,
 }
 
 impl Filesystem {
@@ -104,32 +104,14 @@ impl Filesystem {
     }
 
     async fn read(&self, req: &Request, op: op::Read<'_>) -> Result<()> {
-        let file = {
-            let mut lruf = self.lruf.lock().await;
-            let inode_num = op.ino() as usize;
 
-            // if the file is not in the cache -> create it and put the file handle into the lru
-            if !lruf.contains(Box::new(inode_num).as_ref()) {
-                let entry = self.meta.entry(op.ino()).await?;
-                let file = match entry.kind {
-                    EntryKind::File(file) => file,
-                    _ => {
-                        return Ok(req.reply_error(libc::EISDIR)?);
-                    }
-                };
-                lruf.put(inode_num, file);
-            };
-            //return the file handle
-            lruf.get(&inode_num).unwrap().clone()
+        let entry = self.meta.entry(op.ino()).await?;
+        let file = match entry.kind {
+            EntryKind::File(file) => file,
+            _ => {
+                return Ok(req.reply_error(libc::EISDIR)?);
+            }
         };
-
-        // let entry = self.meta.entry(op.ino()).await?;
-        // let file = match entry.kind {
-        //     EntryKind::File(file) => file,
-        //     _ => {
-        //         return Ok(req.reply_error(libc::EISDIR)?);
-        //     }
-        // };
 
         let offset = op.offset() as usize;
         let size = op.size() as usize;
@@ -149,27 +131,52 @@ impl Filesystem {
         let mut total = 0;
 
         'blocks: for block in file.blocks.iter().skip(chunk_index) {
-            let (_, mut fd) = match cache.get(block).await {
-                Ok(out) => out,
-                Err(_) => {
-                    return Ok(req.reply_error(libc::EIO)?);
-                }
+            // fhash works as a key inside the LRU
+            let fhash = block.hash.clone();
+            let mut lruf = self.lruf.lock().await;
+
+            // getting the file descriptor from the LRU or from the cache if not found in the LRU
+            let mut fd = if lruf.contains(&fhash) {
+                let file_descriptor = lruf.pop(&fhash).unwrap();
+                drop(lruf);
+                file_descriptor
+            } else {
+                let (_, file_descriptor) = match cache.get(block).await {
+                    Ok(out) => out,
+                    Err(_) => {
+                        return Ok(req.reply_error(libc::EIO)?);
+                    }
+                };
+                file_descriptor
             };
+            
+            // seek to the position <offset>
             fd.seek(SeekFrom::Start(offset as u64)).await?;
 
             loop {
+                // read the file bytes into buf
                 let read = match fd.read(&mut buf[total..]).await {
                     Ok(n) => n,
                     Err(_) => {
                         return Ok(req.reply_error(libc::EIO)?);
                     }
                 };
+
+                // calculate the total size and break if the whole file downloaded
                 total += read;
                 if total >= size {
                     break 'blocks;
                 }
 
+                // read = 0 means that the file not totally read
                 if read == 0 {
+                    
+                    // if this true it means that the last chunk is not totally read
+                    // so we push it inside the LRU
+                    if total%CHUNK_SIZE > 0 {
+                        let mut lruf = self.lruf.lock().await;
+                        lruf.put(fhash, fd);
+                    }
                     break;
                 }
             }
