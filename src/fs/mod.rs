@@ -106,7 +106,7 @@ impl Filesystem {
     async fn read(&self, req: &Request, op: op::Read<'_>) -> Result<()> {
 
         let entry = self.meta.entry(op.ino()).await?;
-        let file = match entry.kind {
+        let file_metadata = match entry.kind {
             EntryKind::File(file) => file,
             _ => {
                 return Ok(req.reply_error(libc::EISDIR)?);
@@ -118,7 +118,7 @@ impl Filesystem {
         let chunk_size = CHUNK_SIZE; // file.block_size as usize;
         let chunk_index = offset / chunk_size;
 
-        if chunk_index >= file.blocks.len() || op.size() == 0 {
+        if chunk_index >= file_metadata.blocks.len() || op.size() == 0 {
             // reading after the end of the file
             let data: &[u8] = &[];
             return Ok(req.reply(data)?);
@@ -130,7 +130,7 @@ impl Filesystem {
         let mut buf: Vec<u8> = vec![0; size];
         let mut total = 0;
 
-        'blocks: for block in file.blocks.iter().skip(chunk_index) {
+        'blocks: for block in file_metadata.blocks.iter().skip(chunk_index) {
             // fhash works as a key inside the LRU
             let fhash = block.hash.clone();
             let mut lruf = self.lruf.lock().await;
