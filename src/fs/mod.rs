@@ -153,6 +153,8 @@ impl Filesystem {
             // seek to the position <offset>
             fd.seek(SeekFrom::Start(internal_offset as u64)).await?;
 
+            let mut internal_seek = internal_offset as u64;
+
             loop {
                 // read the file bytes into buf
                 let read = match fd.read(&mut buf[total..]).await {
@@ -162,12 +164,15 @@ impl Filesystem {
                     }
                 };
 
+                internal_seek += read as u64;
+
                 // calculate the total size and break if the required bytes (=size) downloaded
                 total += read;
+
                 if total >= size {
-                    let read_size = fd.stream_position().await?;
+
                     // if only part of the block read -> store it in the lruf
-                    if read_size < block_size {
+                    if internal_seek < block_size {
                         let mut lruf = self.lruf.lock().await;
                         lruf.put(fhash, (fd, block_size));
                     }
