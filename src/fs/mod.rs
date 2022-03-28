@@ -12,7 +12,10 @@ use polyfuse::{
     KernelConfig, Operation, Request, Session,
 };
 use std::io::SeekFrom;
+use std::sync::Arc;
 use std::{io, os::unix::prelude::*, path::PathBuf, time::Duration};
+use tokio::fs::File;
+use tokio::sync::Mutex;
 use tokio::{
     io::{unix::AsyncFd, AsyncReadExt, AsyncSeekExt, Interest},
     task::{self, JoinHandle},
@@ -20,16 +23,24 @@ use tokio::{
 
 const CHUNK_SIZE: usize = 512 * 1024; // 512k and is hardcoded in the hub. the block_size value is not used
 const TTL: Duration = Duration::from_secs(60 * 60 * 24 * 365);
+const LRU_CAP: usize = 5; // Least Recently Used File Capacity
+type FHash = Vec<u8>;
+type BlockSize = u64;
 
 #[derive(Clone)]
 pub struct Filesystem {
     meta: meta::Metadata,
     cache: cache::Cache,
+    lru: Arc<Mutex<lru::LruCache<FHash, (File, BlockSize)>>>,
 }
 
 impl Filesystem {
     pub fn new(meta: meta::Metadata, cache: cache::Cache) -> Filesystem {
-        Filesystem { meta, cache }
+        Filesystem {
+            meta,
+            cache,
+            lru: Arc::new(Mutex::new(lru::LruCache::new(LRU_CAP))),
+        }
     }
 
     pub async fn mount<S>(&self, mnt: S) -> Result<()>
@@ -49,6 +60,7 @@ impl Filesystem {
         // release here
         while let Some(req) = session.next_request().await? {
             let fs = self.clone();
+
             let _: JoinHandle<Result<()>> = task::spawn(async move {
                 let result = match req.operation()? {
                     Operation::Lookup(op) => fs.lookup(&req, op).await,
@@ -94,7 +106,7 @@ impl Filesystem {
 
     async fn read(&self, req: &Request, op: op::Read<'_>) -> Result<()> {
         let entry = self.meta.entry(op.ino()).await?;
-        let file = match entry.kind {
+        let file_metadata = match entry.kind {
             EntryKind::File(file) => file,
             _ => {
                 return Ok(req.reply_error(libc::EISDIR)?);
@@ -106,7 +118,7 @@ impl Filesystem {
         let chunk_size = CHUNK_SIZE; // file.block_size as usize;
         let chunk_index = offset / chunk_size;
 
-        if chunk_index >= file.blocks.len() || op.size() == 0 {
+        if chunk_index >= file_metadata.blocks.len() || op.size() == 0 {
             // reading after the end of the file
             let data: &[u8] = &[];
             return Ok(req.reply(data)?);
@@ -118,31 +130,64 @@ impl Filesystem {
         let mut buf: Vec<u8> = vec![0; size];
         let mut total = 0;
 
-        'blocks: for block in file.blocks.iter().skip(chunk_index) {
-            let (_, mut fd) = match cache.get(block).await {
-                Ok(out) => out,
-                Err(_) => {
-                    return Ok(req.reply_error(libc::EIO)?);
+        'blocks: for block in file_metadata.blocks.iter().skip(chunk_index) {
+            // hash works as a key inside the LRU
+            let hash = block.hash.clone();
+
+            // getting the file descriptor from the LRU or from the cache if not found in the LRU
+            let lru = self.lru.lock().await.pop(&hash);
+
+            let (mut fd, block_size) = match lru {
+                Some((descriptor, bsize)) => {
+                    debug!("lru hit");
+                    (descriptor, bsize)
+                }
+                None => {
+                    let (bsize, descriptor) = match cache.get(block).await {
+                        Ok(out) => out,
+                        Err(_) => {
+                            return Ok(req.reply_error(libc::EIO)?);
+                        }
+                    };
+                    (descriptor, bsize)
                 }
             };
+
+            // seek to the position <offset>
             fd.seek(SeekFrom::Start(offset as u64)).await?;
 
+            let mut chunk_offset = offset as u64;
+
             loop {
+                // read the file bytes into buf
                 let read = match fd.read(&mut buf[total..]).await {
                     Ok(n) => n,
                     Err(_) => {
                         return Ok(req.reply_error(libc::EIO)?);
                     }
                 };
+
+                chunk_offset += read as u64;
+
+                // calculate the total size and break if the required bytes (=size) downloaded
                 total += read;
+
                 if total >= size {
+                    // if only part of the block read -> store it in the lruf
+                    if chunk_offset < block_size {
+                        let mut lruf = self.lru.lock().await;
+                        lruf.put(hash, (fd, block_size));
+                    }
+
                     break 'blocks;
                 }
 
+                // read = 0 means the EOF (end of the block)
                 if read == 0 {
                     break;
                 }
             }
+
             offset = 0;
         }
 
@@ -153,8 +198,8 @@ impl Filesystem {
         let entry = self.meta.entry(op.ino()).await?;
         let mut attr = AttrOut::default();
 
-        let mut fill = attr.attr();
-        if entry.fill(&self.meta, &mut fill).await.is_err() {
+        let fill = attr.attr();
+        if entry.fill(&self.meta, fill).await.is_err() {
             req.reply_error(libc::ENOENT)?;
         }
 
