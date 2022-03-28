@@ -16,7 +16,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Unit Testing
-      run: cargo test --lib --bins
+      run: cargo test --bins
     - name: Integration Testing
       run: cargo test --test '*' --test-threads=1
       
