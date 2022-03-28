@@ -23,7 +23,7 @@ use tokio::{
 
 const CHUNK_SIZE: usize = 512 * 1024; // 512k and is hardcoded in the hub. the block_size value is not used
 const TTL: Duration = Duration::from_secs(60 * 60 * 24 * 365);
-const LRUFCAP: usize = 20; // Least Recently Used File Capacity
+const LRU_CAP: usize = 5; // Least Recently Used File Capacity
 type FHash = Vec<u8>;
 type BlockSize = u64;
 
@@ -31,7 +31,7 @@ type BlockSize = u64;
 pub struct Filesystem {
     meta: meta::Metadata,
     cache: cache::Cache,
-    lruf: Arc<Mutex<lru::LruCache<FHash, (File, BlockSize)>>>,
+    lru: Arc<Mutex<lru::LruCache<FHash, (File, BlockSize)>>>,
 }
 
 impl Filesystem {
@@ -39,7 +39,7 @@ impl Filesystem {
         Filesystem {
             meta,
             cache,
-            lruf: Arc::new(Mutex::new(lru::LruCache::new(LRUFCAP))),
+            lru: Arc::new(Mutex::new(lru::LruCache::new(LRU_CAP))),
         }
     }
 
@@ -125,20 +125,23 @@ impl Filesystem {
         }
 
         // offset inside the file
-        let mut internal_offset = offset - (chunk_index * chunk_size);
+        let mut offset = offset - (chunk_index * chunk_size);
         let mut cache = self.cache.clone();
         let mut buf: Vec<u8> = vec![0; size];
         let mut total = 0;
 
         'blocks: for block in file_metadata.blocks.iter().skip(chunk_index) {
-            // fhash works as a key inside the LRU
-            let fhash = block.hash.clone();
+            // hash works as a key inside the LRU
+            let hash = block.hash.clone();
 
             // getting the file descriptor from the LRU or from the cache if not found in the LRU
-            let lrufd = self.lruf.lock().await.pop(&fhash);
+            let lru = self.lru.lock().await.pop(&hash);
 
-            let (mut fd, block_size) = match lrufd {
-                Some((descriptor, bsize)) => (descriptor, bsize),
+            let (mut fd, block_size) = match lru {
+                Some((descriptor, bsize)) => {
+                    debug!("lru hit");
+                    (descriptor, bsize)
+                }
                 None => {
                     let (bsize, descriptor) = match cache.get(block).await {
                         Ok(out) => out,
@@ -151,9 +154,9 @@ impl Filesystem {
             };
 
             // seek to the position <offset>
-            fd.seek(SeekFrom::Start(internal_offset as u64)).await?;
+            fd.seek(SeekFrom::Start(offset as u64)).await?;
 
-            let mut internal_seek = internal_offset as u64;
+            let mut chunk_offset = offset as u64;
 
             loop {
                 // read the file bytes into buf
@@ -164,17 +167,16 @@ impl Filesystem {
                     }
                 };
 
-                internal_seek += read as u64;
+                chunk_offset += read as u64;
 
                 // calculate the total size and break if the required bytes (=size) downloaded
                 total += read;
 
                 if total >= size {
-
                     // if only part of the block read -> store it in the lruf
-                    if internal_seek < block_size {
-                        let mut lruf = self.lruf.lock().await;
-                        lruf.put(fhash, (fd, block_size));
+                    if chunk_offset < block_size {
+                        let mut lruf = self.lru.lock().await;
+                        lruf.put(hash, (fd, block_size));
                     }
 
                     break 'blocks;
@@ -186,7 +188,7 @@ impl Filesystem {
                 }
             }
 
-            internal_offset = 0;
+            offset = 0;
         }
 
         Ok(req.reply(&buf[..size])?)
@@ -196,8 +198,8 @@ impl Filesystem {
         let entry = self.meta.entry(op.ino()).await?;
         let mut attr = AttrOut::default();
 
-        let mut fill = attr.attr();
-        if entry.fill(&self.meta, &mut fill).await.is_err() {
+        let fill = attr.attr();
+        if entry.fill(&self.meta, fill).await.is_err() {
             req.reply_error(libc::ENOENT)?;
         }
 

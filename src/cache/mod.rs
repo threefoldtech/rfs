@@ -129,7 +129,7 @@ impl Locker {
     }
 
     pub async fn lock(&self) -> Result<()> {
-        let fd = self.fd.clone();
+        let fd = self.fd;
         tokio::task::spawn_blocking(move || {
             nix::fcntl::flock(fd, nix::fcntl::FlockArg::LockExclusive)
         })
