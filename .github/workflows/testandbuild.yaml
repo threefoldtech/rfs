@@ -2,7 +2,7 @@ name: Rust
 
 on:
   push:
-    branches: [ master ]
+    branches: [ test-build-github-actions ]
   pull_request:
     branches: [ master ]
 
@@ -15,6 +15,17 @@ jobs:
     
     steps:
     - uses: actions/checkout@v2
+    - name: Get Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install capnproto
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+    - uses: actions-rs/cargo@v1
+      with:
+        command: build
+        args: --release
     - name: Unit Testing
       run: cargo test --bins
     - name: Integration Testing
