@@ -26,6 +26,7 @@ jobs:
       with:
         command: build
         args: --release
+    - uses: Swatinem/rust-cache@v1
     - name: Unit Testing
       run: cargo test --bins
     - name: Integration Testing
