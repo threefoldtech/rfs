@@ -29,7 +29,7 @@ jobs:
     - name: Unit Testing
       run: cargo test --bins
     - name: Integration Testing
-      run: cargo test --test '*' --test-threads=1
+      run: cargo test --release --test '*' -- --test-threads=1
       
   build:
     needs: test

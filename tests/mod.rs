@@ -3,11 +3,11 @@ use assert_cmd::{assert::Assert, Command};
 const MOUNTPOINT: &str = "/tmp/rmnt";
 
 fn create_mountpoint_dir() {
-    Command::new("/bin/mkdir").args(["-p", MOUNTPOINT]);
+    Command::new("/bin/mkdir").args(["-p", MOUNTPOINT]).output().unwrap();
 }
 
 fn remove_mountpoint_dir() {
-    Command::new("/bin/rm").args(["-Rf", MOUNTPOINT]);
+    Command::new("/bin/rm").args(["-Rf", MOUNTPOINT]).output().unwrap();
 }
 
 fn run_rfs_detached() -> Assert {
@@ -16,7 +16,7 @@ fn run_rfs_detached() -> Assert {
         .args([
             "-d",
             "--meta",
-            "/media/ahmedyasen/Data/workspaces/Rust/rfs/tests/threefoldtech-funk-latest.flist",
+            "./tests/threefoldtech-funk-latest.flist",
             MOUNTPOINT,
         ])
         .assert();
@@ -31,7 +31,7 @@ fn umount_rfs() {
 fn test_sucess_mount() {
     remove_mountpoint_dir();
     create_mountpoint_dir();
-
+    
     run_rfs_detached().success();
 
     umount_rfs();
