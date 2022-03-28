@@ -170,7 +170,6 @@ impl Filesystem {
                 total += read;
 
                 if total >= size {
-
                     // if only part of the block read -> store it in the lruf
                     if internal_seek < block_size {
                         let mut lruf = self.lruf.lock().await;
