@@ -1,4 +1,4 @@
-name: Rust
+name: Unit and Integration Test
 
 on:
   push:
@@ -23,14 +23,10 @@ jobs:
       with:
         toolchain: stable
     - uses: Swatinem/rust-cache@v1
-    - uses: actions-rs/cargo@v1
-      with:
-        command: build
-        args: --release
     - name: Unit Testing
       run: cargo test --bins
     - name: Config FUSE to run without sudo
-      run: sudo echo user_allow_other >> /etc/fuse.conf
+      run: sudo chmod +x /etc/fuse.conf && sudo echo user_allow_other >> /etc/fuse.conf
     - name: Integration Testing
       run: cargo test --release --test '*' -- --test-threads=1
       
