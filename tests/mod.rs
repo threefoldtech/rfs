@@ -11,6 +11,7 @@ fn remove_mountpoint_dir() {
 }
 
 fn run_rfs_detached() -> Assert {
+    Command::new("sudo").output().unwrap();
     let mut cmd = Command::cargo_bin("rfs").unwrap();
     let assert_mount = cmd
         .args([
