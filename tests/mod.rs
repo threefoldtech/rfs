@@ -15,11 +15,16 @@ fn run_rfs_detached() -> Assert {
     let assert_mount = cmd
         .args([
             "-d",
+            "--log",
+            "/tmp/rfs.logs",
             "--meta",
             "./tests/threefoldtech-funk-latest.flist",
             MOUNTPOINT,
         ])
         .assert();
+
+    let logs = Command::new("cat").args(["/tmp/rfs.logs"]).output();
+    println!("\r\n\r\n==========\r\nDetaching the filesystem's logs\r\n{:#?}", logs);
     assert_mount
 }
 

@@ -22,11 +22,11 @@ jobs:
     - uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
+    - uses: Swatinem/rust-cache@v1
     - uses: actions-rs/cargo@v1
       with:
         command: build
         args: --release
-    - uses: Swatinem/rust-cache@v1
     - name: Unit Testing
       run: cargo test --bins
     - name: Integration Testing
