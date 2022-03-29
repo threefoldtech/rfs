@@ -29,6 +29,8 @@ jobs:
         args: --release
     - name: Unit Testing
       run: cargo test --bins
+    - name: Config FUSE to run without sudo
+      run: sudo echo user_allow_other >> /etc/fuse.conf
     - name: Integration Testing
       run: cargo test --release --test '*' -- --test-threads=1
       
