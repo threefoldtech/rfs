@@ -9,8 +9,10 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+
 container:
-  image: ghcr.io/owner/image --user root
+  image: ghcr.io/owner/image
+  options: --user root
   credentials:
     username: ${{ github.actor }}
     password: ${{ secrets.github_token }}
@@ -32,7 +34,7 @@ jobs:
     - name: Unit Testing
       run: cargo test --bins
     - name: Config FUSE to run without sudo
-      run: sudo chmod +x /etc/fuse.conf && sudo echo user_allow_other >> /etc/fuse.conf
+      run: sudo chown -R  /etc/fuse.conf && sudo echo user_allow_other >> /etc/fuse.conf
     - name: Integration Testing
       run: cargo test --release --test '*' -- --test-threads=1
       
