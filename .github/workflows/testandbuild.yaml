@@ -9,14 +9,6 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
-
-container:
-  image: ghcr.io/owner/image
-  options: --user root
-  credentials:
-    username: ${{ github.actor }}
-    password: ${{ secrets.github_token }}
-
 jobs:
   test:
     runs-on: ubuntu-latest
