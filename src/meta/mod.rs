@@ -2,51 +2,22 @@ pub mod inode;
 pub mod types;
 
 use anyhow::{Context, Result};
-use blake2::digest::{Update, VariableOutput};
-use blake2::VarBlake2b;
 use flate2::read::GzDecoder;
 use inode::Inode;
 use sqlx::sqlite::SqlitePool;
-use std::fmt::Write;
 use std::path::Path;
 use std::sync::Arc;
 use tar::Archive;
 use tokio::sync::Mutex;
 use types::{Entry, EntryKind};
 
+/// 16 byte blake2b hash of the empty string
+const ROOT_HASH: &str = "cae66941d9efbd404e4d88758ea67670";
+
 #[derive(Error, Debug)]
 pub enum MetaError {
     #[error("error not found")]
     EntryNotFound,
-}
-
-pub struct Hash(Vec<u8>);
-impl Hash {
-    pub fn new(w: &str) -> Hash {
-        let mut hasher = VarBlake2b::new(16).unwrap();
-
-        hasher.update(w.as_bytes());
-        let mut result: Vec<u8> = Vec::new();
-        hasher.finalize_variable(|res| {
-            result = res.to_vec();
-        });
-
-        Hash(result)
-    }
-
-    fn hex(&self) -> String {
-        let mut result = String::new();
-        for i in self.0.as_slice() {
-            write!(&mut result, "{:02x}", i).unwrap();
-        }
-        result
-    }
-}
-
-impl std::fmt::Display for Hash {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
-        write!(f, "{}", self.hex())
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -112,8 +83,7 @@ impl Metadata {
     }
 
     pub async fn root(&self) -> Result<Arc<types::Entry>> {
-        let root = Hash::new("").hex();
-        return self.dir_by_key(root).await;
+        return self.dir_by_key(ROOT_HASH).await;
     }
 
     fn inode(&self, ino: u64) -> Inode {
@@ -149,7 +119,6 @@ impl Metadata {
     }
 
     async fn dir_by_key<S: AsRef<str>>(&self, key: S) -> Result<Arc<types::Entry>> {
-        // let root = Hash::new("").hex();
         let mut lru = self.lru.lock().await;
         if let Some(dir) = lru.get(key.as_ref()) {
             return Ok(dir.clone());

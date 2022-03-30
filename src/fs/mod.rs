@@ -24,7 +24,7 @@ use tokio::{
 const CHUNK_SIZE: usize = 512 * 1024; // 512k and is hardcoded in the hub. the block_size value is not used
 const TTL: Duration = Duration::from_secs(60 * 60 * 24 * 365);
 const LRU_CAP: usize = 5; // Least Recently Used File Capacity
-type FHash = Vec<u8>;
+type FHash = [u8; 16];
 type BlockSize = u64;
 
 #[derive(Clone)]
@@ -132,7 +132,7 @@ impl Filesystem {
 
         'blocks: for block in file_metadata.blocks.iter().skip(chunk_index) {
             // hash works as a key inside the LRU
-            let hash = block.hash.clone();
+            let hash = block.hash;
 
             // getting the file descriptor from the LRU or from the cache if not found in the LRU
             let lru = self.lru.lock().await.pop(&hash);
