@@ -34,7 +34,7 @@ jobs:
     - name: Unit Testing
       run: cargo test --bins
     - name: Config FUSE to run without sudo
-      run: sudo chown -R  /etc/fuse.conf && sudo echo user_allow_other >> /etc/fuse.conf
+      run: sudo chown -R  $USER:$USER /etc/fuse.conf && sudo echo user_allow_other >> /etc/fuse.conf
     - name: Integration Testing
       run: cargo test --release --test '*' -- --test-threads=1
       
