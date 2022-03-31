@@ -5,6 +5,7 @@ use anyhow::Result;
 use capnp::{message, serialize};
 use nix::unistd::{Group, User};
 use polyfuse::reply::FileAttr;
+use std::convert::TryInto;
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
@@ -24,8 +25,8 @@ pub struct SubDir {
 
 #[derive(Debug, Clone)]
 pub struct FileBlock {
-    pub hash: Vec<u8>,
-    pub key: Vec<u8>,
+    pub hash: [u8; 16],
+    pub key: [u8; 16],
 }
 
 #[derive(Debug, Clone)]
@@ -116,8 +117,14 @@ impl Dir {
                                 let mut result = vec![];
                                 for block in blocks {
                                     result.push(FileBlock {
-                                        hash: Vec::from(block.get_hash()?),
-                                        key: Vec::from(block.get_key()?),
+                                        hash: block
+                                            .get_hash()?
+                                            .try_into()
+                                            .expect("block hash is 16 bytes"),
+                                        key: block
+                                            .get_key()?
+                                            .try_into()
+                                            .expect("block encryption key is 16 bytes"),
                                     });
                                 }
                                 result
