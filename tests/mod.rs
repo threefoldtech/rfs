@@ -28,7 +28,7 @@ fn run_rfs_detached() -> Assert {
 }
 
 fn umount_rfs() {
-    Command::new("umount").args([MOUNTPOINT]).unwrap();
+    nix::mount::umount(MOUNTPOINT).unwrap();
 }
 
 #[test]
