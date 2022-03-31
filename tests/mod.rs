@@ -1,17 +1,17 @@
 use assert_cmd::{assert::Assert, Command};
+use std::fs;
 
 const MOUNTPOINT: &str = "/tmp/rmnt";
 
 fn create_mountpoint_dir() {
-    Command::new("/bin/mkdir").args(["-p", MOUNTPOINT]).output().unwrap();
+    fs::create_dir_all(MOUNTPOINT).unwrap();
 }
 
 fn remove_mountpoint_dir() {
-    Command::new("/bin/rm").args(["-Rf", MOUNTPOINT]).output().unwrap();
+    fs::remove_dir_all(MOUNTPOINT).unwrap();
 }
 
 fn run_rfs_detached() -> Assert {
-    Command::new("echo").args(["user_allow_other", ">>", "/etc/fuse.conf"]).output().unwrap();
     let mut cmd = Command::cargo_bin("rfs").unwrap();
     let assert_mount = cmd
         .args([
@@ -24,8 +24,6 @@ fn run_rfs_detached() -> Assert {
         ])
         .assert();
 
-    let logs = Command::new("cat").args(["/tmp/rfs.logs"]).output();
-    println!("\r\n\r\n==========\r\nDetaching the filesystem's logs\r\n{:#?}", logs);
     assert_mount
 }
 
