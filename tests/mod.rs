@@ -77,7 +77,7 @@ fn test_fs_with_md5sum_check() {
     Command::new("md5sum")
         .args([
             "-c",
-            format!("{}/{}", current_directory, "checksum.md5").as_str(),
+            "checksum.md5",
         ])
         .current_dir(current_directory)
         .assert()
@@ -97,7 +97,7 @@ fn test_symblic_with_md5sum_check() {
     Command::new("md5sum")
         .args([
             "-c",
-            format!("{}/{}", current_directory, "checksum.md5").as_str(),
+            "checksum.md5",
         ])
         .current_dir(current_directory)
         .assert()
