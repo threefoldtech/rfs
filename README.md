@@ -17,7 +17,7 @@ Improve stability and resources needed to run a 0-fs instance.
 - [x] ACL and ownership
 
 ## Difference between the 2 implementations
-- Rust fuse library only provide the Inode api (no higher lever API). This is the reason we can't merge flists in runtime, because `inodes` are
+- Rust fuse library only provide the inode api (no higher level API). This is the reason we can't merge flists in runtime, because `inodes` are
 generated from `rawid` of the sqlite database.
 
 ## Basic usage

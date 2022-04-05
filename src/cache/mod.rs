@@ -11,14 +11,6 @@ trait Hex {
     fn hex(&self) -> String;
 }
 
-impl Hex for Vec<u8> {
-    fn hex(&self) -> String {
-        self.iter()
-            .map(|x| -> String { format!("{:02x}", x) })
-            .collect()
-    }
-}
-
 impl Hex for &[u8] {
     fn hex(&self) -> String {
         self.iter()
@@ -106,12 +98,12 @@ impl Cache {
         let meta = file.metadata().await?;
         if meta.len() > 0 {
             // chunk is already downloaded
-            debug!("block cache hit: {}", block.hash.hex());
+            debug!("block cache hit: {}", block.hash.as_slice().hex());
             locker.unlock().await?;
             return Ok((meta.len(), file));
         }
 
-        debug!("downloading block: {}", block.hash.hex());
+        debug!("downloading block: {}", block.hash.as_slice().hex());
         let size = self.download(&mut file, block).await?;
 
         locker.unlock().await?;
