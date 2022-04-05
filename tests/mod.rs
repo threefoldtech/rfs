@@ -55,6 +55,7 @@ fn test_symblic_with_md5sum_check() {
 }
 
 #[test]
+#[ignore]
 fn test_permissions() {
     let mops = RfsMntOps(MOUNTPOINT);
 
