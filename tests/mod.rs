@@ -22,7 +22,6 @@ fn test_sucess_mount() {
     let mops = RfsMntOps(MOUNTPOINT);
 
     mops.mount_rfs().assert().success();
-
 }
 
 #[test]
@@ -30,28 +29,26 @@ fn test_fs_with_md5sum_check() {
     let mops = RfsMntOps(MOUNTPOINT);
     mops.mount_rfs().output().unwrap();
 
-    let current_directory = format!("{}/vfs", MOUNTPOINT);
+    let current_directory = format!("{}", MOUNTPOINT);
 
     Command::new("md5sum")
         .args(["-c", "checksum.md5"])
         .current_dir(current_directory)
         .assert()
         .success();
-
 }
 
 #[test]
-fn test_symblic_with_md5sum_check() {
+fn test_symbolic_with_md5sum_check() {
     let mops = RfsMntOps(MOUNTPOINT);
     mops.mount_rfs().output().unwrap();
-    let current_directory = format!("{}/vfs/symbolic_links", MOUNTPOINT);
+    let current_directory = format!("{}/symbolic_links", MOUNTPOINT);
 
     Command::new("md5sum")
         .args(["-c", "checksum.md5"])
         .current_dir(current_directory)
         .assert()
         .success();
-
 }
 
 #[test]
@@ -60,7 +57,7 @@ fn test_permissions() {
     let mops = RfsMntOps(MOUNTPOINT);
 
     mops.mount_rfs().output().unwrap();
-    let current_directory = format!("{}/vfs/file_permissions", MOUNTPOINT);
+    let current_directory = format!("{}/file_permissions", MOUNTPOINT);
 
     // all permissions is the same for ugo
     // test read only permission
@@ -84,7 +81,6 @@ fn test_permissions() {
     // test read write execute permission
     let md = fs::metadata(format!("{}/rwx", current_directory)).unwrap();
     assert_eq!(md.permissions().mode() & PERMMASK, READWRITEEXEC);
-
 }
 
 #[test]
@@ -93,7 +89,6 @@ fn test_failure_use_mountpoint_twice() {
 
     mops.mount_rfs().output().unwrap();
     mops.mount_rfs().assert().failure();
-
 }
 
 #[test]
