@@ -1,10 +1,7 @@
 name: Unit and Integration Test
 
 on:
-  push:
-    branches: [ test-build-github-actions ]
-  pull_request:
-    branches: [ master ]
+  push
 
 env:
   CARGO_TERM_COLOR: always
