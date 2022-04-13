@@ -4,8 +4,8 @@ use std::{fs, os::unix::prelude::PermissionsExt, path::Path};
 const MOUNTPOINT: &str = "/tmp/rmnt";
 
 const FLISTPATH: &str = "/tmp/test.flist";
-// const FLISTURL: &str = "https://hub.grid.tf/yasen.3bot/integration_test_fs.flist";
-const FLISTURL: &str = "https://hub.grid.tf/azmy.3bot/perm.flist";
+const FLISTURL: &str = "https://hub.grid.tf/yasen.3bot/integration_test_fs.flist";
+// const FLISTURL: &str = "https://hub.grid.tf/azmy.3bot/perm.flist";
 
 const PERMMASK: u32 = 0x1FF;
 const EXECONLY: u32 = 0o111;
@@ -52,7 +52,6 @@ fn test_symbolic_with_md5sum_check() {
 }
 
 #[test]
-#[ignore]
 fn test_permissions() {
     let mops = RfsMntOps(MOUNTPOINT);
 
