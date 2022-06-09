@@ -154,7 +154,7 @@ fn wait_child(target: String, mut pid_file: tempfile::NamedTempFile) {
     let pid = buf.parse::<i32>();
     match pid {
         Err(e) => error!("failed to parse pid_file contents {}: {}", buf, e),
-        Ok(v) => signal::kill(Pid::from_raw(v), Signal::SIGTERM).unwrap_or_default(),
+        Ok(v) => { let _ = signal::kill(Pid::from_raw(v), Signal::SIGTERM); } // probably the child exited on its own
     }
     // cleanup is not performed if the process is terminated with exit(2)
     drop(pid_file);
