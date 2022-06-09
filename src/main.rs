@@ -14,6 +14,9 @@ pub mod schema_capnp {
     include!(concat!(env!("OUT_DIR"), "/schema_capnp.rs"));
 }
 
+const GIT_VERSION: &str =
+    git_version::git_version!(args = ["--tags", "--always", "--dirty=-modified"]);
+
 struct Options {
     hub: String,
     meta: String,
@@ -24,7 +27,7 @@ struct Options {
 
 fn main() -> Result<()> {
     let matches = App::new("Mount flists")
-        .version("0.2")
+        .version(GIT_VERSION)
         .author("Threefold Tech")
         .arg(
             Arg::with_name("debug")
@@ -126,7 +129,7 @@ fn is_mountpoint<S: AsRef<str>>(target: S) -> Result<bool> {
         .arg("-q")
         .arg(target.as_ref())
         .output()
-        .context("failed to check mount pooint")?;
+        .context("failed to check mountpoint")?;
 
     Ok(output.status.success())
 }

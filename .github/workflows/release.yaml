@@ -12,19 +12,22 @@ jobs:
     # we use 18.04 to be compatible with libc version on zos
     runs-on: ubuntu-18.04
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-      - name: Get Dependencies
+      - name: Prepare
         run: |
           sudo apt-get update
+          sudo apt-get install musl-dev musl-tools
           sudo apt-get install capnproto
+      - name: Checkout code
+        uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
+        name: Install toolchain
         with:
           toolchain: stable
+          target: x86_64-unknown-linux-musl
       - uses: actions-rs/cargo@v1
         with:
           command: build
-          args: --release
+          args: --release --target=x86_64-unknown-linux-musl
       - name: Strip
         run: |
           strip target/release/rfs

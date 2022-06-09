@@ -539,6 +539,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "git-version"
+version = "0.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f6b0decc02f4636b9ccad390dcbe77b722a77efedfa393caf8379a51d5c61899"
+dependencies = [
+ "git-version-macro",
+ "proc-macro-hack",
+]
+
+[[package]]
+name = "git-version-macro"
+version = "0.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe69f1cbdb6e28af2bac214e943b99ce8a0a06b447d15d3e61161b0423139f3f"
+dependencies = [
+ "proc-macro-hack",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "h2"
 version = "0.3.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1077,8 +1099,7 @@ checksum = "1df8c4ec4b0627e53bdf214615ad287367e482558cf84b109250b37464dc03ae"
 [[package]]
 name = "polyfuse"
 version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "acb80af6cabd03bbc7a110587f265ed947f8b6e0a853e13f008a4d8b4bf02ca0"
+source = "git+https://github.com/muhamadazmy/polyfuse?branch=master#ae2d098aab3af8786d9d86ed4a1dad46115da2ea"
 dependencies = [
  "either",
  "libc",
@@ -1090,8 +1111,7 @@ dependencies = [
 [[package]]
 name = "polyfuse-kernel"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9fcdb6363a7c4c480eb6c2b65c70f69be05e595ef33b1a9013e41ca08efef293"
+source = "git+https://github.com/muhamadazmy/polyfuse?branch=master#ae2d098aab3af8786d9d86ed4a1dad46115da2ea"
 dependencies = [
  "zerocopy",
 ]
@@ -1122,6 +1142,12 @@ dependencies = [
  "predicates-core",
  "termtree",
 ]
+
+[[package]]
+name = "proc-macro-hack"
+version = "0.5.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dbf0c48bc1d91375ae5c3cd81e3722dff1abcf81a30960240640d223f59fe0e5"
 
 [[package]]
 name = "proc-macro2"
@@ -1236,6 +1262,7 @@ dependencies = [
  "daemonize",
  "flate2",
  "futures",
+ "git-version",
  "libc",
  "log",
  "lru",

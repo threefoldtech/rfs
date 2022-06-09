@@ -13,7 +13,6 @@ anyhow = "1.0.44"
 time = "0.3.3"
 sqlx = { version = "0.5", features = [ "runtime-tokio-rustls", "sqlite" ] }
 tokio = { version = "1.11.0", features = ["full"] }
-polyfuse = "0.4"
 libc = "0.2"
 futures = "0.3"
 thiserror = "1.0"
@@ -29,6 +28,11 @@ tar = "0.4"
 flate2 = "1.0"
 daemonize = "0.4.1"
 snap = "1.0.5"
+git-version = "0.3.5"
+
+[dependencies.polyfuse]
+branch = "master"
+git = "https://github.com/muhamadazmy/polyfuse"
 
 [dev-dependencies]
 reqwest = { version = "0.11", features = ["blocking"] }
