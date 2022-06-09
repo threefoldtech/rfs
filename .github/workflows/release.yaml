@@ -30,7 +30,7 @@ jobs:
           args: --release --target=x86_64-unknown-linux-musl
       - name: Strip
         run: |
-          strip target/x86_64-unknown-linux-musl/release/rmb
+          strip target/x86_64-unknown-linux-musl/release/rfs
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1
@@ -48,6 +48,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: target/x86_64-unknown-linux-musl/release/rmb
+          asset_path: target/x86_64-unknown-linux-musl/release/rfs
           asset_name: rfs
           asset_content_type: application/x-pie-executable
