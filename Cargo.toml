@@ -29,6 +29,7 @@ flate2 = "1.0"
 daemonize = "0.4.1"
 snap = "1.0.5"
 git-version = "0.3.5"
+tempfile = "3.3.0"
 
 [dependencies.polyfuse]
 branch = "master"

@@ -1274,6 +1274,7 @@ dependencies = [
  "snap",
  "sqlx",
  "tar",
+ "tempfile",
  "thiserror",
  "time",
  "tokio",
