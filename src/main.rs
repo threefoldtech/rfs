@@ -129,7 +129,7 @@ fn is_mountpoint<S: AsRef<str>>(target: S) -> Result<bool> {
         .arg("-q")
         .arg(target.as_ref())
         .output()
-        .context("failed to check mount pooint")?;
+        .context("failed to check mountpoint")?;
 
     Ok(output.status.success())
 }
