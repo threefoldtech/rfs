@@ -4,6 +4,10 @@ extern crate anyhow;
 extern crate thiserror;
 #[macro_use]
 extern crate log;
+use nix::sys::signal::{self, Signal};
+use nix::unistd::Pid;
+use std::io::Read;
+
 use anyhow::{Context, Result};
 use clap::{App, Arg};
 
@@ -104,10 +108,12 @@ fn main() -> Result<()> {
     }
 
     if opt.daemon {
+        let pid_file = tempfile::NamedTempFile::new()?;
         let target = opt.target.clone();
         let mut daemon = daemonize::Daemonize::new()
             .working_directory(std::env::current_dir()?)
-            .exit_action(move || wait_child(target));
+            .pid_file(pid_file.path())
+            .exit_action(move || wait_child(target, pid_file));
         if matches.is_present("log") {
             let out = std::fs::File::create(matches.value_of("log").unwrap())?;
             let err = out.try_clone()?;
@@ -134,14 +140,24 @@ fn is_mountpoint<S: AsRef<str>>(target: S) -> Result<bool> {
     Ok(output.status.success())
 }
 
-fn wait_child(target: String) {
+fn wait_child(target: String, mut pid_file: tempfile::NamedTempFile) {
     for _ in 0..5 {
         if is_mountpoint(&target).unwrap() {
             return;
         }
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
-
+    let mut buf = String::new();
+    if let Err(e) = pid_file.read_to_string(&mut buf) {
+        error!("failed to read pid_file: {}", e);
+    }
+    let pid = buf.parse::<i32>();
+    match pid {
+        Err(e) => error!("failed to parse pid_file contents {}: {}", buf, e),
+        Ok(v) => { let _ = signal::kill(Pid::from_raw(v), Signal::SIGTERM); } // probably the child exited on its own
+    }
+    // cleanup is not performed if the process is terminated with exit(2)
+    drop(pid_file);
     eprintln!("failed to mount in under 5 seconds, please check logs for more information");
     std::process::exit(1);
 }
