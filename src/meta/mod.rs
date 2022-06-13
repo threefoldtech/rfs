@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use flate2::read::GzDecoder;
 use inode::Inode;
 use sqlx::sqlite::SqlitePool;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tar::Archive;
 use tokio::sync::Mutex;
@@ -84,6 +84,40 @@ impl Metadata {
 
     pub async fn root(&self) -> Result<Arc<types::Entry>> {
         return self.dir_by_key(ROOT_HASH).await;
+    }
+
+    #[async_recursion::async_recursion]
+    async fn walk_dir<F>(&self, p: &Path, entry: &Entry, cb: &F) -> Result<()>
+    where
+        F: Fn(&Path, &Entry) -> Result<()> + Sync,
+    {
+        cb(p, &entry)?;
+
+        let dir = match entry.kind {
+            EntryKind::Dir(ref dir) => dir,
+            _ => return Ok(()),
+        };
+
+        for entry in dir.entries.iter() {
+            let path = p.join(&entry.node.name);
+            match entry.kind {
+                EntryKind::SubDir(ref sub) => {
+                    let dir = self.dir_by_key(&sub.key).await?;
+                    self.walk_dir(path.as_path(), &dir, cb).await?;
+                }
+                _ => cb(path.as_path(), entry)?,
+            };
+        }
+        Ok(())
+    }
+
+    pub async fn walk<F>(&self, cb: F) -> Result<()>
+    where
+        F: Fn(&Path, &Entry) -> Result<()> + Sync,
+    {
+        let root = self.root().await?;
+        let path: PathBuf = "/".into();
+        self.walk_dir(path.as_path(), &root, &cb).await
     }
 
     fn inode(&self, ino: u64) -> Inode {
@@ -180,5 +214,22 @@ impl Metadata {
         let aci = types::Aci::new(data)?;
         acis.put(key.as_ref().into(), aci.clone());
         Ok(aci)
+    }
+}
+
+#[cfg(test)]
+mod test {
+
+    #[tokio::test]
+    async fn test() {
+        use super::Metadata;
+        let meta = Metadata::open("/tmp/redis.flist.d").await.unwrap();
+
+        meta.walk(|path, entry| {
+            println!("entry: {:?}  || {}", path, entry.node.name);
+            Ok(())
+        })
+        .await
+        .unwrap();
     }
 }

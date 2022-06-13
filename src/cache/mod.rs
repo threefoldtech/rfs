@@ -1,7 +1,6 @@
 use crate::meta::types::FileBlock;
 use anyhow::{Context, Result};
-//use fs2::FileExt;
-use redis::Client;
+use bb8_redis::{bb8::Pool, redis::AsyncCommands, RedisConnectionManager};
 use std::os::unix::io::AsRawFd;
 use std::path::PathBuf;
 use tokio::fs::{self, File, OpenOptions};
@@ -21,7 +20,7 @@ impl Hex for &[u8] {
 
 #[derive(Clone)]
 pub struct Cache {
-    con: redis::aio::ConnectionManager,
+    pool: Pool<RedisConnectionManager>,
     root: PathBuf,
 }
 
@@ -31,20 +30,20 @@ impl Cache {
         S: AsRef<str>,
         P: Into<PathBuf>,
     {
-        let client = Client::open(url.as_ref())?;
-        let mgr = client
-            .get_tokio_connection_manager()
-            .await
-            .context("failed to open connection to storage")?;
+        let mgr = RedisConnectionManager::new(url.as_ref())?;
+        let pool = Pool::builder().max_size(20).build(mgr).await?;
+
         Ok(Cache {
-            con: mgr,
+            pool,
             root: root.into(),
         })
     }
 
     // get content from redis
     async fn get_data(&mut self, id: &[u8], key: &[u8]) -> Result<Vec<u8>> {
-        let result: Vec<u8> = redis::cmd("GET").arg(id).query_async(&mut self.con).await?;
+        let mut con = self.pool.get().await.context("failed to get connection")?;
+        //con.
+        let result: Vec<u8> = con.get(id).await?;
         if result.is_empty() {
             bail!("invalid chunk length downloaded");
         }
@@ -109,6 +108,8 @@ impl Cache {
         locker.unlock().await?;
         Ok((size, file))
     }
+
+    //pub async fn write(&mut self, out: &mut File, )
 }
 
 pub struct Locker {
