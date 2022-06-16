@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tar::Archive;
 use tokio::sync::Mutex;
-use types::{Entry, EntryKind};
+pub use types::{Entry, EntryKind};
 
 /// 16 byte blake2b hash of the empty string
 const ROOT_HASH: &str = "cae66941d9efbd404e4d88758ea67670";
@@ -18,6 +18,11 @@ const ROOT_HASH: &str = "cae66941d9efbd404e4d88758ea67670";
 pub enum MetaError {
     #[error("error not found")]
     EntryNotFound,
+}
+
+#[async_trait::async_trait]
+pub trait WalkVisitor: Send + Sync {
+    async fn visit<P: AsRef<Path> + Send + Sync>(&mut self, path: P, entry: &Entry) -> Result<()>;
 }
 
 #[derive(Clone, Debug)]
@@ -87,11 +92,11 @@ impl Metadata {
     }
 
     #[async_recursion::async_recursion]
-    async fn walk_dir<F>(&self, p: &Path, entry: &Entry, cb: &F) -> Result<()>
+    async fn walk_dir<F>(&self, p: &Path, entry: &Entry, cb: &mut F) -> Result<()>
     where
-        F: Fn(&Path, &Entry) -> Result<()> + Sync,
+        F: WalkVisitor,
     {
-        cb(p, &entry)?;
+        cb.visit(p, &entry).await?;
 
         let dir = match entry.kind {
             EntryKind::Dir(ref dir) => dir,
@@ -105,19 +110,20 @@ impl Metadata {
                     let dir = self.dir_by_key(&sub.key).await?;
                     self.walk_dir(path.as_path(), &dir, cb).await?;
                 }
-                _ => cb(path.as_path(), entry)?,
+                _ => cb.visit(path.as_path(), entry).await?,
             };
         }
         Ok(())
     }
 
-    pub async fn walk<F>(&self, cb: F) -> Result<()>
+    #[allow(dead_code)]
+    pub async fn walk<F>(&self, cb: &mut F) -> Result<()>
     where
-        F: Fn(&Path, &Entry) -> Result<()> + Sync,
+        F: WalkVisitor,
     {
         let root = self.root().await?;
         let path: PathBuf = "/".into();
-        self.walk_dir(path.as_path(), &root, &cb).await
+        self.walk_dir(path.as_path(), &root, cb).await
     }
 
     fn inode(&self, ino: u64) -> Inode {
@@ -198,7 +204,7 @@ impl Metadata {
         Ok(Inode::new(self.mask, id as u64))
     }
 
-    async fn aci<S: AsRef<str>>(&self, key: S) -> Result<types::Aci> {
+    pub async fn aci<S: AsRef<str>>(&self, key: S) -> Result<types::Aci> {
         let mut acis = self.acis.lock().await;
         if let Some(aci) = acis.get(key.as_ref()) {
             return Ok(aci.clone());
@@ -207,29 +213,12 @@ impl Metadata {
             .bind(key.as_ref())
             .fetch_one(&self.pool)
             .await
-            .context("failed to find directory")?;
+            .context("failed to find aci")?;
 
         // that's only place where we create a directory
         // so we can cache it in lru now.
         let aci = types::Aci::new(data)?;
         acis.put(key.as_ref().into(), aci.clone());
         Ok(aci)
-    }
-}
-
-#[cfg(test)]
-mod test {
-
-    #[tokio::test]
-    async fn test() {
-        use super::Metadata;
-        let meta = Metadata::open("/tmp/redis.flist.d").await.unwrap();
-
-        meta.walk(|path, entry| {
-            println!("entry: {:?}  || {}", path, entry.node.name);
-            Ok(())
-        })
-        .await
-        .unwrap();
     }
 }

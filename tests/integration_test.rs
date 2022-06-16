@@ -10,7 +10,6 @@ const TMP_PATH: &str = "/tmp";
 
 const MOUNTPOINT: &str = "/tmp/rmnt";
 
-// const FLISTURL: &str = "https://hub.grid.tf/yasen.3bot/integration_test_fs.flist";
 const FLISTURL: &str = "https://hub.grid.tf/azmy.3bot/perm.flist";
 
 const PERMMASK: u32 = 0x1FF;
@@ -21,6 +20,51 @@ const READONLY: u32 = 0o444;
 const READEXEC: u32 = 0o555;
 const READWRITE: u32 = 0o666;
 const READWRITEEXEC: u32 = 0o777;
+
+struct TestMount<'a>(PathBuf, &'a str);
+
+impl<'a> TestMount<'a> {
+    pub fn new(flist: &'a str, mountpoint: &'a str) -> Result<Self> {
+        fs::create_dir_all(mountpoint).context("failed to create test mountpoint")?;
+
+        let (_, name) = flist
+            .rsplit_once("/")
+            .ok_or(anyhow::anyhow!("invalid flist path"))?;
+        let path = Path::new(TMP_PATH).join(name);
+        if !path.exists() {
+            let client = reqwest::blocking::Client::new();
+            let mut response = client.get(flist).send().context("failed to get flist")?;
+            let mut fd = std::fs::File::create(&path).context("failed to create temp flist")?;
+            response
+                .copy_to(&mut fd)
+                .context("failed to download flist")?;
+        }
+
+        Ok(TestMount(path, mountpoint))
+    }
+
+    pub fn mount(&self) -> Command {
+        let mut cmd = Command::cargo_bin("rfs").unwrap();
+        cmd.arg("-d")
+            .arg("--log")
+            .arg("/tmp/test-rmb.log")
+            .arg("--meta")
+            .arg(&self.0)
+            .arg(self.1);
+
+        cmd
+    }
+
+    fn unmount(&self) {
+        let _ = Command::new("umount").arg(self.1).output();
+    }
+}
+
+impl<'a> Drop for TestMount<'a> {
+    fn drop(&mut self) {
+        self.unmount();
+    }
+}
 
 #[test]
 fn test_sucess_mount() {
@@ -117,47 +161,58 @@ fn test_fail_call_bin_without_meta_argument() {
     assert.failure();
 }
 
-struct TestMount<'a>(PathBuf, &'a str);
+#[tokio::test]
+async fn test_walk() {
+    let mops = TestMount::new(FLISTURL, MOUNTPOINT).unwrap();
+    use rfs::meta::{EntryKind, Metadata, WalkVisitor};
+    let meta = Metadata::open(&mops.0).await.unwrap();
 
-impl<'a> TestMount<'a> {
-    pub fn new(flist: &'a str, mountpoint: &'a str) -> Result<Self> {
-        fs::create_dir_all(mountpoint).context("failed to create test mountpoint")?;
+    //let mut paths = vec![];
 
-        let (_, name) = flist
-            .rsplit_once("/")
-            .ok_or(anyhow::anyhow!("invalid flist path"))?;
-        let path = Path::new(TMP_PATH).join(name);
-        if !path.exists() {
-            let client = reqwest::blocking::Client::new();
-            let mut response = client.get(flist).send().context("failed to get flist")?;
-            let mut fd = std::fs::File::create(&path).context("failed to create temp flist")?;
-            response
-                .copy_to(&mut fd)
-                .context("failed to download flist")?;
+    struct TestVisitor {
+        paths: Vec<PathBuf>,
+    }
+    #[async_trait::async_trait]
+    impl WalkVisitor for TestVisitor {
+        async fn visit<P: AsRef<Path> + Send + Sync>(
+            &mut self,
+            path: P,
+            entry: &rfs::meta::Entry,
+        ) -> Result<()> {
+            self.paths.push(path.as_ref().to_owned());
+
+            if path.as_ref() == Path::new("/file_5M.random") {
+                assert!(matches!(entry.kind, EntryKind::File(_)));
+            } else if path.as_ref() == Path::new("/file_permissions") {
+                assert!(matches!(entry.kind, EntryKind::Dir(_)));
+            } else if path.as_ref() == Path::new("/symbolic_links/file_5M.random") {
+                assert!(matches!(entry.kind, EntryKind::Link(_)));
+            }
+
+            Ok(())
         }
-
-        Ok(TestMount(path, mountpoint))
     }
 
-    pub fn mount(&self) -> Command {
-        let mut cmd = Command::cargo_bin("rfs").unwrap();
-        cmd.arg("-d")
-            .arg("--log")
-            .arg("/tmp/test-rmb.log")
-            .arg("--meta")
-            .arg(&self.0)
-            .arg(self.1);
+    let mut visitor = TestVisitor { paths: vec![] };
+    //let inner = Arc::clone(&paths);
+    meta.walk(&mut visitor).await.unwrap();
 
-        cmd
-    }
-
-    fn unmount(&self) {
-        let _ = Command::new("umount").arg(self.1).output();
-    }
+    assert_eq!(24, visitor.paths.len());
 }
 
-impl<'a> Drop for TestMount<'a> {
-    fn drop(&mut self) {
-        self.unmount();
-    }
+#[tokio::test]
+async fn test_extract() {
+    let mops = TestMount::new(FLISTURL, MOUNTPOINT).unwrap();
+    use rfs::cache::Cache;
+    use rfs::meta::Metadata;
+
+    let meta = Metadata::open(&mops.0).await.unwrap();
+
+    let mut cache = Cache::new("redis://hub.grid.tf:9900", "/tmp/ex-cache")
+        .await
+        .unwrap();
+
+    rfs::extract(&meta, &mut cache, "/tmp/extracted")
+        .await
+        .unwrap();
 }
