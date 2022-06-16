@@ -1,9 +1,15 @@
+use anyhow::{Context, Result};
 use assert_cmd::Command;
-use std::{fs, os::unix::prelude::PermissionsExt, path::Path};
+use std::{
+    fs,
+    os::unix::prelude::PermissionsExt,
+    path::{Path, PathBuf},
+};
+
+const TMP_PATH: &str = "/tmp";
 
 const MOUNTPOINT: &str = "/tmp/rmnt";
 
-const FLISTPATH: &str = "/tmp/test.flist";
 // const FLISTURL: &str = "https://hub.grid.tf/yasen.3bot/integration_test_fs.flist";
 const FLISTURL: &str = "https://hub.grid.tf/azmy.3bot/perm.flist";
 
@@ -18,16 +24,15 @@ const READWRITEEXEC: u32 = 0o777;
 
 #[test]
 fn test_sucess_mount() {
-    let mops = RfsMntOps(MOUNTPOINT);
+    let mops = TestMount::new(FLISTURL, MOUNTPOINT).unwrap();
 
-    mops.mount_rfs().assert().success();
-
+    mops.mount().assert().success();
 }
 
 #[test]
 fn test_fs_with_md5sum_check() {
-    let mops = RfsMntOps(MOUNTPOINT);
-    mops.mount_rfs().output().unwrap();
+    let mops = TestMount::new(FLISTURL, MOUNTPOINT).unwrap();
+    mops.mount().output().unwrap();
 
     let current_directory = format!("{}", MOUNTPOINT);
 
@@ -40,8 +45,8 @@ fn test_fs_with_md5sum_check() {
 
 #[test]
 fn test_symbolic_with_md5sum_check() {
-    let mops = RfsMntOps(MOUNTPOINT);
-    mops.mount_rfs().output().unwrap();
+    let mops = TestMount::new(FLISTURL, MOUNTPOINT).unwrap();
+    mops.mount().output().unwrap();
     let current_directory = format!("{}/symbolic_links", MOUNTPOINT);
 
     Command::new("md5sum")
@@ -54,9 +59,9 @@ fn test_symbolic_with_md5sum_check() {
 #[test]
 #[ignore]
 fn test_permissions() {
-    let mops = RfsMntOps(MOUNTPOINT);
+    let mops = TestMount::new(FLISTURL, MOUNTPOINT).unwrap();
 
-    mops.mount_rfs().output().unwrap();
+    mops.mount().output().unwrap();
     let current_directory = format!("{}/file_permissions", MOUNTPOINT);
 
     // all permissions is the same for ugo
@@ -85,10 +90,10 @@ fn test_permissions() {
 
 #[test]
 fn test_failure_use_mountpoint_twice() {
-    let mops = RfsMntOps(MOUNTPOINT);
+    let mops = TestMount::new(FLISTURL, MOUNTPOINT).unwrap();
 
-    mops.mount_rfs().output().unwrap();
-    mops.mount_rfs().assert().failure();
+    mops.mount().output().unwrap();
+    mops.mount().assert().failure();
 }
 
 #[test]
@@ -99,9 +104,9 @@ fn test_fail_call_bin_without_arguments() {
 
 #[test]
 fn test_fail_call_bin_without_target_argument() {
-    RfsMntOps::download_flist();
+    let mops = TestMount::new(FLISTURL, MOUNTPOINT).unwrap();
     let mut cmd = Command::cargo_bin("rfs").unwrap();
-    let assert = cmd.args(["--meta", FLISTPATH]).assert();
+    let assert = cmd.arg("--meta").arg(&mops.0).assert();
     assert.failure();
 }
 
@@ -112,45 +117,47 @@ fn test_fail_call_bin_without_meta_argument() {
     assert.failure();
 }
 
-type MPOINT = &'static str;
-struct RfsMntOps(MPOINT);
+struct TestMount<'a>(PathBuf, &'a str);
 
-impl RfsMntOps {
-    pub fn download_flist() {
-        if Path::new(FLISTPATH).exists() {
-            return;
+impl<'a> TestMount<'a> {
+    pub fn new(flist: &'a str, mountpoint: &'a str) -> Result<Self> {
+        fs::create_dir_all(mountpoint).context("failed to create test mountpoint")?;
+
+        let (_, name) = flist
+            .rsplit_once("/")
+            .ok_or(anyhow::anyhow!("invalid flist path"))?;
+        let path = Path::new(TMP_PATH).join(name);
+        if !path.exists() {
+            let client = reqwest::blocking::Client::new();
+            let mut response = client.get(flist).send().context("failed to get flist")?;
+            let mut fd = std::fs::File::create(&path).context("failed to create temp flist")?;
+            response
+                .copy_to(&mut fd)
+                .context("failed to download flist")?;
         }
-        let client = reqwest::blocking::Client::new();
-        let mut response = client.get(FLISTURL).send().unwrap();
-        let mut fd = std::fs::File::create(FLISTPATH).unwrap();
-        response.copy_to(&mut fd).unwrap();
+
+        Ok(TestMount(path, mountpoint))
     }
 
-    pub fn mount_rfs(&self) -> Command {
-        Self::download_flist();
-        Self::remove_mountpoint_dir();
-        Self::create_mountpoint_dir();
+    pub fn mount(&self) -> Command {
         let mut cmd = Command::cargo_bin("rfs").unwrap();
-        cmd.args(["-d", "--log", "/tmp/rfs.logs", "--meta", FLISTPATH, self.0]);
+        cmd.arg("-d")
+            .arg("--log")
+            .arg("/tmp/test-rmb.log")
+            .arg("--meta")
+            .arg(&self.0)
+            .arg(self.1);
 
         cmd
     }
 
-    fn create_mountpoint_dir() {
-        let _ = fs::create_dir_all(MOUNTPOINT);
-    }
-
-    fn remove_mountpoint_dir() {
-        let _ = fs::remove_dir_all(MOUNTPOINT);
-    }
-
-    fn umount_rfs() {
-        let _ = Command::new("umount").args([MOUNTPOINT]).output();
+    fn unmount(&self) {
+        let _ = Command::new("umount").arg(self.1).output();
     }
 }
 
-impl Drop for RfsMntOps {
+impl<'a> Drop for TestMount<'a> {
     fn drop(&mut self) {
-        Self::umount_rfs();
+        self.unmount();
     }
 }

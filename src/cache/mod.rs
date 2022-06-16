@@ -4,7 +4,7 @@ use bb8_redis::{bb8::Pool, redis::AsyncCommands, RedisConnectionManager};
 use std::os::unix::io::AsRawFd;
 use std::path::PathBuf;
 use tokio::fs::{self, File, OpenOptions};
-use tokio::io::{AsyncSeekExt, AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
 
 trait Hex {
     fn hex(&self) -> String;
@@ -60,7 +60,6 @@ impl Cache {
 
     // download given an open file, writes the content of the chunk to the file
     async fn download(&mut self, file: &mut File, block: &FileBlock) -> Result<u64> {
-        file.rewind().await?;
         let data = self.get_data(&block.hash, &block.key).await?;
         file.write_all(&data).await?;
 
@@ -87,6 +86,8 @@ impl Cache {
         Ok(file)
     }
 
+    /// get a file block either from cache or from remote if it's already
+    /// not cached
     pub async fn get(&mut self, block: &FileBlock) -> Result<(u64, File)> {
         let mut file = self.prepare(&block.hash).await?;
         // TODO: locking must happen here so no
@@ -109,7 +110,16 @@ impl Cache {
         Ok((size, file))
     }
 
-    //pub async fn write(&mut self, out: &mut File, )
+    /// direct downloads all the file blocks from remote and write it to output
+    pub async fn direct(&mut self, blocks: &[FileBlock], out: &mut File) -> Result<()> {
+        for (index, block) in blocks.iter().enumerate() {
+            self.download(out, block)
+                .await
+                .with_context(|| format!("failed to download block {}", index))?;
+        }
+
+        Ok(())
+    }
 }
 
 pub struct Locker {
