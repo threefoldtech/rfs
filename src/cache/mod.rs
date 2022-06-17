@@ -1,7 +1,6 @@
 use crate::meta::types::FileBlock;
 use anyhow::{Context, Result};
-//use fs2::FileExt;
-use redis::Client;
+use bb8_redis::{bb8::Pool, redis::AsyncCommands, RedisConnectionManager};
 use std::os::unix::io::AsRawFd;
 use std::path::PathBuf;
 use tokio::fs::{self, File, OpenOptions};
@@ -21,7 +20,7 @@ impl Hex for &[u8] {
 
 #[derive(Clone)]
 pub struct Cache {
-    con: redis::aio::ConnectionManager,
+    pool: Pool<RedisConnectionManager>,
     root: PathBuf,
 }
 
@@ -31,20 +30,20 @@ impl Cache {
         S: AsRef<str>,
         P: Into<PathBuf>,
     {
-        let client = Client::open(url.as_ref())?;
-        let mgr = client
-            .get_tokio_connection_manager()
-            .await
-            .context("failed to open connection to storage")?;
+        let mgr = RedisConnectionManager::new(url.as_ref())?;
+        let pool = Pool::builder().max_size(20).build(mgr).await?;
+
         Ok(Cache {
-            con: mgr,
+            pool,
             root: root.into(),
         })
     }
 
     // get content from redis
     async fn get_data(&mut self, id: &[u8], key: &[u8]) -> Result<Vec<u8>> {
-        let result: Vec<u8> = redis::cmd("GET").arg(id).query_async(&mut self.con).await?;
+        let mut con = self.pool.get().await.context("failed to get connection")?;
+        //con.
+        let result: Vec<u8> = con.get(id).await?;
         if result.is_empty() {
             bail!("invalid chunk length downloaded");
         }
@@ -61,7 +60,6 @@ impl Cache {
 
     // download given an open file, writes the content of the chunk to the file
     async fn download(&mut self, file: &mut File, block: &FileBlock) -> Result<u64> {
-        file.rewind().await?;
         let data = self.get_data(&block.hash, &block.key).await?;
         file.write_all(&data).await?;
 
@@ -88,6 +86,8 @@ impl Cache {
         Ok(file)
     }
 
+    /// get a file block either from cache or from remote if it's already
+    /// not cached
     pub async fn get(&mut self, block: &FileBlock) -> Result<(u64, File)> {
         let mut file = self.prepare(&block.hash).await?;
         // TODO: locking must happen here so no
@@ -106,8 +106,26 @@ impl Cache {
         debug!("downloading block: {}", block.hash.as_slice().hex());
         let size = self.download(&mut file, block).await?;
 
+        // if file is just downloaded, we need
+        // to seek to beginning of the file.
+        file.rewind().await?;
+
         locker.unlock().await?;
         Ok((size, file))
+    }
+
+    /// direct downloads all the file blocks from remote and write it to output
+    #[allow(dead_code)]
+    pub async fn direct(&mut self, blocks: &[FileBlock], out: &mut File) -> Result<()> {
+        use tokio::io::copy;
+        for (index, block) in blocks.iter().enumerate() {
+            let (_, mut chunk) = self.get(&block).await?;
+            copy(&mut chunk, out)
+                .await
+                .with_context(|| format!("failed to download block {}", index))?;
+        }
+
+        Ok(())
     }
 }
 

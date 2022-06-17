@@ -5,11 +5,11 @@ use anyhow::{Context, Result};
 use flate2::read::GzDecoder;
 use inode::Inode;
 use sqlx::sqlite::SqlitePool;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tar::Archive;
 use tokio::sync::Mutex;
-use types::{Entry, EntryKind};
+pub use types::{Entry, EntryKind};
 
 /// 16 byte blake2b hash of the empty string
 const ROOT_HASH: &str = "cae66941d9efbd404e4d88758ea67670";
@@ -18,6 +18,11 @@ const ROOT_HASH: &str = "cae66941d9efbd404e4d88758ea67670";
 pub enum MetaError {
     #[error("error not found")]
     EntryNotFound,
+}
+
+#[async_trait::async_trait]
+pub trait WalkVisitor: Send + Sync {
+    async fn visit<P: AsRef<Path> + Send + Sync>(&mut self, path: P, entry: &Entry) -> Result<()>;
 }
 
 #[derive(Clone, Debug)]
@@ -84,6 +89,41 @@ impl Metadata {
 
     pub async fn root(&self) -> Result<Arc<types::Entry>> {
         return self.dir_by_key(ROOT_HASH).await;
+    }
+
+    #[async_recursion::async_recursion]
+    async fn walk_dir<F>(&self, p: &Path, entry: &Entry, cb: &mut F) -> Result<()>
+    where
+        F: WalkVisitor,
+    {
+        cb.visit(p, &entry).await?;
+
+        let dir = match entry.kind {
+            EntryKind::Dir(ref dir) => dir,
+            _ => return Ok(()),
+        };
+
+        for entry in dir.entries.iter() {
+            let path = p.join(&entry.node.name);
+            match entry.kind {
+                EntryKind::SubDir(ref sub) => {
+                    let dir = self.dir_by_key(&sub.key).await?;
+                    self.walk_dir(path.as_path(), &dir, cb).await?;
+                }
+                _ => cb.visit(path.as_path(), entry).await?,
+            };
+        }
+        Ok(())
+    }
+
+    #[allow(dead_code)]
+    pub async fn walk<F>(&self, cb: &mut F) -> Result<()>
+    where
+        F: WalkVisitor,
+    {
+        let root = self.root().await?;
+        let path: PathBuf = "/".into();
+        self.walk_dir(path.as_path(), &root, cb).await
     }
 
     fn inode(&self, ino: u64) -> Inode {
@@ -164,7 +204,7 @@ impl Metadata {
         Ok(Inode::new(self.mask, id as u64))
     }
 
-    async fn aci<S: AsRef<str>>(&self, key: S) -> Result<types::Aci> {
+    pub async fn aci<S: AsRef<str>>(&self, key: S) -> Result<types::Aci> {
         let mut acis = self.acis.lock().await;
         if let Some(aci) = acis.get(key.as_ref()) {
             return Ok(aci.clone());
@@ -173,7 +213,7 @@ impl Metadata {
             .bind(key.as_ref())
             .fetch_one(&self.pool)
             .await
-            .context("failed to find directory")?;
+            .context("failed to find aci")?;
 
         // that's only place where we create a directory
         // so we can cache it in lru now.
