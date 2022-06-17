@@ -78,11 +78,9 @@ fn test_fs_with_md5sum_check() {
     let mops = TestMount::new(FLISTURL, MOUNTPOINT).unwrap();
     mops.mount().output().unwrap();
 
-    let current_directory = format!("{}", MOUNTPOINT);
-
     Command::new("md5sum")
         .args(["-c", "checksum.md5"])
-        .current_dir(current_directory)
+        .current_dir(MOUNTPOINT)
         .assert()
         .success();
 }
@@ -212,7 +210,7 @@ async fn test_extract() {
         .await
         .unwrap();
 
-    let path = "/tmp/extracted";
+    let path = Path::new("/tmp/extracted");
     let _ = fs::remove_dir_all(path);
     rfs::extract(&meta, &mut cache, path).await.unwrap();
 
@@ -224,7 +222,7 @@ async fn test_extract() {
 
     Command::new("md5sum")
         .args(["-c", "checksum.md5"])
-        .current_dir(format!("{}/symbolic_links", path))
+        .current_dir(path.join("symbolic_links"))
         .assert()
         .success();
 }

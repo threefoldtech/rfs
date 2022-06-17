@@ -4,7 +4,7 @@ use bb8_redis::{bb8::Pool, redis::AsyncCommands, RedisConnectionManager};
 use std::os::unix::io::AsRawFd;
 use std::path::PathBuf;
 use tokio::fs::{self, File, OpenOptions};
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 
 trait Hex {
     fn hex(&self) -> String;
@@ -106,11 +106,16 @@ impl Cache {
         debug!("downloading block: {}", block.hash.as_slice().hex());
         let size = self.download(&mut file, block).await?;
 
+        // if file is just downloaded, we need
+        // to seek to beginning of the file.
+        file.rewind().await?;
+
         locker.unlock().await?;
         Ok((size, file))
     }
 
     /// direct downloads all the file blocks from remote and write it to output
+    #[allow(dead_code)]
     pub async fn direct(&mut self, blocks: &[FileBlock], out: &mut File) -> Result<()> {
         use tokio::io::copy;
         for (index, block) in blocks.iter().enumerate() {
