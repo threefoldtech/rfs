@@ -54,18 +54,30 @@ impl<'a> meta::WalkVisitor for CopyVisitor<'a> {
                     .mode(acl)
                     .open(&rooted)
                     .await
-                    .with_context(|| format!("failed to create directory '{:?}'", rooted))?;
+                    .with_context(|| format!("failed to create file '{:?}'", rooted))?;
 
                 self.cache
                     .direct(&file.blocks, &mut fd)
                     .await
                     .with_context(|| format!("failed to create download file '{:?}'", rooted))?;
             }
-            _ => {}
+            EntryKind::Link(link) => {
+                let target = Path::new(&link.target);
+                let target = if target.is_relative() {
+                    target.to_owned()
+                } else {
+                    self.root.join(target)
+                };
+
+                std::os::unix::fs::symlink(target, &rooted)
+                    .with_context(|| format!("failed to create symlink '{:?}'", rooted))?;
+            }
+            _ => {
+                debug!("unknown file kind: {:?}", entry.kind);
+            }
         };
 
         Ok(())
-        //unimplemented!();
     }
 }
 

@@ -212,7 +212,19 @@ async fn test_extract() {
         .await
         .unwrap();
 
-    rfs::extract(&meta, &mut cache, "/tmp/extracted")
-        .await
-        .unwrap();
+    let path = "/tmp/extracted";
+    let _ = fs::remove_dir_all(path);
+    rfs::extract(&meta, &mut cache, path).await.unwrap();
+
+    Command::new("md5sum")
+        .args(["-c", "checksum.md5"])
+        .current_dir(path)
+        .assert()
+        .success();
+
+    Command::new("md5sum")
+        .args(["-c", "checksum.md5"])
+        .current_dir(format!("{}/symbolic_links", path))
+        .assert()
+        .success();
 }

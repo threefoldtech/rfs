@@ -112,8 +112,10 @@ impl Cache {
 
     /// direct downloads all the file blocks from remote and write it to output
     pub async fn direct(&mut self, blocks: &[FileBlock], out: &mut File) -> Result<()> {
+        use tokio::io::copy;
         for (index, block) in blocks.iter().enumerate() {
-            self.download(out, block)
+            let (_, mut chunk) = self.get(&block).await?;
+            copy(&mut chunk, out)
                 .await
                 .with_context(|| format!("failed to download block {}", index))?;
         }
