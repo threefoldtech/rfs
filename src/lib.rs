@@ -41,7 +41,6 @@ impl<'a> meta::WalkVisitor for CopyVisitor<'a> {
             .map(|a| a.mode & 0o777)
             .unwrap_or(0o666);
 
-        println!("creating file: {:?} {:?}", path.as_ref(), rooted);
         match &entry.kind {
             EntryKind::Dir(_) => {
                 fs::create_dir_all(&rooted)
