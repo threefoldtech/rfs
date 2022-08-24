@@ -5,6 +5,7 @@ use anyhow::{Context, Result};
 use flate2::read::GzDecoder;
 use inode::Inode;
 use sqlx::sqlite::SqlitePool;
+pub use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tar::Archive;
@@ -195,7 +196,7 @@ impl Metadata {
         self.dir_by_key(key).await
     }
 
-    pub async fn dir_inode<S: AsRef<str>>(&self, key: S) -> Result<Inode> {
+    pub(crate) async fn dir_inode<S: AsRef<str>>(&self, key: S) -> Result<Inode> {
         let (id,): (i64,) = sqlx::query_as("select rowid from entries where key = ?")
             .bind(key.as_ref())
             .fetch_one(&self.pool)
@@ -220,5 +221,18 @@ impl Metadata {
         let aci = types::Aci::new(data)?;
         acis.put(key.as_ref().into(), aci.clone());
         Ok(aci)
+    }
+
+    pub async fn tags(&self) -> Result<HashMap<String, String>> {
+        let data: Vec<(String, String)> = match sqlx::query_as("select key, value from metadata;")
+            .fetch_all(&self.pool)
+            .await
+        {
+            Ok(data) => data,
+            Err(sqlx::Error::Database(_)) => Vec::default(),
+            Err(e) => return Err(anyhow!(e)),
+        };
+
+        Ok(data.into_iter().collect())
     }
 }

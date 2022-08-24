@@ -85,6 +85,7 @@ fn main() -> Result<()> {
         .get_matches();
 
     let mut logger = simple_logger::SimpleLogger::new()
+        .with_utc_timestamps()
         .with_level(log::Level::Info.to_level_filter())
         .with_module_level("sqlx", log::Level::Error.to_level_filter());
 
@@ -154,7 +155,9 @@ fn wait_child(target: String, mut pid_file: tempfile::NamedTempFile) {
     let pid = buf.parse::<i32>();
     match pid {
         Err(e) => error!("failed to parse pid_file contents {}: {}", buf, e),
-        Ok(v) => { let _ = signal::kill(Pid::from_raw(v), Signal::SIGTERM); } // probably the child exited on its own
+        Ok(v) => {
+            let _ = signal::kill(Pid::from_raw(v), Signal::SIGTERM);
+        } // probably the child exited on its own
     }
     // cleanup is not performed if the process is terminated with exit(2)
     drop(pid_file);
@@ -169,6 +172,20 @@ async fn app(opts: Options) -> Result<()> {
     let mgr = meta::Metadata::open(opts.meta)
         .await
         .context("failed to initialize metadata database")?;
+
+    //print tags
+    match mgr.tags().await {
+        Ok(tags) => {
+            debug!("flist has {} tags", tags.len());
+            for (k, v) in tags.iter() {
+                info!("[tag][{}]: {}", k, v);
+            }
+        }
+        Err(err) => {
+            error!("failed to extract flist tags: {}", err);
+        }
+    }
+
     let filesystem = fs::Filesystem::new(mgr, cache);
     filesystem.mount(opts.target).await
 }
