@@ -1,10 +1,8 @@
 use super::inode::Inode;
-use super::Metadata;
 use crate::schema_capnp;
 use anyhow::Result;
 use capnp::{message, serialize};
 use nix::unistd::{Group, User};
-use polyfuse::reply::FileAttr;
 use std::convert::TryInto;
 use std::sync::Arc;
 
@@ -166,58 +164,6 @@ pub enum EntryKind {
     SubDir(SubDir),
     File(File),
     Link(Link),
-}
-
-impl Entry {
-    pub async fn fill(&self, meta: &Metadata, attr: &mut FileAttr) -> Result<Inode> {
-        use std::time::Duration;
-
-        let mode = match meta.aci(&self.node.acl).await {
-            Ok(aci) => {
-                attr.uid(aci.user);
-                attr.gid(aci.group);
-                aci.mode & 0o777
-            }
-            Err(_) => 0o444,
-        };
-
-        let inode = self.node.inode;
-        attr.ino(inode.ino());
-        attr.ctime(Duration::from_secs(self.node.creation as u64));
-        attr.mtime(Duration::from_secs(self.node.modification as u64));
-        attr.size(self.node.size);
-
-        let inode = match &self.kind {
-            EntryKind::Unknown => bail!("unkown entry"),
-            EntryKind::Dir(_) => {
-                attr.nlink(2);
-                attr.mode(libc::S_IFDIR | mode);
-                inode
-            }
-            EntryKind::SubDir(sub) => {
-                let inode = meta.dir_inode(&sub.key).await?;
-                // reset inode
-                attr.ino(inode.ino());
-                attr.nlink(2);
-                attr.mode(libc::S_IFDIR | mode);
-                inode
-            }
-            EntryKind::File(_) => {
-                attr.nlink(1);
-                attr.mode(libc::S_IFREG | mode);
-                attr.blksize(4 * 1024);
-                inode
-            }
-            EntryKind::Link(link) => {
-                attr.nlink(1);
-                attr.size(link.target.len() as u64);
-                attr.mode(libc::S_IFLNK | 0o555);
-                inode
-            }
-        };
-
-        Ok(inode)
-    }
 }
 
 #[derive(Clone)]

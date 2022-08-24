@@ -196,6 +196,8 @@ impl Metadata {
         self.dir_by_key(key).await
     }
 
+    #[cfg(feature = "build-binary")]
+    #[allow(dead_code)] // to avoid build warnings when building the binary with build-binary feature
     pub(crate) async fn dir_inode<S: AsRef<str>>(&self, key: S) -> Result<Inode> {
         let (id,): (i64,) = sqlx::query_as("select rowid from entries where key = ?")
             .bind(key.as_ref())
