@@ -30,7 +30,7 @@ impl<'a> meta::WalkVisitor for CopyVisitor<'a> {
         &mut self,
         path: P,
         entry: &meta::Entry,
-    ) -> Result<()> {
+    ) -> Result<meta::Walk> {
         use tokio::fs::OpenOptions;
 
         let rooted = self.root.join(path.as_ref().strip_prefix("/")?);
@@ -77,7 +77,7 @@ impl<'a> meta::WalkVisitor for CopyVisitor<'a> {
             }
         };
 
-        Ok(())
+        Ok(meta::Walk::Continue)
     }
 }
 

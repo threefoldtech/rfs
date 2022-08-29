@@ -21,9 +21,15 @@ pub enum MetaError {
     EntryNotFound,
 }
 
+pub enum Walk {
+    Skip,
+    Continue,
+}
+
 #[async_trait::async_trait]
 pub trait WalkVisitor: Send + Sync {
-    async fn visit<P: AsRef<Path> + Send + Sync>(&mut self, path: P, entry: &Entry) -> Result<()>;
+    async fn visit<P: AsRef<Path> + Send + Sync>(&mut self, path: P, entry: &Entry)
+        -> Result<Walk>;
 }
 
 #[derive(Clone, Debug)]
@@ -97,7 +103,9 @@ impl Metadata {
     where
         F: WalkVisitor,
     {
-        cb.visit(p, &entry).await?;
+        if let Walk::Skip = cb.visit(p, &entry).await? {
+            return Ok(());
+        }
 
         let dir = match entry.kind {
             EntryKind::Dir(ref dir) => dir,
@@ -111,7 +119,13 @@ impl Metadata {
                     let dir = self.dir_by_key(&sub.key).await?;
                     self.walk_dir(path.as_path(), &dir, cb).await?;
                 }
-                _ => cb.visit(path.as_path(), entry).await?,
+                _ => match cb.visit(path.as_path(), entry).await? {
+                    // if you return skip during processing of a file
+                    // the rest of the directory is skipped
+                    Walk::Skip => break,
+                    // otherwise visit next file
+                    _ => (),
+                },
             };
         }
         Ok(())

@@ -162,7 +162,7 @@ fn test_fail_call_bin_without_meta_argument() {
 #[tokio::test]
 async fn test_walk() {
     let mops = TestMount::new(FLISTURL, MOUNTPOINT).unwrap();
-    use rfs::meta::{EntryKind, Metadata, WalkVisitor};
+    use rfs::meta::{EntryKind, Metadata, Walk, WalkVisitor};
     let meta = Metadata::open(&mops.0).await.unwrap();
 
     //let mut paths = vec![];
@@ -176,7 +176,7 @@ async fn test_walk() {
             &mut self,
             path: P,
             entry: &rfs::meta::Entry,
-        ) -> Result<()> {
+        ) -> Result<Walk> {
             self.paths.push(path.as_ref().to_owned());
 
             if path.as_ref() == Path::new("/file_5M.random") {
@@ -187,7 +187,7 @@ async fn test_walk() {
                 assert!(matches!(entry.kind, EntryKind::Link(_)));
             }
 
-            Ok(())
+            Ok(Walk::Continue)
         }
     }
 
