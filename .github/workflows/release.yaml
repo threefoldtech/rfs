@@ -27,7 +27,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: build
-          args: --release --target=x86_64-unknown-linux-musl
+          args: --release --target=x86_64-unknown-linux-musl --features build-binary
       - name: Strip
         run: |
           strip target/x86_64-unknown-linux-musl/release/rfs
