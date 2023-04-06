@@ -21,6 +21,7 @@ pub enum MetaError {
     EntryNotFound,
 }
 
+#[allow(dead_code)]
 pub enum Walk {
     Skip,
     Continue,
