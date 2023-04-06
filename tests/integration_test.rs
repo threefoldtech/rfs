@@ -206,13 +206,13 @@ async fn test_extract() {
 
     let meta = Metadata::open(&mops.0).await.unwrap();
 
-    let mut cache = Cache::new("redis://hub.grid.tf:9900", "/tmp/ex-cache")
+    let cache = Cache::new("redis://hub.grid.tf:9900", "/tmp/ex-cache")
         .await
         .unwrap();
 
     let path = Path::new("/tmp/extracted");
     let _ = fs::remove_dir_all(path);
-    rfs::extract(&meta, &mut cache, path).await.unwrap();
+    rfs::extract(&meta, &cache, path).await.unwrap();
 
     Command::new("md5sum")
         .args(["-c", "checksum.md5"])

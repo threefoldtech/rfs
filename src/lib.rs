@@ -18,10 +18,16 @@ pub mod meta;
 use cache::Cache;
 use meta::{EntryKind, Metadata};
 
-struct CopyVisitor<'a> {
+pub struct CopyVisitor<'a> {
     meta: &'a Metadata,
-    cache: &'a mut Cache,
+    cache: &'a Cache,
     root: &'a Path,
+}
+
+impl<'a> CopyVisitor<'a> {
+    pub fn new(meta: &'a Metadata, cache: &'a Cache, root: &'a Path) -> Self {
+        Self { meta, cache, root }
+    }
 }
 
 #[async_trait::async_trait]
@@ -83,14 +89,10 @@ impl<'a> meta::WalkVisitor for CopyVisitor<'a> {
 
 pub async fn extract<P: AsRef<Path> + Send + Sync>(
     meta: &Metadata,
-    cache: &mut Cache,
+    cache: &Cache,
     root: P,
 ) -> Result<()> {
-    let mut visitor = CopyVisitor {
-        meta,
-        cache,
-        root: root.as_ref(),
-    };
+    let mut visitor = CopyVisitor::new(meta, cache, root.as_ref());
 
     meta.walk(&mut visitor).await
 }

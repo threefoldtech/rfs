@@ -40,7 +40,7 @@ impl Cache {
     }
 
     // get content from redis
-    async fn get_data(&mut self, id: &[u8], key: &[u8]) -> Result<Vec<u8>> {
+    async fn get_data(&self, id: &[u8], key: &[u8]) -> Result<Vec<u8>> {
         let mut con = self.pool.get().await.context("failed to get connection")?;
         //con.
         let result: Vec<u8> = con.get(id).await?;
@@ -59,7 +59,7 @@ impl Cache {
     }
 
     // download given an open file, writes the content of the chunk to the file
-    async fn download(&mut self, file: &mut File, block: &FileBlock) -> Result<u64> {
+    async fn download(&self, file: &mut File, block: &FileBlock) -> Result<u64> {
         let data = self.get_data(&block.hash, &block.key).await?;
         file.write_all(&data).await?;
 
@@ -88,7 +88,7 @@ impl Cache {
 
     /// get a file block either from cache or from remote if it's already
     /// not cached
-    pub async fn get(&mut self, block: &FileBlock) -> Result<(u64, File)> {
+    pub async fn get(&self, block: &FileBlock) -> Result<(u64, File)> {
         let mut file = self.prepare(&block.hash).await?;
         // TODO: locking must happen here so no
         // other processes start downloading the same chunk
@@ -116,7 +116,7 @@ impl Cache {
 
     /// direct downloads all the file blocks from remote and write it to output
     #[allow(dead_code)]
-    pub async fn direct(&mut self, blocks: &[FileBlock], out: &mut File) -> Result<()> {
+    pub async fn direct(&self, blocks: &[FileBlock], out: &mut File) -> Result<()> {
         use tokio::io::copy;
         for (index, block) in blocks.iter().enumerate() {
             let (_, mut chunk) = self.get(&block).await?;

@@ -130,7 +130,6 @@ impl Filesystem {
 
         // offset inside the file
         let mut offset = offset - (chunk_index * chunk_size);
-        let mut cache = self.cache.clone();
         let mut buf: Vec<u8> = vec![0; size];
         let mut total = 0;
 
@@ -147,7 +146,7 @@ impl Filesystem {
                     (descriptor, bsize)
                 }
                 None => {
-                    let (bsize, descriptor) = match cache.get(block).await {
+                    let (bsize, descriptor) = match self.cache.get(block).await {
                         Ok(out) => out,
                         Err(_) => {
                             return Ok(req.reply_error(libc::EIO)?);
