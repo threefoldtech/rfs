@@ -87,11 +87,7 @@ impl<'a> meta::WalkVisitor for CopyVisitor<'a> {
     }
 }
 
-pub async fn extract<P: AsRef<Path> + Send + Sync>(
-    meta: &Metadata,
-    cache: &Cache,
-    root: P,
-) -> Result<()> {
+pub async fn extract<P: AsRef<Path>>(meta: &Metadata, cache: &Cache, root: P) -> Result<()> {
     let mut visitor = CopyVisitor::new(meta, cache, root.as_ref());
 
     meta.walk(&mut visitor).await
