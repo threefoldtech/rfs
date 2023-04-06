@@ -30,7 +30,7 @@ capnp = "0.14.3"
 anyhow = "1.0.44"
 time = "0.3.3"
 sqlx = { version = "0.5", features = [ "runtime-tokio-rustls", "sqlite" ] }
-tokio = { version = "1.27", features = [ "rt", "rt-multi-thread", "macros"] }
+tokio = { version = "1", features = [ "rt", "rt-multi-thread", "macros"] }
 libc = "0.2"
 futures = "0.3"
 thiserror = "1.0"
