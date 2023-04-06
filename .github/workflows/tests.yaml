@@ -1,7 +1,6 @@
 name: Unit and Integration Test
 
-on:
-  push
+on: push
 
 env:
   CARGO_TERM_COLOR: always
@@ -9,20 +8,20 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
-    
+
     steps:
-    - uses: actions/checkout@v2
-    - name: Get Dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install capnproto
-    - uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-    - uses: Swatinem/rust-cache@v1
-    - name: Unit Testing
-      run: cargo test --bins
-    - name: Config FUSE to run without sudo
-      run:  echo user_allow_other | sudo tee /etc/fuse.conf
-    - name: Integration Testing
-      run: cargo test --release --test '*' -- --test-threads=1
+      - uses: actions/checkout@v2
+      - name: Get Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install capnproto
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@v1
+      - name: Unit Testing
+        run: cargo test --bins --features build-binary
+      - name: Config FUSE to run without sudo
+        run: echo user_allow_other | sudo tee /etc/fuse.conf
+      - name: Integration Testing
+        run: cargo test --features build-binary --release --test '*' -- --test-threads=1

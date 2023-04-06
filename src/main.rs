@@ -113,15 +113,21 @@ fn main() -> Result<()> {
         let target = opt.target.clone();
         let mut daemon = daemonize::Daemonize::new()
             .working_directory(std::env::current_dir()?)
-            .pid_file(pid_file.path())
-            .exit_action(move || wait_child(target, pid_file));
+            .pid_file(pid_file.path());
         if matches.is_present("log") {
             let out = std::fs::File::create(matches.value_of("log").unwrap())?;
             let err = out.try_clone()?;
             daemon = daemon.stdout(out).stderr(err);
         }
 
-        daemon.start()?;
+        match daemon.execute() {
+            daemonize::Outcome::Parent(Ok(_)) => {
+                wait_child(target, pid_file);
+                return Ok(());
+            }
+            daemonize::Outcome::Parent(Err(err)) => bail!("failed to daemonize: {}", err),
+            _ => {}
+        }
     }
 
     let rt = tokio::runtime::Runtime::new()?;
