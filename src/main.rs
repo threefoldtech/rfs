@@ -49,7 +49,7 @@ fn main() -> Result<()> {
         .arg(
             Arg::with_name("hub")
                 .long("storage-url")
-                .help("storage url to retrieve files from")
+                .help("storage url to retrieve files from. Url can end with /<namespace> to switch to a different namespace")
                 .default_value("redis://hub.grid.tf:9900"),
         )
         .arg(
