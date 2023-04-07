@@ -10,7 +10,7 @@ jobs:
   build:
     name: Releasing rfs
     # we use 18.04 to be compatible with libc version on zos
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     steps:
       - name: Prepare
         run: |
