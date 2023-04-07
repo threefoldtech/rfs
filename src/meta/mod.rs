@@ -80,7 +80,7 @@ impl Metadata {
         };
 
         if ext == "sqlite3" {
-            return Self::new(p).await;
+            Self::new(p).await
         } else {
             // extract the flist
             // create directory for extracted meta
@@ -91,12 +91,12 @@ impl Metadata {
             let mut archive = Archive::new(tar);
             archive.unpack(&dir)?;
 
-            return Self::new(dir.join("flistdb.sqlite3")).await;
+            Self::new(dir.join("flistdb.sqlite3")).await
         }
     }
 
     pub async fn root(&self) -> Result<Arc<types::Entry>> {
-        return self.dir_by_key(ROOT_HASH).await;
+        self.dir_by_key(ROOT_HASH).await
     }
 
     #[async_recursion::async_recursion]
@@ -104,7 +104,7 @@ impl Metadata {
     where
         F: WalkVisitor,
     {
-        if let Walk::Skip = cb.visit(p, &entry).await? {
+        if let Walk::Skip = cb.visit(p, entry).await? {
             return Ok(());
         }
 
@@ -120,13 +120,11 @@ impl Metadata {
                     let dir = self.dir_by_key(&sub.key).await?;
                     self.walk_dir(path.as_path(), &dir, cb).await?;
                 }
-                _ => match cb.visit(path.as_path(), entry).await? {
-                    // if you return skip during processing of a file
-                    // the rest of the directory is skipped
-                    Walk::Skip => break,
-                    // otherwise visit next file
-                    _ => (),
-                },
+                _ => {
+                    if let Walk::Skip = cb.visit(path.as_path(), entry).await? {
+                        break;
+                    }
+                }
             };
         }
         Ok(())

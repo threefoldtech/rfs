@@ -65,9 +65,7 @@ impl Cache {
         u.set_path("");
 
         let mgr = RedisConnectionManager::new(u)?;
-        let namespace = WithNamespace {
-            namespace: namespace,
-        };
+        let namespace = WithNamespace { namespace };
         let pool = Pool::builder()
             .max_size(20)
             .connection_customizer(Box::new(namespace))
@@ -160,7 +158,7 @@ impl Cache {
     pub async fn direct(&self, blocks: &[FileBlock], out: &mut File) -> Result<()> {
         use tokio::io::copy;
         for (index, block) in blocks.iter().enumerate() {
-            let (_, mut chunk) = self.get(&block).await?;
+            let (_, mut chunk) = self.get(block).await?;
             copy(&mut chunk, out)
                 .await
                 .with_context(|| format!("failed to download block {}", index))?;
