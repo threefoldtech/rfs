@@ -1,6 +1,11 @@
 use crate::meta::types::FileBlock;
 use anyhow::{Context, Result};
-use bb8_redis::{bb8::Pool, redis::AsyncCommands, RedisConnectionManager};
+use bb8_redis::redis::aio::Connection;
+use bb8_redis::{
+    bb8::{CustomizeConnection, Pool},
+    redis::{cmd, AsyncCommands, RedisError},
+    RedisConnectionManager,
+};
 use std::os::unix::io::AsRawFd;
 use std::path::PathBuf;
 use tokio::fs::{self, File, OpenOptions};
@@ -18,6 +23,27 @@ impl Hex for &[u8] {
     }
 }
 
+#[derive(Debug)]
+struct WithNamespace {
+    namespace: Option<String>,
+}
+
+#[async_trait::async_trait]
+impl CustomizeConnection<Connection, RedisError> for WithNamespace {
+    async fn on_acquire(&self, connection: &mut Connection) -> Result<(), RedisError> {
+        match self.namespace {
+            Some(ref ns) if ns != "default" => {
+                let result = cmd("SELECT").arg(ns).query_async(connection).await;
+                if let Err(ref err) = result {
+                    error!("failed to switch namespace to {}: {}", ns, err);
+                }
+                result
+            }
+            _ => Ok(()),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Cache {
     pool: Pool<RedisConnectionManager>,
@@ -30,8 +56,23 @@ impl Cache {
         S: AsRef<str>,
         P: Into<PathBuf>,
     {
-        let mgr = RedisConnectionManager::new(url.as_ref())?;
-        let pool = Pool::builder().max_size(20).build(mgr).await?;
+        let mut u: url::Url = url.as_ref().parse().context("failed to parse url")?;
+        let namespace: Option<String> = match u.path_segments() {
+            None => None,
+            Some(mut segments) => segments.next().map(|s| s.to_owned()),
+        };
+
+        u.set_path("");
+
+        let mgr = RedisConnectionManager::new(u)?;
+        let namespace = WithNamespace {
+            namespace: namespace,
+        };
+        let pool = Pool::builder()
+            .max_size(20)
+            .connection_customizer(Box::new(namespace))
+            .build(mgr)
+            .await?;
 
         Ok(Cache {
             pool,
