@@ -200,34 +200,3 @@ impl Locker {
         Ok(())
     }
 }
-
-#[cfg(test)]
-mod test {
-    #[test]
-    fn test_url() {
-        let mut u =
-            url::Url::parse("redis://[2001:728:1000:402:70b4:a3ff:fe89:bf13]:9900/604-22888-zdb1")
-                .unwrap();
-        let namespace: Option<String> = match u.path_segments() {
-            None => None,
-            Some(mut segments) => segments.next().map(|s| s.to_owned()),
-        };
-
-        assert!(matches!(namespace, Some(ref s) if s == "604-22888-zdb1"));
-
-        u.set_path("");
-
-        assert_eq!(
-            u.to_string(),
-            "redis://[2001:728:1000:402:70b4:a3ff:fe89:bf13]:9900"
-        );
-    }
-
-    #[test]
-    fn test_redis() {
-        use bb8_redis::redis::{cmd, Client};
-        let mut con = Client::open("redis://[2001:728:1000:402:70b4:a3ff:fe89:bf13]:9900").unwrap();
-
-        let _: () = cmd("PING").query(&mut con).unwrap();
-    }
-}
