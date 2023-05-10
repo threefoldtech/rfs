@@ -1,7 +1,9 @@
+mod backend;
 pub mod inode;
 pub mod types;
 
 use anyhow::{Context, Result};
+pub use backend::Backend;
 use flate2::read::GzDecoder;
 use inode::Inode;
 use sqlx::sqlite::SqlitePool;
@@ -249,5 +251,28 @@ impl Metadata {
         };
 
         Ok(data.into_iter().collect())
+    }
+
+    pub async fn tag<S: AsRef<str>>(&self, key: S) -> Result<Option<String>> {
+        let value: Option<(String,)> =
+            match sqlx::query_as("select value from metadata where key = ?;")
+                .bind(key.as_ref())
+                .fetch_optional(&self.pool)
+                .await
+            {
+                Ok(data) => data,
+                Err(sqlx::Error::Database(_)) => None,
+                Err(err) => return Err(anyhow!(err)),
+            };
+
+        Ok(value.map(|v| v.0))
+    }
+
+    pub async fn backend(&self) -> Result<Option<Backend>> {
+        if let Some(data) = self.tag("backend").await? {
+            return Ok(Some(Backend::load(data.as_bytes())?));
+        }
+
+        Ok(None)
     }
 }
