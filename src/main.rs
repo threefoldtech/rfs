@@ -10,7 +10,7 @@ use nix::unistd::Pid;
 use std::io::Read;
 
 use anyhow::{Context, Result};
-use clap::{App, Arg};
+use clap::{ArgAction, Parser};
 
 mod cache;
 mod fs;
@@ -19,104 +19,76 @@ pub mod schema_capnp {
     include!(concat!(env!("OUT_DIR"), "/schema_capnp.rs"));
 }
 
-const GIT_VERSION: &str =
-    git_version::git_version!(args = ["--tags", "--always", "--dirty=-modified"]);
-
+/// mount flists
+#[derive(Parser, Debug)]
+#[clap(name ="rfs", author, version = env!("GIT_VERSION"), about, long_about = None)]
 struct Options {
-    hub: String,
+    /// storage-url is a url to the backend where the data is stored
+    /// this is a backup url to fall back to for backward compatability.
+    /// In newered flists, this information is already included int he flist
+    #[clap(
+        short,
+        long = "storage-url",
+        default_value_t = String::from("redis://hub.grid.tf:9900")
+    )]
+    storage_url: String,
+    /// path to metadata file (flist)
+    #[clap(short, long)]
     meta: String,
+
+    /// directory used as cache for downloaded file chuncks
+    #[clap(short, long, default_value_t = String::from("/tmp/cache"))]
     cache: String,
-    target: String,
+
+    #[clap(short, long)]
     daemon: bool,
+
+    /// enable debugging logs
+    #[clap(long, action=ArgAction::Count)]
+    debug: u8,
+
+    /// log file only used with daemon mode
+    #[clap(short, long)]
+    log: Option<String>,
+
+    /// hidden value
+    #[clap(long = "ro", hide = true)]
+    ro: bool,
+
+    /// target mountpoint
+    target: String,
 }
 
 fn main() -> Result<()> {
-    let matches = App::new("Mount flists")
-        .version(GIT_VERSION)
-        .author("Threefold Tech")
-        .arg(
-            Arg::with_name("debug")
-                .long("debug")
-                .help("enable debug logging"),
-        )
-        .arg(
-            Arg::with_name("meta")
-                .long("meta")
-                .required(true)
-                .takes_value(true)
-                .value_name("META")
-                .help("metadata file, can be a .flist file, a .sqlite3 file or a directory with a `flistdb.sqlite3` inside"),
-        )
-        .arg(
-            Arg::with_name("hub")
-                .long("storage-url")
-                .help("storage url to retrieve files from. Url can end with /<namespace> to switch to a different namespace")
-                .default_value("redis://hub.grid.tf:9900"),
-        )
-        .arg(
-            Arg::with_name("cache")
-                .long("cache")
-                .help("cache directory")
-                .default_value("/tmp/cache"),
-        )
-        .arg(
-            Arg::with_name("daemon")
-                .short("d")
-                .long("daemon")
-                .help("daemonize process"),
-        )
-        .arg(
-            Arg::with_name("log")
-                .long("log")
-                .takes_value(true)
-                .help("log file only in daemon mode"),
-        )
-        .arg(
-            Arg::with_name("ro")
-            .long("ro")
-            .hidden(true)
-            .help("only for compatibility with command line interface of g8ufs")
-        )
-        .arg(
-            Arg::with_name("target")
-                .required(true)
-                .value_name("TARGET")
-                .index(1),
-        )
-        .get_matches();
+    let opts = Options::parse();
 
-    let mut logger = simple_logger::SimpleLogger::new()
+    simple_logger::SimpleLogger::new()
         .with_utc_timestamps()
-        .with_level(log::Level::Info.to_level_filter())
-        .with_module_level("sqlx", log::Level::Error.to_level_filter());
+        .with_level({
+            match opts.debug {
+                0 => log::LevelFilter::Info,
+                1 => log::LevelFilter::Debug,
+                _ => log::LevelFilter::Trace,
+            }
+        })
+        .with_module_level("sqlx", log::Level::Error.to_level_filter())
+        .init()?;
 
-    if matches.is_present("debug") {
-        logger = logger.with_level(log::Level::Debug.to_level_filter())
-    }
+    log::debug!("options: {:#?}", opts);
 
-    logger.init()?;
-
-    let opt = Options {
-        hub: matches.value_of("hub").unwrap().into(),
-        meta: matches.value_of("meta").unwrap().into(),
-        cache: matches.value_of("cache").unwrap().into(),
-        target: matches.value_of("target").unwrap().into(),
-        daemon: matches.is_present("daemon"),
-    };
-
-    if is_mountpoint(&opt.target)? {
-        eprintln!("target {} is already a mount point", opt.target);
+    if is_mountpoint(&opts.target)? {
+        eprintln!("target {} is already a mount point", opts.target);
         std::process::exit(1);
     }
 
-    if opt.daemon {
+    if opts.daemon {
         let pid_file = tempfile::NamedTempFile::new()?;
-        let target = opt.target.clone();
+        let target = opts.target.clone();
         let mut daemon = daemonize::Daemonize::new()
             .working_directory(std::env::current_dir()?)
             .pid_file(pid_file.path());
-        if matches.is_present("log") {
-            let out = std::fs::File::create(matches.value_of("log").unwrap())?;
+        if let Some(ref log) = opts.log {
+            let out = std::fs::File::create(log)?;
             let err = out.try_clone()?;
             daemon = daemon.stdout(out).stderr(err);
         }
@@ -133,7 +105,7 @@ fn main() -> Result<()> {
 
     let rt = tokio::runtime::Runtime::new()?;
 
-    rt.block_on(app(opt))
+    rt.block_on(app(opts))
 }
 
 fn is_mountpoint<S: AsRef<str>>(target: S) -> Result<bool> {
@@ -182,7 +154,7 @@ async fn app(opts: Options) -> Result<()> {
         .await
         .context("failed to get backend information")?
     {
-        None => opts.hub.into_connection_info()?,
+        None => opts.storage_url.into_connection_info()?,
         Some(backend) => backend.into_connection_info()?,
     };
 
