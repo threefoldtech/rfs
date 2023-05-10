@@ -4,6 +4,7 @@ extern crate anyhow;
 extern crate thiserror;
 #[macro_use]
 extern crate log;
+use cache::{ConnectionInfo, IntoConnectionInfo};
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
 use std::io::Read;
@@ -172,12 +173,23 @@ fn wait_child(target: String, mut pid_file: tempfile::NamedTempFile) {
 }
 
 async fn app(opts: Options) -> Result<()> {
-    let cache = cache::Cache::new(opts.hub, opts.cache)
-        .await
-        .context("failed to initialize cache")?;
     let mgr = meta::Metadata::open(opts.meta)
         .await
         .context("failed to initialize metadata database")?;
+
+    let cache_info: ConnectionInfo = match mgr
+        .backend()
+        .await
+        .context("failed to get backend information")?
+    {
+        None => opts.hub.into_connection_info()?,
+        Some(backend) => backend.into_connection_info()?,
+    };
+
+    info!("backend: {}", cache_info);
+    let cache = cache::Cache::new(cache_info, opts.cache)
+        .await
+        .context("failed to initialize cache")?;
 
     //print tags
     match mgr.tags().await {

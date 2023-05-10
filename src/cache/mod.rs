@@ -1,11 +1,13 @@
 use crate::meta::types::FileBlock;
 use anyhow::{Context, Result};
 use bb8_redis::redis::aio::Connection;
+
 use bb8_redis::{
     bb8::{CustomizeConnection, Pool},
-    redis::{cmd, AsyncCommands, RedisError},
+    redis::{cmd, AsyncCommands, ConnectionInfo as RedisConnectionInfo, RedisError},
     RedisConnectionManager,
 };
+use std::fmt::Display;
 use std::os::unix::io::AsRawFd;
 use std::path::PathBuf;
 use tokio::fs::{self, File, OpenOptions};
@@ -44,6 +46,38 @@ impl CustomizeConnection<Connection, RedisError> for WithNamespace {
     }
 }
 
+pub struct ConnectionInfo {
+    redis: RedisConnectionInfo,
+    namespace: Option<String>,
+}
+
+impl ConnectionInfo {
+    /// create a new instance of connection info
+    pub fn new(redis: RedisConnectionInfo, namespace: Option<String>) -> Self {
+        Self { redis, namespace }
+    }
+}
+
+impl Display for ConnectionInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "redis://{}", self.redis.addr)?;
+        if let Some(ref ns) = self.namespace {
+            write!(f, "/{}", ns)?;
+        }
+
+        Ok(())
+    }
+}
+
+pub trait IntoConnectionInfo {
+    fn into_connection_info(self) -> Result<ConnectionInfo>;
+}
+
+impl IntoConnectionInfo for ConnectionInfo {
+    fn into_connection_info(self) -> Result<ConnectionInfo> {
+        Ok(self)
+    }
+}
 #[derive(Clone)]
 pub struct Cache {
     pool: Pool<RedisConnectionManager>,
@@ -51,22 +85,17 @@ pub struct Cache {
 }
 
 impl Cache {
-    pub async fn new<S, P>(url: S, root: P) -> Result<Cache>
+    pub async fn new<S, P>(info: S, root: P) -> Result<Cache>
     where
-        S: AsRef<str>,
+        S: IntoConnectionInfo,
         P: Into<PathBuf>,
     {
-        let mut u: url::Url = url.as_ref().parse().context("failed to parse url")?;
-        let namespace: Option<String> = match u.path_segments() {
-            None => None,
-            Some(mut segments) => segments.next().map(|s| s.to_owned()),
+        let info: ConnectionInfo = info.into_connection_info()?;
+        log::debug!("switching namespace to: {:?}", info.namespace);
+        let mgr = RedisConnectionManager::new(info.redis)?;
+        let namespace = WithNamespace {
+            namespace: info.namespace,
         };
-
-        u.set_path("");
-
-        log::debug!("switching namespace to: {:?}", namespace);
-        let mgr = RedisConnectionManager::new(u)?;
-        let namespace = WithNamespace { namespace };
         let pool = Pool::builder()
             .max_size(20)
             .connection_customizer(Box::new(namespace))
@@ -198,5 +227,23 @@ impl Locker {
             .context("failed to unlock file")?;
 
         Ok(())
+    }
+}
+
+impl<S: AsRef<str>> IntoConnectionInfo for S {
+    fn into_connection_info(self) -> Result<ConnectionInfo> {
+        let mut u: url::Url = self.as_ref().parse().context("failed to parse url")?;
+        let namespace: Option<String> = match u.path_segments() {
+            None => None,
+            Some(mut segments) => segments.next().map(|s| s.to_owned()),
+        };
+
+        u.set_path("");
+
+        use bb8_redis::redis::IntoConnectionInfo as RedisIntoConnectionInfo;
+        Ok(ConnectionInfo {
+            redis: RedisIntoConnectionInfo::into_connection_info(u)?,
+            namespace,
+        })
     }
 }
