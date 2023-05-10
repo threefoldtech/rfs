@@ -26,7 +26,10 @@ impl IntoConnectionInfo for Backend {
     fn into_connection_info(self) -> anyhow::Result<ConnectionInfo> {
         let redis = RedisConnectionInfo {
             addr: ConnectionAddr::Tcp(self.host, self.port),
-            redis: InnerConnectionInfo::default(),
+            redis: InnerConnectionInfo {
+                password: self.password,
+                ..Default::default()
+            },
         };
 
         Ok(ConnectionInfo::new(redis, self.namespace))

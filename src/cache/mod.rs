@@ -28,6 +28,7 @@ impl Hex for &[u8] {
 #[derive(Debug)]
 struct WithNamespace {
     namespace: Option<String>,
+    password: Option<String>,
 }
 
 #[async_trait::async_trait]
@@ -35,7 +36,13 @@ impl CustomizeConnection<Connection, RedisError> for WithNamespace {
     async fn on_acquire(&self, connection: &mut Connection) -> Result<(), RedisError> {
         match self.namespace {
             Some(ref ns) if ns != "default" => {
-                let result = cmd("SELECT").arg(ns).query_async(connection).await;
+                let mut c = cmd("SELECT");
+                let c = c.arg(ns);
+                if let Some(ref password) = self.password {
+                    c.arg(password);
+                }
+
+                let result = c.query_async(connection).await;
                 if let Err(ref err) = result {
                     error!("failed to switch namespace to {}: {}", ns, err);
                 }
@@ -65,6 +72,10 @@ impl Display for ConnectionInfo {
             write!(f, "/{}", ns)?;
         }
 
+        if let Some(ref pw) = self.redis.redis.password {
+            write!(f, " [password: {}]", pw)?;
+        }
+
         Ok(())
     }
 }
@@ -91,11 +102,13 @@ impl Cache {
         P: Into<PathBuf>,
     {
         let info: ConnectionInfo = info.into_connection_info()?;
-        log::debug!("switching namespace to: {:?}", info.namespace);
-        let mgr = RedisConnectionManager::new(info.redis)?;
         let namespace = WithNamespace {
             namespace: info.namespace,
+            password: info.redis.redis.password.clone(),
         };
+        log::debug!("switching namespace to: {:?}", namespace.namespace);
+        let mgr = RedisConnectionManager::new(info.redis)?;
+
         let pool = Pool::builder()
             .max_size(20)
             .connection_customizer(Box::new(namespace))
