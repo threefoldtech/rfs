@@ -168,7 +168,7 @@ async fn app(opts: Options) -> Result<()> {
         Ok(tags) => {
             debug!("flist has {} tags", tags.len());
             for (k, v) in tags.iter() {
-                info!("[tag][{}]: {}", k, v);
+                debug!("[tag][{}]: {}", k, v);
             }
         }
         Err(err) => {
