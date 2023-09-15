@@ -13,6 +13,7 @@ pub mod schema_capnp {
 }
 
 pub mod cache;
+pub mod fungi;
 pub mod meta;
 
 use cache::Cache;
