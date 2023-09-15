@@ -377,19 +377,16 @@ mod test {
     async fn test_get_routes() {
         const PATH: &str = "/tmp/route.fl";
         let meta = Writer::new(PATH).await.unwrap();
-        let hash: [u8; HASH_LEN] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
-        let key1: [u8; KEY_LEN] = [1; KEY_LEN];
-        let key2: [u8; KEY_LEN] = [2; KEY_LEN];
 
-        meta.block(1, &hash, &key1).await.unwrap();
-        meta.block(1, &hash, &key2).await.unwrap();
+        meta.route(0, 128, "zdb://hub1.grid.tf").await.unwrap();
+        meta.route(129, 255, "zdb://hub2.grid.tf").await.unwrap();
 
         let meta = Reader::new(PATH).await.unwrap();
 
-        let blocks = meta.blocks(1).await.unwrap();
-        assert_eq!(blocks.len(), 2);
-        assert_eq!(blocks[0].hash, hash);
-        assert_eq!(blocks[0].key, key1);
-        assert_eq!(blocks[1].key, key2);
+        let routes = meta.routes().await.unwrap();
+        assert_eq!(routes.len(), 2);
+        assert_eq!(routes[0].start, 0);
+        assert_eq!(routes[0].end, 128);
+        assert_eq!(routes[0].url, "zdb://hub1.grid.tf");
     }
 }
