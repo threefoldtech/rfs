@@ -8,13 +8,10 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::Path;
 
-pub mod schema_capnp {
-    include!(concat!(env!("OUT_DIR"), "/schema_capnp.rs"));
-}
-
 pub mod cache;
 pub mod fungi;
-pub mod meta;
+pub mod store;
+/*
 
 use cache::Cache;
 use meta::{EntryKind, Metadata};
@@ -93,3 +90,4 @@ pub async fn extract<P: AsRef<Path>>(meta: &Metadata, cache: &Cache, root: P) ->
 
     meta.walk(&mut visitor).await
 }
+*/

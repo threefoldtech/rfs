@@ -1,4 +1,4 @@
-use crate::meta::types::FileBlock;
+use crate::fungi::meta::Block;
 use anyhow::{Context, Result};
 use bb8_redis::redis::aio::Connection;
 
@@ -127,21 +127,21 @@ impl Cache {
         //con.
         let result: Vec<u8> = con.get(id).await?;
         if result.is_empty() {
-            bail!("invalid chunk length downloaded");
+            anyhow::bail!("invalid chunk length downloaded");
         }
 
         let key = unsafe { std::str::from_utf8_unchecked(key) };
         let mut decoder = snap::raw::Decoder::new();
         let result = match decoder.decompress_vec(&xxtea::decrypt(&result, key)) {
             Ok(data) => data,
-            Err(_) => bail!("invalid chunk"),
+            Err(_) => anyhow::bail!("invalid chunk"),
         };
 
         Ok(result)
     }
 
     // download given an open file, writes the content of the chunk to the file
-    async fn download(&self, file: &mut File, block: &FileBlock) -> Result<u64> {
+    async fn download(&self, file: &mut File, block: &Block) -> Result<u64> {
         let data = self.get_data(&block.hash, &block.key).await?;
         file.write_all(&data).await?;
 
@@ -151,7 +151,7 @@ impl Cache {
     async fn prepare(&self, id: &[u8]) -> Result<File> {
         let name = id.hex();
         if name.len() < 4 {
-            bail!("invalid chunk hash");
+            anyhow::bail!("invalid chunk hash");
         }
         let path = self.root.join(&name[0..2]).join(&name[2..4]);
         fs::create_dir_all(&path).await?;
@@ -170,7 +170,7 @@ impl Cache {
 
     /// get a file block either from cache or from remote if it's already
     /// not cached
-    pub async fn get(&self, block: &FileBlock) -> Result<(u64, File)> {
+    pub async fn get(&self, block: &Block) -> Result<(u64, File)> {
         let mut file = self.prepare(&block.hash).await?;
         // TODO: locking must happen here so no
         // other processes start downloading the same chunk
@@ -198,7 +198,7 @@ impl Cache {
 
     /// direct downloads all the file blocks from remote and write it to output
     #[allow(dead_code)]
-    pub async fn direct(&self, blocks: &[FileBlock], out: &mut File) -> Result<()> {
+    pub async fn direct(&self, blocks: &[Block], out: &mut File) -> Result<()> {
         use tokio::io::copy;
         for (index, block) in blocks.iter().enumerate() {
             let (_, mut chunk) = self.get(block).await?;

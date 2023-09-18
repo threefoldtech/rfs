@@ -1,8 +1,4 @@
 #[macro_use]
-extern crate anyhow;
-#[macro_use]
-extern crate thiserror;
-#[macro_use]
 extern crate log;
 use cache::{ConnectionInfo, IntoConnectionInfo};
 use nix::sys::signal::{self, Signal};
@@ -14,7 +10,7 @@ use clap::{ArgAction, Parser};
 
 mod cache;
 mod fs;
-mod meta;
+mod fungi;
 pub mod schema_capnp {
     include!(concat!(env!("OUT_DIR"), "/schema_capnp.rs"));
 }
@@ -98,7 +94,7 @@ fn main() -> Result<()> {
                 wait_child(target, pid_file);
                 return Ok(());
             }
-            daemonize::Outcome::Parent(Err(err)) => bail!("failed to daemonize: {}", err),
+            daemonize::Outcome::Parent(Err(err)) => anyhow::bail!("failed to daemonize: {}", err),
             _ => {}
         }
     }
@@ -145,36 +141,31 @@ fn wait_child(target: String, mut pid_file: tempfile::NamedTempFile) {
 }
 
 async fn app(opts: Options) -> Result<()> {
-    let mgr = meta::Metadata::open(opts.meta)
+    let mgr = fungi::Reader::new(opts.meta)
         .await
         .context("failed to initialize metadata database")?;
 
-    let cache_info: ConnectionInfo = match mgr
-        .backend()
-        .await
-        .context("failed to get backend information")?
-    {
-        None => opts.storage_url.into_connection_info()?,
-        Some(backend) => backend.into_connection_info()?,
-    };
+    // TODO: backend support with routers
+    let cache_info: ConnectionInfo = opts.storage_url.into_connection_info()?;
 
     info!("backend: {}", cache_info);
     let cache = cache::Cache::new(cache_info, opts.cache)
         .await
         .context("failed to initialize cache")?;
 
-    //print tags
-    match mgr.tags().await {
-        Ok(tags) => {
-            debug!("flist has {} tags", tags.len());
-            for (k, v) in tags.iter() {
-                debug!("[tag][{}]: {}", k, v);
-            }
-        }
-        Err(err) => {
-            error!("failed to extract flist tags: {}", err);
-        }
-    }
+    //TODO: print tags
+
+    // match mgr.tags().await {
+    //     Ok(tags) => {
+    //         debug!("flist has {} tags", tags.len());
+    //         for (k, v) in tags.iter() {
+    //             debug!("[tag][{}]: {}", k, v);
+    //         }
+    //     }
+    //     Err(err) => {
+    //         error!("failed to extract flist tags: {}", err);
+    //     }
+    // }
 
     let filesystem = fs::Filesystem::new(mgr, cache);
     filesystem.mount(opts.target).await
