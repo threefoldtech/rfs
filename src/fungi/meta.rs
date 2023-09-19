@@ -50,7 +50,7 @@ pub enum Error {
     #[error("io error: {0}")]
     IO(#[from] std::io::Error),
 
-    #[error("unknown error: {0}")]
+    #[error("{0}")]
     Anyhow(#[from] anyhow::Error),
 }
 
@@ -97,7 +97,7 @@ pub struct Inode {
     pub uid: u32,
     pub gid: u32,
     pub mode: Mode,
-    pub rdev: u32,
+    pub rdev: u64,
     pub ctime: i64,
     pub mtime: i64,
     pub data: Option<Vec<u8>>,
@@ -113,7 +113,7 @@ impl FromRow<'_, SqliteRow> for Inode {
             uid: row.get("uid"),
             gid: row.get("uid"),
             mode: row.get::<u32, &str>("mode").into(),
-            rdev: row.get("rdev"),
+            rdev: row.get::<i64, &str>("rdev") as u64,
             ctime: row.get("ctime"),
             mtime: row.get("mtime"),
             data: row.get("data"),
@@ -347,7 +347,7 @@ impl Writer {
         .bind(inode.uid)
         .bind(inode.gid)
         .bind(inode.mode.0)
-        .bind(inode.rdev)
+        .bind(inode.rdev as i64)
         .bind(inode.ctime)
         .bind(inode.mtime)
         .execute(&self.pool)
