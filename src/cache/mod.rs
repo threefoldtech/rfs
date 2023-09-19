@@ -1,134 +1,35 @@
 use crate::fungi::meta::Block;
+use crate::store::Store;
 use anyhow::{Context, Result};
-use bb8_redis::redis::aio::Connection;
 
-use bb8_redis::{
-    bb8::{CustomizeConnection, Pool},
-    redis::{cmd, AsyncCommands, ConnectionInfo as RedisConnectionInfo, RedisError},
-    RedisConnectionManager,
-};
-use std::fmt::Display;
 use std::os::unix::io::AsRawFd;
 use std::path::PathBuf;
 use tokio::fs::{self, File, OpenOptions};
 use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 
-trait Hex {
-    fn hex(&self) -> String;
-}
-
-impl Hex for &[u8] {
-    fn hex(&self) -> String {
-        self.iter()
-            .map(|x| -> String { format!("{:02x}", x) })
-            .collect()
-    }
-}
-
-#[derive(Debug)]
-struct WithNamespace {
-    namespace: Option<String>,
-    password: Option<String>,
-}
-
-#[async_trait::async_trait]
-impl CustomizeConnection<Connection, RedisError> for WithNamespace {
-    async fn on_acquire(&self, connection: &mut Connection) -> Result<(), RedisError> {
-        match self.namespace {
-            Some(ref ns) if ns != "default" => {
-                let mut c = cmd("SELECT");
-                let c = c.arg(ns);
-                if let Some(ref password) = self.password {
-                    c.arg(password);
-                }
-
-                let result = c.query_async(connection).await;
-                if let Err(ref err) = result {
-                    error!("failed to switch namespace to {}: {}", ns, err);
-                }
-                result
-            }
-            _ => Ok(()),
-        }
-    }
-}
-
-pub struct ConnectionInfo {
-    redis: RedisConnectionInfo,
-    namespace: Option<String>,
-}
-
-impl ConnectionInfo {
-    /// create a new instance of connection info
-    pub fn new(redis: RedisConnectionInfo, namespace: Option<String>) -> Self {
-        Self { redis, namespace }
-    }
-}
-
-impl Display for ConnectionInfo {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "redis://{}", self.redis.addr)?;
-        if let Some(ref ns) = self.namespace {
-            write!(f, "/{}", ns)?;
-        }
-
-        if let Some(ref pw) = self.redis.redis.password {
-            write!(f, " [password: {}]", pw)?;
-        }
-
-        Ok(())
-    }
-}
-
-pub trait IntoConnectionInfo {
-    fn into_connection_info(self) -> Result<ConnectionInfo>;
-}
-
-impl IntoConnectionInfo for ConnectionInfo {
-    fn into_connection_info(self) -> Result<ConnectionInfo> {
-        Ok(self)
-    }
-}
 #[derive(Clone)]
-pub struct Cache {
-    pool: Pool<RedisConnectionManager>,
+pub struct Cache<S: Store> {
+    store: S,
     root: PathBuf,
 }
 
-impl Cache {
-    pub async fn new<S, P>(info: S, root: P) -> Result<Cache>
+impl<S> Cache<S>
+where
+    S: Store,
+{
+    pub fn new<P>(root: P, store: S) -> Self
     where
-        S: IntoConnectionInfo,
         P: Into<PathBuf>,
     {
-        let info: ConnectionInfo = info.into_connection_info()?;
-        let namespace = WithNamespace {
-            namespace: info.namespace,
-            password: info.redis.redis.password.clone(),
-        };
-        log::debug!("switching namespace to: {:?}", namespace.namespace);
-        let mgr = RedisConnectionManager::new(info.redis)?;
-
-        let pool = Pool::builder()
-            .max_size(20)
-            .connection_customizer(Box::new(namespace))
-            .build(mgr)
-            .await?;
-
-        Ok(Cache {
-            pool,
+        Cache {
+            store,
             root: root.into(),
-        })
+        }
     }
 
     // get content from redis
     async fn get_data(&self, id: &[u8], key: &[u8]) -> Result<Vec<u8>> {
-        let mut con = self.pool.get().await.context("failed to get connection")?;
-        //con.
-        let result: Vec<u8> = con.get(id).await?;
-        if result.is_empty() {
-            anyhow::bail!("invalid chunk length downloaded");
-        }
+        let result = self.store.get(id).await?;
 
         let key = unsafe { std::str::from_utf8_unchecked(key) };
         let mut decoder = snap::raw::Decoder::new();
@@ -243,20 +144,14 @@ impl Locker {
     }
 }
 
-impl<S: AsRef<str>> IntoConnectionInfo for S {
-    fn into_connection_info(self) -> Result<ConnectionInfo> {
-        let mut u: url::Url = self.as_ref().parse().context("failed to parse url")?;
-        let namespace: Option<String> = match u.path_segments() {
-            None => None,
-            Some(mut segments) => segments.next().map(|s| s.to_owned()),
-        };
+trait Hex {
+    fn hex(&self) -> String;
+}
 
-        u.set_path("");
-
-        use bb8_redis::redis::IntoConnectionInfo as RedisIntoConnectionInfo;
-        Ok(ConnectionInfo {
-            redis: RedisIntoConnectionInfo::into_connection_info(u)?,
-            namespace,
-        })
+impl Hex for &[u8] {
+    fn hex(&self) -> String {
+        self.iter()
+            .map(|x| -> String { format!("{:02x}", x) })
+            .collect()
     }
 }

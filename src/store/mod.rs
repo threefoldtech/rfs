@@ -7,6 +7,8 @@ pub enum Error {
     KeyNotFound,
     #[error("invalid key")]
     InvalidKey,
+    #[error("invalid blob")]
+    InvalidBlob,
     #[error("key is not routable")]
     KeyNotRoutable,
     #[error("store is not available")]
@@ -17,6 +19,9 @@ pub enum Error {
     Multiple(Box<Vec<Self>>),
     #[error("io error: {0}")]
     IO(#[from] std::io::Error),
+
+    #[error("url parse error: {0}")]
+    Url(#[from] url::ParseError),
     #[error("other: {0}")]
     Other(#[from] anyhow::Error),
 }
@@ -27,6 +32,13 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub trait Store: Send + Sync + 'static {
     async fn get(&self, key: &[u8]) -> Result<Vec<u8>>;
     async fn set(&self, key: &[u8], blob: &[u8]) -> Result<()>;
+}
+
+#[async_trait::async_trait]
+pub trait StoreFactory {
+    type Store: Store;
+
+    async fn new<U: AsRef<str> + Send>(&self, url: U) -> anyhow::Result<Self::Store>;
 }
 
 pub type Router = router::Router<Box<dyn Store>>;

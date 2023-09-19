@@ -1,72 +1,77 @@
 #[macro_use]
-extern crate anyhow;
-#[macro_use]
-extern crate thiserror;
-#[macro_use]
 extern crate log;
-use anyhow::{Context, Result};
-use std::fs;
+use anyhow::Context;
+use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
+use std::{ffi::OsStr, fs};
+use store::Store;
 
 pub mod cache;
 pub mod fungi;
 pub mod store;
-/*
 
 use cache::Cache;
-use meta::{EntryKind, Metadata};
+use fungi::{
+    meta::{FileType, Inode, Walk, WalkVisitor},
+    Reader,
+};
 
-pub struct CopyVisitor<'a> {
-    meta: &'a Metadata,
-    cache: &'a Cache,
+pub struct CopyVisitor<'a, S>
+where
+    S: store::Store,
+{
+    meta: &'a fungi::Reader,
+    cache: &'a cache::Cache<S>,
     root: &'a Path,
 }
 
-impl<'a> CopyVisitor<'a> {
-    pub fn new(meta: &'a Metadata, cache: &'a Cache, root: &'a Path) -> Self {
+impl<'a, S> CopyVisitor<'a, S>
+where
+    S: store::Store,
+{
+    pub fn new(meta: &'a fungi::Reader, cache: &'a Cache<S>, root: &'a Path) -> Self {
         Self { meta, cache, root }
     }
 }
 
 #[async_trait::async_trait]
-impl<'a> meta::WalkVisitor for CopyVisitor<'a> {
-    async fn visit<P: AsRef<Path> + Send + Sync>(
-        &mut self,
-        path: P,
-        entry: &meta::Entry,
-    ) -> Result<meta::Walk> {
+impl<'a, S> WalkVisitor for CopyVisitor<'a, S>
+where
+    S: Store,
+{
+    async fn visit(&mut self, path: &Path, node: &Inode) -> fungi::meta::Result<Walk> {
         use tokio::fs::OpenOptions;
 
-        let rooted = self.root.join(path.as_ref().strip_prefix("/")?);
-        let acl = self
-            .meta
-            .aci(&entry.node.acl)
-            .await
-            .map(|a| a.mode & 0o777)
-            .unwrap_or(0o666);
+        let rooted = self.root.join(path.strip_prefix("/").unwrap());
 
-        match &entry.kind {
-            EntryKind::Dir(_) => {
+        match node.mode.file_type() {
+            FileType::Dir => {
                 fs::create_dir_all(&rooted)
                     .with_context(|| format!("failed to create directory '{:?}'", rooted))?;
             }
-            EntryKind::File(file) => {
+            FileType::Regular => {
                 let mut fd = OpenOptions::new()
                     .create(true)
                     .write(true)
                     .truncate(true)
-                    .mode(acl)
+                    .mode(node.mode.mode())
                     .open(&rooted)
                     .await
                     .with_context(|| format!("failed to create file '{:?}'", rooted))?;
 
+                let blocks = self.meta.blocks(node.ino).await?;
                 self.cache
-                    .direct(&file.blocks, &mut fd)
+                    .direct(&blocks, &mut fd)
                     .await
                     .with_context(|| format!("failed to create download file '{:?}'", rooted))?;
             }
-            EntryKind::Link(link) => {
-                let target = Path::new(&link.target);
+            FileType::Link => {
+                let target = node
+                    .data
+                    .as_deref()
+                    .ok_or_else(|| anyhow::anyhow!("link has no target path"))?;
+
+                let target = Path::new(OsStr::from_bytes(target));
                 let target = if target.is_relative() {
                     target.to_owned()
                 } else {
@@ -77,17 +82,20 @@ impl<'a> meta::WalkVisitor for CopyVisitor<'a> {
                     .with_context(|| format!("failed to create symlink '{:?}'", rooted))?;
             }
             _ => {
-                debug!("unknown file kind: {:?}", entry.kind);
+                debug!("unknown file kind: {:?}", node.mode.file_type());
             }
         };
 
-        Ok(meta::Walk::Continue)
+        Ok(Walk::Continue)
     }
 }
 
-pub async fn extract<P: AsRef<Path>>(meta: &Metadata, cache: &Cache, root: P) -> Result<()> {
+pub async fn extract<P: AsRef<Path>, S: Store>(
+    meta: &Reader,
+    cache: &Cache<S>,
+    root: P,
+) -> Result<(), fungi::meta::Error> {
     let mut visitor = CopyVisitor::new(meta, cache, root.as_ref());
 
     meta.walk(&mut visitor).await
 }
-*/

@@ -1,6 +1,5 @@
 #[macro_use]
 extern crate log;
-use cache::{ConnectionInfo, IntoConnectionInfo};
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
 use std::io::Read;
@@ -8,13 +7,11 @@ use std::io::Read;
 use anyhow::{Context, Result};
 use clap::{ArgAction, Parser};
 
-mod cache;
-mod fs;
-mod fungi;
-pub mod schema_capnp {
-    include!(concat!(env!("OUT_DIR"), "/schema_capnp.rs"));
-}
+use rfs::cache;
+use rfs::fungi;
+use rfs::store::{self, StoreFactory};
 
+mod fs;
 /// mount flists
 #[derive(Parser, Debug)]
 #[clap(name ="rfs", author, version = env!("GIT_VERSION"), about, long_about = None)]
@@ -141,17 +138,13 @@ fn wait_child(target: String, mut pid_file: tempfile::NamedTempFile) {
 }
 
 async fn app(opts: Options) -> Result<()> {
-    let mgr = fungi::Reader::new(opts.meta)
+    let meta = fungi::Reader::new(opts.meta)
         .await
         .context("failed to initialize metadata database")?;
 
-    // TODO: backend support with routers
-    let cache_info: ConnectionInfo = opts.storage_url.into_connection_info()?;
+    let store = store::zdb::ZdbStoreFactory.new(&opts.storage_url).await?;
 
-    info!("backend: {}", cache_info);
-    let cache = cache::Cache::new(cache_info, opts.cache)
-        .await
-        .context("failed to initialize cache")?;
+    let cache = cache::Cache::new(opts.cache, store);
 
     //TODO: print tags
 
@@ -167,6 +160,6 @@ async fn app(opts: Options) -> Result<()> {
     //     }
     // }
 
-    let filesystem = fs::Filesystem::new(mgr, cache);
+    let filesystem = fs::Filesystem::new(meta, cache);
     filesystem.mount(opts.target).await
 }

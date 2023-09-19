@@ -6,6 +6,7 @@ use crate::fungi::{
     meta::{FileType, Inode},
     Reader,
 };
+use crate::store::Store;
 
 use anyhow::{ensure, Result};
 use polyfuse::reply::FileAttr;
@@ -31,14 +32,20 @@ type FHash = [u8; 16];
 type BlockSize = u64;
 
 #[derive(Clone)]
-pub struct Filesystem {
+pub struct Filesystem<S>
+where
+    S: Store + Clone,
+{
     meta: Reader,
-    cache: cache::Cache,
+    cache: cache::Cache<S>,
     lru: Arc<Mutex<lru::LruCache<FHash, (File, BlockSize)>>>,
 }
 
-impl Filesystem {
-    pub fn new(meta: Reader, cache: cache::Cache) -> Filesystem {
+impl<S> Filesystem<S>
+where
+    S: Store + Clone,
+{
+    pub fn new(meta: Reader, cache: cache::Cache<S>) -> Self {
         Filesystem {
             meta,
             cache,
@@ -46,9 +53,9 @@ impl Filesystem {
         }
     }
 
-    pub async fn mount<S>(&self, mnt: S) -> Result<()>
+    pub async fn mount<P>(&self, mnt: P) -> Result<()>
     where
-        S: Into<PathBuf>,
+        P: Into<PathBuf>,
     {
         let mountpoint: PathBuf = mnt.into();
         ensure!(mountpoint.is_dir(), "mountpoint must be a directory");

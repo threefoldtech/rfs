@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use sqlx::{sqlite::SqliteRow, FromRow, Row, SqlitePool};
 
@@ -49,6 +49,9 @@ pub enum Error {
 
     #[error("io error: {0}")]
     IO(#[from] std::io::Error),
+
+    #[error("unknown error: {0}")]
+    Anyhow(#[from] anyhow::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -181,6 +184,16 @@ impl<'a> Tag<'a> {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Walk {
+    Continue,
+    Break,
+}
+#[async_trait::async_trait]
+pub trait WalkVisitor {
+    async fn visit(&mut self, path: &Path, node: &Inode) -> Result<Walk>;
+}
+
 #[derive(Clone)]
 pub struct Reader {
     pool: SqlitePool,
@@ -252,6 +265,50 @@ impl Reader {
             .await?;
 
         Ok(results)
+    }
+
+    pub async fn walk<W: WalkVisitor + Send>(&self, visitor: &mut W) -> Result<()> {
+        let node = self.inode(1).await?;
+        let path: PathBuf = "".into();
+        self.walk_node(&path, &node, visitor).await?;
+        Ok(())
+    }
+
+    #[async_recursion::async_recursion]
+    async fn walk_node<W: WalkVisitor + Send>(
+        &self,
+        path: &Path,
+        node: &Inode,
+        visitor: &mut W,
+    ) -> Result<Walk> {
+        let path = path.join(&node.name);
+        if visitor.visit(&path, node).await? == Walk::Break {
+            return Ok(Walk::Break);
+        }
+
+        let mut offset = 0;
+        loop {
+            let children = self.children(node.ino, 1000, offset).await?;
+            if children.is_empty() {
+                break;
+            }
+
+            for child in children {
+                offset += 1;
+                if self.walk_node(&path, &child, visitor).await? == Walk::Break {
+                    // if a file return break, we stop scanning this directory
+                    if child.mode.is(FileType::Regular) {
+                        return Ok(Walk::Continue);
+                    }
+                    // if child was a directory we continue because it means
+                    // a directory returned a break on first visit so the
+                    // entire directory is skipped anyway
+                    continue;
+                }
+            }
+        }
+
+        Ok(Walk::Continue)
     }
 }
 
@@ -472,5 +529,44 @@ mod test {
 
         assert_eq!(m.permissions(), 0754);
         assert_eq!(m.file_type(), FileType::Regular);
+    }
+
+    #[tokio::test]
+    async fn test_walk() {
+        const PATH: &str = "/tmp/walk.fl";
+        let meta = Writer::new(PATH).await.unwrap();
+
+        let parent = meta
+            .inode(Inode {
+                name: "/".into(),
+                data: Some("target".into()),
+                ..Inode::default()
+            })
+            .await
+            .unwrap();
+
+        for name in ["bin", "etc", "usr"] {
+            meta.inode(Inode {
+                parent: parent,
+                name: name.into(),
+                ..Inode::default()
+            })
+            .await
+            .unwrap();
+        }
+
+        let meta = Reader::new(PATH).await.unwrap();
+        //TODO: validate the walk
+        meta.walk(&mut WalkTest).await.unwrap();
+    }
+
+    struct WalkTest;
+
+    #[async_trait::async_trait]
+    impl WalkVisitor for WalkTest {
+        async fn visit(&mut self, path: &Path, node: &Inode) -> Result<Walk> {
+            println!("{} = {:?}", node.ino, path);
+            Ok(Walk::Continue)
+        }
     }
 }
