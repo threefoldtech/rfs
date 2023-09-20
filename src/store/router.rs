@@ -1,7 +1,7 @@
-/// route implements a naive prefix router by going through the complete set of
-/// available routers and find that ones that matches this given prefix
 use std::ops::Range;
 
+/// route implements a naive prefix router by going through the complete set of
+/// available routers and find that ones that matches this given prefix
 #[derive(Default)]
 pub struct Router<T> {
     routes: Vec<(Range<u8>, T)>,
@@ -14,10 +14,14 @@ impl<T> Router<T> {
         }
     }
 
+    /// add a range
     pub fn add(&mut self, start: u8, end: u8, route: T) {
         self.routes.push((start..end, route));
     }
 
+    /// return all stores that matches a certain key
+    ///
+    /// TODO: may be they need to be randomized
     pub fn route(&self, i: u8) -> impl Iterator<Item = &T> {
         self.routes
             .iter()

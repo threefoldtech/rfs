@@ -212,7 +212,7 @@ async fn test_extract() {
 
     let path = Path::new("/tmp/extracted");
     let _ = fs::remove_dir_all(path);
-    rfs::extract(&meta, &cache, path).await.unwrap();
+    rfs::unpack(&meta, &cache, path).await.unwrap();
 
     Command::new("md5sum")
         .args(["-c", "checksum.md5"])

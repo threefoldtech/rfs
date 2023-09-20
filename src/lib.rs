@@ -9,6 +9,8 @@ use std::path::Path;
 use std::{ffi::OsStr, fs};
 use store::Store;
 
+const BLOB_SIZE: usize = 512 * 1024; // 512K
+
 pub mod cache;
 pub mod fungi;
 pub mod store;
@@ -18,6 +20,8 @@ use fungi::{
     meta::{FileType, Inode, Result, Walk, WalkVisitor},
     Reader,
 };
+
+use crate::store::BlockStore;
 
 struct CopyVisitor<'a, S>
 where
@@ -93,7 +97,9 @@ where
     }
 }
 
-pub async fn extract<P: AsRef<Path>, S: Store>(
+/// unpack an FL to the given root location. it will download the files and reconstruct
+/// the filesystem.
+pub async fn unpack<P: AsRef<Path>, S: Store>(
     meta: &Reader,
     cache: &Cache<S>,
     root: P,
@@ -103,20 +109,35 @@ pub async fn extract<P: AsRef<Path>, S: Store>(
     meta.walk(&mut visitor).await
 }
 
-pub async fn pack<P: AsRef<Path>>(meta: &Writer, root: P) -> Result<()> {
+/// creates an FL from the given root location. It takes ownership of the writer because
+/// it's logically incorrect to store multiple filessytem in the same FL.
+/// All file chunks will then be uploaded to the provided store
+///
+pub async fn pack<P: AsRef<Path>, S: Store>(meta: Writer, store: S, root: P) -> Result<()> {
     use tokio::fs;
+
+    let store: BlockStore<S> = store.into();
 
     let m = fs::metadata(&root)
         .await
         .context("failed to get root stats")?;
 
-    scan(meta, 0, "/", root.as_ref(), &m).await
+    scan(&meta, &store, 0, "/", root.as_ref(), &m).await
 }
 
 #[async_recursion::async_recursion]
-pub async fn scan(meta: &Writer, parent: Ino, name: &str, path: &Path, m: &Metadata) -> Result<()> {
+async fn scan<S: Store>(
+    meta: &Writer,
+    store: &BlockStore<S>,
+    parent: Ino,
+    name: &str,
+    path: &Path,
+    m: &Metadata,
+) -> Result<()> {
     use std::os::unix::fs::MetadataExt;
     use tokio::fs;
+    use tokio::io::AsyncReadExt;
+    use tokio::io::BufReader;
 
     let data = if m.is_symlink() {
         let target = fs::read_link(&path).await?;
@@ -141,6 +162,28 @@ pub async fn scan(meta: &Writer, parent: Ino, name: &str, path: &Path, m: &Metad
         })
         .await?;
 
+    if m.is_file() {
+        // create file blocks
+        let fd = fs::OpenOptions::default().read(true).open(&path).await?;
+        let mut reader = BufReader::new(fd);
+        let mut buffer: [u8; BLOB_SIZE] = [0; BLOB_SIZE];
+        loop {
+            let size = reader.read(&mut buffer).await?;
+            if size == 0 {
+                break;
+            }
+
+            // write block to remote store
+            let block = store
+                .set(&buffer[..size])
+                .await
+                .context("failed to store blob")?;
+
+            // write block info to meta
+            meta.block(ino, &block.id, &block.key).await?;
+        }
+    }
+
     if !m.is_dir() {
         return Ok(());
     }
@@ -150,6 +193,7 @@ pub async fn scan(meta: &Writer, parent: Ino, name: &str, path: &Path, m: &Metad
     while let Some(child) = children.next_entry().await? {
         scan(
             meta,
+            store,
             ino,
             &child.file_name().to_string_lossy(),
             &path.join(child.file_name()),
@@ -163,7 +207,7 @@ pub async fn scan(meta: &Writer, parent: Ino, name: &str, path: &Path, m: &Metad
 
 #[cfg(test)]
 mod test {
-    use crate::fungi::meta;
+    use crate::{fungi::meta, store::dir::DirStore};
 
     use super::*;
 
@@ -174,11 +218,16 @@ mod test {
     async fn create_meta() {
         let writer = meta::Writer::new("/tmp/build.fl").await.unwrap();
 
-        pack(&writer, "/home/azmy/Documents").await.unwrap();
-        drop(writer);
+        let store = DirStore::new("/tmp/store").await.unwrap();
+        pack(writer, store, "/home/azmy/Documents/Visa Application")
+            .await
+            .unwrap();
+
+        let store = DirStore::new("/tmp/store").await.unwrap();
+        let cache = Cache::new("/tmp/cache", store);
 
         let reader = meta::Reader::new("/tmp/build.fl").await.unwrap();
-        reader.walk(&mut WalkTest).await.unwrap();
+        unpack(&reader, &cache, "/tmp/unpacked").await.unwrap();
     }
 
     struct WalkTest;

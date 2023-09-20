@@ -2,8 +2,8 @@ use std::path::{Path, PathBuf};
 
 use sqlx::{sqlite::SqliteRow, FromRow, Row, SqlitePool};
 
-const HASH_LEN: usize = 16;
-const KEY_LEN: usize = 16;
+const ID_LEN: usize = 32;
+const KEY_LEN: usize = 32;
 const TYPE_MASK: u32 = nix::libc::S_IFMT;
 
 #[repr(u32)]
@@ -123,14 +123,16 @@ impl FromRow<'_, SqliteRow> for Inode {
 
 #[derive(Debug, Clone, Default)]
 pub struct Block {
-    pub hash: [u8; HASH_LEN],
+    /// id of the block
+    pub id: [u8; ID_LEN],
+    /// encryption key of the block
     pub key: [u8; KEY_LEN],
 }
 
 impl FromRow<'_, SqliteRow> for Block {
     fn from_row(row: &'_ SqliteRow) -> std::result::Result<Self, sqlx::Error> {
-        let hash: &[u8] = row.get("hash");
-        if hash.len() != HASH_LEN {
+        let hash: &[u8] = row.get("id");
+        if hash.len() != ID_LEN {
             return Err(sqlx::Error::Decode(Box::new(Error::InvalidHash)));
         }
 
@@ -141,7 +143,7 @@ impl FromRow<'_, SqliteRow> for Block {
         }
 
         let mut block = Self::default();
-        block.hash.copy_from_slice(hash);
+        block.id.copy_from_slice(hash);
         block.key.copy_from_slice(key);
 
         Ok(block)
@@ -242,7 +244,7 @@ impl Reader {
     }
 
     pub async fn blocks(&self, ino: Ino) -> Result<Vec<Block>> {
-        let results: Vec<Block> = sqlx::query_as("select hash, key from block where ino = ?;")
+        let results: Vec<Block> = sqlx::query_as("select id, key from block where ino = ?;")
             .bind(ino as i64)
             .fetch_all(&self.pool)
             .await?;
@@ -365,10 +367,10 @@ impl Writer {
         Ok(ino)
     }
 
-    pub async fn block(&self, ino: Ino, hash: &[u8; HASH_LEN], key: &[u8; KEY_LEN]) -> Result<()> {
-        sqlx::query("insert into block (ino, hash, key) values (?, ?, ?)")
+    pub async fn block(&self, ino: Ino, id: &[u8; ID_LEN], key: &[u8; KEY_LEN]) -> Result<()> {
+        sqlx::query("insert into block (ino, id, key) values (?, ?, ?)")
             .bind(ino as i64)
-            .bind(&hash[..])
+            .bind(&id[..])
             .bind(&key[..])
             .execute(&self.pool)
             .await?;
@@ -464,7 +466,10 @@ mod test {
     async fn test_get_block() {
         const PATH: &str = "/tmp/block.fl";
         let meta = Writer::new(PATH).await.unwrap();
-        let hash: [u8; HASH_LEN] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+        let hash: [u8; ID_LEN] = [
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+            25, 26, 27, 28, 29, 30, 31, 32,
+        ];
         let key1: [u8; KEY_LEN] = [1; KEY_LEN];
         let key2: [u8; KEY_LEN] = [2; KEY_LEN];
 
@@ -475,7 +480,7 @@ mod test {
 
         let blocks = meta.blocks(1).await.unwrap();
         assert_eq!(blocks.len(), 2);
-        assert_eq!(blocks[0].hash, hash);
+        assert_eq!(blocks[0].id, hash);
         assert_eq!(blocks[0].key, key1);
         assert_eq!(blocks[1].key, key2);
     }

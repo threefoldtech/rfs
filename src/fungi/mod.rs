@@ -1,3 +1,3 @@
 pub mod meta;
 
-pub use meta::{Reader, Writer};
+pub use meta::{Error, Reader, Result, Writer};

@@ -1,5 +1,5 @@
 use crate::fungi::meta::Block;
-use crate::store::Store;
+use crate::store::{BlockStore, Store};
 use anyhow::{Context, Result};
 
 use std::os::unix::io::AsRawFd;
@@ -7,9 +7,10 @@ use std::path::PathBuf;
 use tokio::fs::{self, File, OpenOptions};
 use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 
+/// Cache implements a caching layer on top of a block store
 #[derive(Clone)]
 pub struct Cache<S: Store> {
-    store: S,
+    store: BlockStore<S>,
     root: PathBuf,
 }
 
@@ -22,28 +23,14 @@ where
         P: Into<PathBuf>,
     {
         Cache {
-            store,
+            store: store.into(),
             root: root.into(),
         }
     }
 
-    // get content from redis
-    async fn get_data(&self, id: &[u8], key: &[u8]) -> Result<Vec<u8>> {
-        let result = self.store.get(id).await?;
-
-        let key = unsafe { std::str::from_utf8_unchecked(key) };
-        let mut decoder = snap::raw::Decoder::new();
-        let result = match decoder.decompress_vec(&xxtea::decrypt(&result, key)) {
-            Ok(data) => data,
-            Err(_) => anyhow::bail!("invalid chunk"),
-        };
-
-        Ok(result)
-    }
-
     // download given an open file, writes the content of the chunk to the file
     async fn download(&self, file: &mut File, block: &Block) -> Result<u64> {
-        let data = self.get_data(&block.hash, &block.key).await?;
+        let data = self.store.get(&block).await?;
         file.write_all(&data).await?;
 
         Ok(data.len() as u64)
@@ -72,7 +59,7 @@ where
     /// get a file block either from cache or from remote if it's already
     /// not cached
     pub async fn get(&self, block: &Block) -> Result<(u64, File)> {
-        let mut file = self.prepare(&block.hash).await?;
+        let mut file = self.prepare(&block.id).await?;
         // TODO: locking must happen here so no
         // other processes start downloading the same chunk
         let locker = Locker::new(&file);
@@ -81,12 +68,12 @@ where
         let meta = file.metadata().await?;
         if meta.len() > 0 {
             // chunk is already downloaded
-            debug!("block cache hit: {}", block.hash.as_slice().hex());
+            debug!("block cache hit: {}", block.id.as_slice().hex());
             locker.unlock().await?;
             return Ok((meta.len(), file));
         }
 
-        debug!("downloading block: {}", block.hash.as_slice().hex());
+        debug!("downloading block: {}", block.id.as_slice().hex());
         let size = self.download(&mut file, block).await?;
 
         // if file is just downloaded, we need
@@ -150,8 +137,6 @@ trait Hex {
 
 impl Hex for &[u8] {
     fn hex(&self) -> String {
-        self.iter()
-            .map(|x| -> String { format!("{:02x}", x) })
-            .collect()
+        hex::encode(self)
     }
 }

@@ -23,8 +23,8 @@ CREATE TABLE IF NOT EXISTS extra (
 -- blocks per file, order of insertion is important
 CREATE TABLE IF NOT EXISTS block (
     ino INTEGER,
-    hash VARCHAR(16),
-    key VARCHAR(16)
+    id VARCHAR(32),
+    key VARCHAR(32)
 );
 
 CREATE INDEX IF NOT EXISTS block_ino ON block (ino);
