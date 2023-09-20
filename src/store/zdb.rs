@@ -49,8 +49,7 @@ impl ZdbStoreFactory {
                 let addr = ConnectionAddr::Tcp(host.to_string(), u.port().unwrap_or(9900));
                 let ns: Option<String> = u
                     .path_segments()
-                    .map(|s| s.last().map(|s| s.to_owned()))
-                    .flatten();
+                    .and_then(|s| s.last().map(|s| s.to_owned()));
                 (addr, ns)
             }
             None => (ConnectionAddr::Unix(u.path().into()), None),
@@ -78,12 +77,12 @@ impl ZdbStoreFactory {
 impl StoreFactory for ZdbStoreFactory {
     type Store = ZdbStore;
 
-    async fn new<U: AsRef<str> + Send>(&self, u: U) -> anyhow::Result<Self::Store> {
+    async fn build<U: AsRef<str> + Send>(&self, u: U) -> anyhow::Result<Self::Store> {
         let url = u.as_ref().to_owned();
         let (mut info, namespace) = self.get_connection_info(u)?;
 
         let namespace = WithNamespace {
-            namespace: namespace,
+            namespace,
             password: info.redis.password.take(),
         };
 

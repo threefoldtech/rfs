@@ -167,7 +167,7 @@ async fn scan<S: Store>(
             rdev: m.rdev(),
             ctime: m.ctime(),
             mtime: m.mtime(),
-            data: data,
+            data,
             ..Default::default()
         })
         .await?;
@@ -228,8 +228,10 @@ mod test {
     use tokio::io::AsyncWriteExt;
 
     #[tokio::test]
-    async fn create_meta() {
+    async fn pack_unpack() {
         const ROOT: &str = "/tmp/pack-unpack-test";
+        fs::remove_dir_all(ROOT).await.unwrap();
+
         let root: PathBuf = ROOT.into();
         let source = root.join("source");
         fs::create_dir_all(&source).await.unwrap();
@@ -284,6 +286,8 @@ mod test {
         unpack(&reader, &cache, root.join("destination"))
             .await
             .unwrap();
+
+        //TODO compare source and destination
     }
 
     struct WalkTest;

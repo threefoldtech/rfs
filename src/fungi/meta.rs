@@ -34,7 +34,7 @@ impl From<u32> for FileType {
     }
 }
 
-static SCHEMA: &'static str = include_str!("../../schema/schema.sql");
+static SCHEMA: &str = include_str!("../../schema/schema.sql");
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -72,7 +72,7 @@ impl Mode {
     }
 
     pub fn file_type(&self) -> FileType {
-        (self.0 as u32 & TYPE_MASK).into()
+        (self.0 & TYPE_MASK).into()
     }
 
     pub fn permissions(&self) -> u32 {

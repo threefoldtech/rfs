@@ -142,7 +142,7 @@ async fn app(opts: Options) -> Result<()> {
         .await
         .context("failed to initialize metadata database")?;
 
-    let store = store::zdb::ZdbStoreFactory.new(&opts.storage_url).await?;
+    let store = store::zdb::ZdbStoreFactory.build(&opts.storage_url).await?;
 
     let cache = cache::Cache::new(opts.cache, store);
 

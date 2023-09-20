@@ -30,7 +30,7 @@ where
 
     // download given an open file, writes the content of the chunk to the file
     async fn download(&self, file: &mut File, block: &Block) -> Result<u64> {
-        let data = self.store.get(&block).await?;
+        let data = self.store.get(block).await?;
         file.write_all(&data).await?;
 
         Ok(data.len() as u64)

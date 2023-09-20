@@ -71,7 +71,7 @@ pub trait Store: Send + Sync + 'static {
 pub trait StoreFactory {
     type Store: Store;
 
-    async fn new<U: AsRef<str> + Send>(&self, url: U) -> anyhow::Result<Self::Store>;
+    async fn build<U: AsRef<str> + Send>(&self, url: U) -> anyhow::Result<Self::Store>;
 }
 
 /// Router holds a set of shards (stores) where each store can be configured to serve
@@ -87,7 +87,7 @@ pub type Router = router::Router<Box<dyn Store>>;
 #[async_trait::async_trait]
 impl Store for Router {
     async fn get(&self, key: &[u8]) -> Result<Vec<u8>> {
-        if key.len() == 0 {
+        if key.is_empty() {
             return Err(Error::InvalidKey);
         }
         let mut errors = Vec::default();
@@ -107,7 +107,7 @@ impl Store for Router {
     }
 
     async fn set(&self, key: &[u8], blob: &[u8]) -> Result<()> {
-        if key.len() == 0 {
+        if key.is_empty() {
             return Err(Error::InvalidKey);
         }
 
