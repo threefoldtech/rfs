@@ -1,4 +1,4 @@
-use super::{Error, Result, Store, StoreFactory};
+use super::{Error, Result, Route, Store, StoreFactory};
 use anyhow::Context;
 
 use bb8_redis::{
@@ -79,6 +79,7 @@ impl StoreFactory for ZdbStoreFactory {
     type Store = ZdbStore;
 
     async fn new<U: AsRef<str> + Send>(&self, u: U) -> anyhow::Result<Self::Store> {
+        let url = u.as_ref().to_owned();
         let (mut info, namespace) = self.get_connection_info(u)?;
 
         let namespace = WithNamespace {
@@ -95,12 +96,13 @@ impl StoreFactory for ZdbStoreFactory {
             .build(mgr)
             .await?;
 
-        Ok(ZdbStore { pool })
+        Ok(ZdbStore { url, pool })
     }
 }
 
 #[derive(Clone)]
 pub struct ZdbStore {
+    url: String,
     pool: Pool<RedisConnectionManager>,
 }
 
@@ -127,6 +129,10 @@ impl Store for ZdbStore {
         con.set(key, blob).await.context("failed to set blob")?;
 
         Ok(())
+    }
+
+    fn routes(&self) -> Vec<Route> {
+        vec![Route::url(self.url.clone())]
     }
 }
 

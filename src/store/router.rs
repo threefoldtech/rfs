@@ -4,7 +4,7 @@ use std::ops::Range;
 /// available routers and find that ones that matches this given prefix
 #[derive(Default)]
 pub struct Router<T> {
-    routes: Vec<(Range<u8>, T)>,
+    pub(crate) routes: Vec<(Range<u8>, T)>,
 }
 
 impl<T> Router<T> {

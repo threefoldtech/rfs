@@ -82,6 +82,8 @@ where
 
 #[cfg(test)]
 mod test {
+    use super::super::Route;
+
     use super::*;
     use std::collections::HashMap;
     use std::sync::Arc;
@@ -104,6 +106,10 @@ mod test {
             map.insert(key.into(), blob.into());
 
             Ok(())
+        }
+
+        fn routes(&self) -> Vec<Route> {
+            vec![Route::url("mem://")]
         }
     }
 

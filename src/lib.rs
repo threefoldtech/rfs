@@ -116,6 +116,16 @@ pub async fn unpack<P: AsRef<Path>, S: Store>(
 pub async fn pack<P: AsRef<Path>, S: Store>(meta: Writer, store: S, root: P) -> Result<()> {
     use tokio::fs;
 
+    // building routing table from store information
+    for route in store.routes() {
+        meta.route(
+            route.start.unwrap_or(u8::MIN),
+            route.end.unwrap_or(u8::MAX),
+            route.url,
+        )
+        .await?;
+    }
+
     let store: BlockStore<S> = store.into();
 
     let m = fs::metadata(&root)
@@ -207,7 +217,10 @@ async fn scan<S: Store>(
 
 #[cfg(test)]
 mod test {
-    use crate::{fungi::meta, store::dir::DirStore};
+    use crate::{
+        fungi::meta,
+        store::{dir::DirStore, Router},
+    };
 
     use super::*;
 
@@ -218,7 +231,13 @@ mod test {
     async fn create_meta() {
         let writer = meta::Writer::new("/tmp/build.fl").await.unwrap();
 
-        let store = DirStore::new("/tmp/store").await.unwrap();
+        let store0 = DirStore::new("/tmp/store0").await.unwrap();
+        let store1 = DirStore::new("/tmp/store1").await.unwrap();
+        let mut store = Router::new();
+
+        store.add(0x00, 0x7f, Box::new(store0));
+        store.add(0x80, 0xff, Box::new(store1));
+
         pack(writer, store, "/home/azmy/Documents/Visa Application")
             .await
             .unwrap();

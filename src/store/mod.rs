@@ -39,6 +39,21 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+pub struct Route {
+    pub start: Option<u8>,
+    pub end: Option<u8>,
+    pub url: String,
+}
+
+impl Route {
+    pub fn url<S: Into<String>>(s: S) -> Self {
+        Self {
+            start: None,
+            end: None,
+            url: s.into(),
+        }
+    }
+}
 /// The store trait defines a simple (low level) key/value store interface to set/get blobs
 /// the concern of the store is to only store given data with given key and implement
 /// the means to retrieve it again once a get is called.
@@ -46,6 +61,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub trait Store: Send + Sync + 'static {
     async fn get(&self, key: &[u8]) -> Result<Vec<u8>>;
     async fn set(&self, key: &[u8], blob: &[u8]) -> Result<()>;
+    fn routes(&self) -> Vec<Route>;
 }
 
 /// The store factory trait works as a factory for a specific store
@@ -106,5 +122,21 @@ impl Store for Router {
         }
 
         Ok(())
+    }
+
+    fn routes(&self) -> Vec<Route> {
+        let mut routes = Vec::default();
+        for (key, value) in self.routes.iter() {
+            for sub in value.routes() {
+                let r = Route {
+                    start: Some(sub.start.unwrap_or(key.start)),
+                    end: Some(sub.end.unwrap_or(key.end)),
+                    url: sub.url,
+                };
+                routes.push(r);
+            }
+        }
+
+        routes
     }
 }

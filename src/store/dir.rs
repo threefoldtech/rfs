@@ -1,5 +1,6 @@
-use super::{Error, Result, Store};
+use super::{Error, Result, Route, Store};
 use std::io::ErrorKind;
+use std::os::unix::prelude::OsStrExt;
 use std::path::PathBuf;
 use tokio::fs;
 
@@ -40,5 +41,14 @@ impl Store for DirStore {
 
         fs::write(path, blob).await?;
         Ok(())
+    }
+
+    fn routes(&self) -> Vec<Route> {
+        let r = Route::url(format!(
+            "dir://{}",
+            String::from_utf8_lossy(self.root.as_os_str().as_bytes())
+        ));
+
+        vec![r]
     }
 }
