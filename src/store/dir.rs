@@ -7,6 +7,7 @@ use tokio::fs;
 /// DirStore is a simple store that store blobs on the filesystem
 /// and is mainly used for testing
 
+#[derive(Clone)]
 pub struct DirStore {
     root: PathBuf,
 }

@@ -129,8 +129,8 @@ impl Store for Router {
         for (key, value) in self.routes.iter() {
             for sub in value.routes() {
                 let r = Route {
-                    start: Some(sub.start.unwrap_or(key.start)),
-                    end: Some(sub.end.unwrap_or(key.end)),
+                    start: Some(sub.start.unwrap_or(*key.start())),
+                    end: Some(sub.end.unwrap_or(*key.end())),
                     url: sub.url,
                 };
                 routes.push(r);

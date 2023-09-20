@@ -217,36 +217,73 @@ async fn scan<S: Store>(
 
 #[cfg(test)]
 mod test {
+    use super::*;
     use crate::{
         fungi::meta,
         store::{dir::DirStore, Router},
     };
+    use rand::Rng;
+    use std::path::PathBuf;
+    use tokio::fs;
+    use tokio::io::AsyncWriteExt;
 
-    use super::*;
-
-    // TODO: create a directory on the fly, pack it then walk it again
-    // from meta.
-    #[ignore]
     #[tokio::test]
     async fn create_meta() {
-        let writer = meta::Writer::new("/tmp/build.fl").await.unwrap();
+        const ROOT: &str = "/tmp/pack-unpack-test";
+        let root: PathBuf = ROOT.into();
+        let source = root.join("source");
+        fs::create_dir_all(&source).await.unwrap();
 
-        let store0 = DirStore::new("/tmp/store0").await.unwrap();
-        let store1 = DirStore::new("/tmp/store1").await.unwrap();
+        let mut buffer: [u8; 1024] = [0; 1024];
+        let mut rng = rand::thread_rng();
+        // generate random files.
+        for size in [0, 100 * 1024, 1024 * 1024, 10 * 1024 * 1024] {
+            let name = format!("file-{}.rnd", size);
+            let p = source.join(&name);
+            let mut file = fs::OpenOptions::default()
+                .create(true)
+                .write(true)
+                .open(p)
+                .await
+                .unwrap();
+
+            let mut filled = 0;
+            // fill it with random data
+            loop {
+                rng.fill(&mut buffer);
+                file.write_all(&buffer).await.unwrap();
+                filled += buffer.len();
+                if filled >= size {
+                    break;
+                }
+            }
+        }
+
+        let writer = meta::Writer::new(root.join("meta.fl")).await.unwrap();
+
+        let store0 = DirStore::new(root.join("store0")).await.unwrap();
+        let store1 = DirStore::new(root.join("store1")).await.unwrap();
         let mut store = Router::new();
 
         store.add(0x00, 0x7f, Box::new(store0));
         store.add(0x80, 0xff, Box::new(store1));
 
-        pack(writer, store, "/home/azmy/Documents/Visa Application")
+        pack(writer, store, &source).await.unwrap();
+
+        // recreate the stores for reading.
+        let store0 = DirStore::new(root.join("store0")).await.unwrap();
+        let store1 = DirStore::new(root.join("store1")).await.unwrap();
+        let mut store = Router::new();
+
+        store.add(0x00, 0x7f, Box::new(store0));
+        store.add(0x80, 0xff, Box::new(store1));
+
+        let cache = Cache::new(root.join("cache"), store);
+
+        let reader = meta::Reader::new(root.join("meta.fl")).await.unwrap();
+        unpack(&reader, &cache, root.join("destination"))
             .await
             .unwrap();
-
-        let store = DirStore::new("/tmp/store").await.unwrap();
-        let cache = Cache::new("/tmp/cache", store);
-
-        let reader = meta::Reader::new("/tmp/build.fl").await.unwrap();
-        unpack(&reader, &cache, "/tmp/unpacked").await.unwrap();
     }
 
     struct WalkTest;

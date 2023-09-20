@@ -1,10 +1,10 @@
-use std::ops::Range;
+use std::ops::RangeInclusive;
 
 /// route implements a naive prefix router by going through the complete set of
 /// available routers and find that ones that matches this given prefix
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Router<T> {
-    pub(crate) routes: Vec<(Range<u8>, T)>,
+    pub(crate) routes: Vec<(RangeInclusive<u8>, T)>,
 }
 
 impl<T> Router<T> {
@@ -16,7 +16,7 @@ impl<T> Router<T> {
 
     /// add a range
     pub fn add(&mut self, start: u8, end: u8, route: T) {
-        self.routes.push((start..end, route));
+        self.routes.push((start..=end, route));
     }
 
     /// return all stores that matches a certain key
