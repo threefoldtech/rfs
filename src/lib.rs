@@ -263,6 +263,8 @@ mod test {
 
         let writer = meta::Writer::new(root.join("meta.fl")).await.unwrap();
 
+        // while we at it we can already create 2 stores and create a router store on top
+        // of that.
         let store0 = DirStore::new(root.join("store0")).await.unwrap();
         let store1 = DirStore::new(root.join("store1")).await.unwrap();
         let mut store = Router::new();
@@ -283,11 +285,27 @@ mod test {
         let cache = Cache::new(root.join("cache"), store);
 
         let reader = meta::Reader::new(root.join("meta.fl")).await.unwrap();
+        // validate reader store routing
+        let routers = reader.routes().await.unwrap();
+        assert_eq!(2, routers.len());
+        assert_eq!(routers[0].url, "dir:///tmp/pack-unpack-test/store0");
+        assert_eq!(routers[1].url, "dir:///tmp/pack-unpack-test/store1");
+
+        assert_eq!((routers[0].start, routers[0].end), (0x00, 0x7f));
+        assert_eq!((routers[1].start, routers[1].end), (0x80, 0xff));
+
         unpack(&reader, &cache, root.join("destination"))
             .await
             .unwrap();
 
-        //TODO compare source and destination
+        // compare that source directory is exactly the same as target directory
+        let status = std::process::Command::new("diff")
+            .arg(root.join("source"))
+            .arg(root.join("destination"))
+            .status()
+            .unwrap();
+
+        assert!(status.success());
     }
 
     struct WalkTest;
