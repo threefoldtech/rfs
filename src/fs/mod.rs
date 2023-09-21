@@ -28,6 +28,8 @@ use tokio::{
 const CHUNK_SIZE: usize = 512 * 1024; // 512k and is hardcoded in the hub. the block_size value is not used
 const TTL: Duration = Duration::from_secs(60 * 60 * 24 * 365);
 const LRU_CAP: usize = 5; // Least Recently Used File Capacity
+const FS_BLOCK_SIZE: u32 = 4 * 1024;
+
 type FHash = [u8; 32];
 type BlockSize = u64;
 
@@ -109,7 +111,9 @@ where
     }
 
     async fn statfs(&self, req: &Request, _op: op::Statfs<'_>) -> Result<()> {
-        let out = StatfsOut::default();
+        let mut out = StatfsOut::default();
+        let stats = out.statfs();
+        stats.bsize(FS_BLOCK_SIZE);
         req.reply(out)?;
         Ok(())
     }
@@ -371,7 +375,19 @@ impl AttributeFiller for Inode {
         attr.ino(self.ino);
         attr.ctime(Duration::from_secs(self.ctime as u64));
         attr.mtime(Duration::from_secs(self.mtime as u64));
+        attr.uid(self.uid);
+        attr.gid(self.gid);
         attr.size(self.size);
+        attr.rdev(self.rdev as u32);
+        attr.blksize(FS_BLOCK_SIZE);
+
+        let mut blocks = self.size / 512;
+        blocks += match self.size % 512 {
+            0 => 0,
+            _ => 1,
+        };
+
+        attr.blocks(blocks);
 
         match self.mode.file_type() {
             FileType::Dir => attr.nlink(2),

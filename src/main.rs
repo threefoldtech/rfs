@@ -5,7 +5,7 @@ use nix::unistd::Pid;
 use std::io::Read;
 
 use anyhow::{Context, Result};
-use clap::{ArgAction, Parser};
+use clap::{ArgAction, Args, Parser, Subcommand};
 
 use rfs::cache;
 use rfs::fungi;
@@ -16,6 +16,24 @@ mod fs;
 #[derive(Parser, Debug)]
 #[clap(name ="rfs", author, version = env!("GIT_VERSION"), about, long_about = None)]
 struct Options {
+    /// enable debugging logs
+    #[clap(long, action=ArgAction::Count)]
+    debug: u8,
+
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand, Debug)]
+enum Commands {
+    /// mount an FL
+    Mount(MountOptions),
+    /// create an FL and upload blocks
+    Create(CreateOptions),
+}
+
+#[derive(Args, Debug)]
+struct MountOptions {
     /// path to metadata file (flist)
     #[clap(short, long)]
     meta: String,
@@ -27,10 +45,6 @@ struct Options {
     #[clap(short, long)]
     daemon: bool,
 
-    /// enable debugging logs
-    #[clap(long, action=ArgAction::Count)]
-    debug: u8,
-
     /// log file only used with daemon mode
     #[clap(short, long)]
     log: Option<String>,
@@ -40,6 +54,20 @@ struct Options {
     ro: bool,
 
     /// target mountpoint
+    target: String,
+}
+
+#[derive(Args, Debug)]
+struct CreateOptions {
+    /// path to metadata file (flist)
+    #[clap(short, long)]
+    meta: String,
+
+    /// store url
+    #[clap(short, long)]
+    store: String,
+
+    /// target directory to upload
     target: String,
 }
 
@@ -60,6 +88,25 @@ fn main() -> Result<()> {
 
     log::debug!("options: {:#?}", opts);
 
+    match opts.command {
+        Commands::Mount(opts) => mount(opts),
+        Commands::Create(opts) => create(opts),
+    }
+}
+
+fn create(opts: CreateOptions) -> Result<()> {
+    let rt = tokio::runtime::Runtime::new()?;
+
+    rt.block_on(async move {
+        let store = store::make(opts.store).await?;
+        let meta = fungi::Writer::new(opts.meta).await?;
+        rfs::pack(meta, store, opts.target).await?;
+
+        Ok(())
+    })
+}
+
+fn mount(opts: MountOptions) -> Result<()> {
     if is_mountpoint(&opts.target)? {
         eprintln!("target {} is already a mount point", opts.target);
         std::process::exit(1);
@@ -89,7 +136,7 @@ fn main() -> Result<()> {
 
     let rt = tokio::runtime::Runtime::new()?;
 
-    rt.block_on(app(opts))
+    rt.block_on(fuse(opts))
 }
 
 fn is_mountpoint<S: AsRef<str>>(target: S) -> Result<bool> {
@@ -128,7 +175,7 @@ fn wait_child(target: String, mut pid_file: tempfile::NamedTempFile) {
     std::process::exit(1);
 }
 
-async fn app(opts: Options) -> Result<()> {
+async fn fuse(opts: MountOptions) -> Result<()> {
     let meta = fungi::Reader::new(opts.meta)
         .await
         .context("failed to initialize metadata database")?;
