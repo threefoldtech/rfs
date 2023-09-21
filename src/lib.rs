@@ -222,10 +222,8 @@ mod test {
         fungi::meta,
         store::{dir::DirStore, Router},
     };
-    use rand::Rng;
     use std::path::PathBuf;
-    use tokio::fs;
-    use tokio::io::AsyncWriteExt;
+    use tokio::{fs, io::AsyncReadExt};
 
     #[tokio::test]
     async fn pack_unpack() {
@@ -236,10 +234,14 @@ mod test {
         let source = root.join("source");
         fs::create_dir_all(&source).await.unwrap();
 
-        let mut buffer: [u8; 1024] = [0; 1024];
-        let mut rng = rand::thread_rng();
-        // generate random files.
         for size in [0, 100 * 1024, 1024 * 1024, 10 * 1024 * 1024] {
+            let mut urandom = fs::OpenOptions::default()
+                .read(true)
+                .open("/dev/urandom")
+                .await
+                .unwrap()
+                .take(size);
+
             let name = format!("file-{}.rnd", size);
             let p = source.join(&name);
             let mut file = fs::OpenOptions::default()
@@ -249,18 +251,10 @@ mod test {
                 .await
                 .unwrap();
 
-            let mut filled = 0;
-            // fill it with random data
-            loop {
-                rng.fill(&mut buffer);
-                file.write_all(&buffer).await.unwrap();
-                filled += buffer.len();
-                if filled >= size {
-                    break;
-                }
-            }
+            tokio::io::copy(&mut urandom, &mut file).await.unwrap();
         }
 
+        println!("file generation complete");
         let writer = meta::Writer::new(root.join("meta.fl")).await.unwrap();
 
         // while we at it we can already create 2 stores and create a router store on top
@@ -274,6 +268,7 @@ mod test {
 
         pack(writer, store, &source).await.unwrap();
 
+        println!("packing complete");
         // recreate the stores for reading.
         let store0 = DirStore::new(root.join("store0")).await.unwrap();
         let store1 = DirStore::new(root.join("store1")).await.unwrap();
@@ -298,6 +293,7 @@ mod test {
             .await
             .unwrap();
 
+        println!("unpacking complete");
         // compare that source directory is exactly the same as target directory
         let status = std::process::Command::new("diff")
             .arg(root.join("source"))
