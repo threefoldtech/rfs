@@ -1,9 +1,9 @@
 #[macro_use]
 extern crate log;
 use anyhow::Context;
-use fungi::meta::Ino;
 use fungi::Writer;
-use std::fs::Metadata;
+use std::collections::LinkedList;
+use std::ffi::OsString;
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::{ffi::OsStr, fs};
@@ -113,103 +113,116 @@ pub async fn unpack<P: AsRef<Path>, S: Store>(
 /// it's logically incorrect to store multiple filessytem in the same FL.
 /// All file chunks will then be uploaded to the provided store
 ///
-pub async fn pack<P: AsRef<Path>, S: Store>(meta: Writer, store: S, root: P) -> Result<()> {
-    use tokio::fs;
-
-    // building routing table from store information
-    for route in store.routes() {
-        meta.route(
-            route.start.unwrap_or(u8::MIN),
-            route.end.unwrap_or(u8::MAX),
-            route.url,
-        )
-        .await?;
-    }
-
-    let store: BlockStore<S> = store.into();
-
-    let m = fs::metadata(&root)
-        .await
-        .context("failed to get root stats")?;
-
-    scan(&meta, &store, 0, "/", root.as_ref(), &m).await
-}
-
-#[async_recursion::async_recursion]
-async fn scan<S: Store>(
-    meta: &Writer,
-    store: &BlockStore<S>,
-    parent: Ino,
-    name: &str,
-    path: &Path,
-    m: &Metadata,
-) -> Result<()> {
+pub async fn pack<P: AsRef<Path>, S: Store>(writer: Writer, store: S, root: P) -> Result<()> {
     use std::os::unix::fs::MetadataExt;
     use tokio::fs;
     use tokio::io::AsyncReadExt;
     use tokio::io::BufReader;
 
-    let data = if m.is_symlink() {
-        let target = fs::read_link(&path).await?;
-        Some(target.as_os_str().as_bytes().into())
-    } else {
-        None
-    };
+    // building routing table from store information
+    for route in store.routes() {
+        writer
+            .route(
+                route.start.unwrap_or(u8::MIN),
+                route.end.unwrap_or(u8::MAX),
+                route.url,
+            )
+            .await?;
+    }
 
-    let ino = meta
-        .inode(Inode {
-            name: name.into(),
-            parent,
-            size: m.size(),
-            uid: m.uid(),
-            gid: m.gid(),
-            mode: m.mode().into(),
-            rdev: m.rdev(),
-            ctime: m.ctime(),
-            mtime: m.mtime(),
-            data,
-            ..Default::default()
-        })
-        .await?;
+    let store: BlockStore<S> = store.into();
 
-    if m.is_file() {
-        // create file blocks
-        let fd = fs::OpenOptions::default().read(true).open(&path).await?;
-        let mut reader = BufReader::new(fd);
-        let mut buffer: [u8; BLOB_SIZE] = [0; BLOB_SIZE];
-        loop {
-            let size = reader.read(&mut buffer).await?;
-            if size == 0 {
-                break;
+    let meta = fs::metadata(&root)
+        .await
+        .context("failed to get root stats")?;
+
+    let root = (0, root.as_ref().to_owned(), meta, OsString::from("/"));
+    let mut list = LinkedList::default();
+
+    list.push_back(root);
+    while !list.is_empty() {
+        let (parent, path, meta, name) = list.pop_back().unwrap();
+
+        let parent = writer
+            .inode(Inode {
+                ino: 0, // this is not used during set
+                name: String::from_utf8_lossy(name.as_bytes()).into_owned(),
+                parent,
+                size: meta.size(),
+                uid: meta.uid(),
+                gid: meta.gid(),
+                mode: meta.mode().into(),
+                rdev: meta.rdev(),
+                ctime: meta.ctime(),
+                mtime: meta.mtime(),
+                data: None,
+            })
+            .await?;
+
+        // sub files
+        log::debug!("listing children of: {:?}", path);
+        let mut children = fs::read_dir(&path).await?;
+        while let Some(child) = children.next_entry().await? {
+            let name = child.file_name();
+            let child_path = path.join(&name);
+
+            let meta = child.metadata().await?;
+            if meta.is_dir() {
+                list.push_back((parent, child_path, meta, child.file_name().to_owned()));
+
+                continue;
+            }
+            // otherwise create the file meta
+            let data = if meta.is_symlink() {
+                let target = fs::read_link(&child_path).await?;
+                Some(target.as_os_str().as_bytes().into())
+            } else {
+                None
+            };
+
+            let file_ino = writer
+                .inode(Inode {
+                    ino: 0,
+                    name: String::from_utf8_lossy(name.as_bytes()).into_owned(),
+                    parent,
+                    size: meta.size(),
+                    uid: meta.uid(),
+                    gid: meta.gid(),
+                    mode: meta.mode().into(),
+                    rdev: meta.rdev(),
+                    ctime: meta.ctime(),
+                    mtime: meta.mtime(),
+                    data,
+                })
+                .await?;
+
+            if !meta.is_file() {
+                continue;
             }
 
-            // write block to remote store
-            let block = store
-                .set(&buffer[..size])
-                .await
-                .context("failed to store blob")?;
+            // create file blocks
+            let fd = fs::OpenOptions::default()
+                .read(true)
+                .open(&child_path)
+                .await?;
+            let mut reader = BufReader::new(fd);
+            let mut buffer: [u8; BLOB_SIZE] = [0; BLOB_SIZE];
+            loop {
+                let size = reader.read(&mut buffer).await?;
+                if size == 0 {
+                    break;
+                }
 
-            // write block info to meta
-            meta.block(ino, &block.id, &block.key).await?;
+                // write block to remote store
+                let block = store
+                    .set(&buffer[..size])
+                    .await
+                    .context("failed to store blob")?;
+
+                // write block info to meta
+                writer.block(file_ino, &block.id, &block.key).await?;
+            }
         }
-    }
-
-    if !m.is_dir() {
-        return Ok(());
-    }
-
-    // sub files
-    let mut children = fs::read_dir(path).await?;
-    while let Some(child) = children.next_entry().await? {
-        scan(
-            meta,
-            store,
-            ino,
-            &child.file_name().to_string_lossy(),
-            &path.join(child.file_name()),
-            &child.metadata().await?,
-        )
-        .await?;
     }
 
     Ok(())
