@@ -9,7 +9,7 @@ pub use bs::BlockStore;
 use futures::Future;
 
 lazy_static::lazy_static! {
-    pub static ref STORES: HashMap<String, Factory> = register_stores();
+    static ref STORES: HashMap<String, Factory> = register_stores();
 }
 
 /// register_stores is used to register the stores built in types
@@ -20,6 +20,16 @@ fn register_stores() -> HashMap<String, Factory> {
     m.insert("zdb".into(), zdb::make);
 
     m
+}
+
+pub async fn make<U: AsRef<str>>(u: U) -> Result<Box<dyn Store>> {
+    let parsed = url::Url::parse(u.as_ref())?;
+    let factory = match STORES.get(parsed.scheme()) {
+        None => return Err(Error::UnknownStore(parsed.scheme().into())),
+        Some(factory) => factory,
+    };
+
+    factory(u.as_ref()).await
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -50,6 +60,8 @@ pub enum Error {
 
     #[error("url parse error: {0}")]
     Url(#[from] url::ParseError),
+    #[error("unknown store type '{0}'")]
+    UnknownStore(String),
     #[error("invalid schema '{0}' expected '{1}'")]
     InvalidScheme(String, String),
     #[error("other: {0}")]

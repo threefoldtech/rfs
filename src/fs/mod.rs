@@ -17,7 +17,7 @@ use polyfuse::{
 };
 use std::io::SeekFrom;
 use std::sync::Arc;
-use std::{io, os::unix::prelude::*, path::PathBuf, time::Duration};
+use std::{io, path::PathBuf, time::Duration};
 use tokio::fs::File;
 use tokio::sync::Mutex;
 use tokio::{
@@ -120,11 +120,11 @@ where
         }
 
         if let Some(target) = link.data {
-            req.reply(target);
+            req.reply(target)?;
             return Ok(());
         }
 
-        return Ok(req.reply_error(libc::ENOLINK)?);
+        Ok(req.reply_error(libc::ENOLINK)?)
     }
 
     async fn read(&self, req: &Request, op: op::Read<'_>) -> Result<()> {
@@ -310,7 +310,7 @@ where
         out.ttl_attr(TTL);
         out.ttl_entry(TTL);
 
-        return Ok(req.reply(out)?);
+        Ok(req.reply(out)?)
     }
 }
 
@@ -358,8 +358,6 @@ trait AttributeFiller {
 
 impl AttributeFiller for Inode {
     fn fill(&self, attr: &mut FileAttr) {
-        use std::time::Duration;
-
         attr.mode(self.mode.mode());
 
         attr.ino(self.ino);

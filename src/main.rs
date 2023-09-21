@@ -16,15 +16,6 @@ mod fs;
 #[derive(Parser, Debug)]
 #[clap(name ="rfs", author, version = env!("GIT_VERSION"), about, long_about = None)]
 struct Options {
-    /// storage-url is a url to the backend where the data is stored
-    /// this is a backup url to fall back to for backward compatability.
-    /// In newered flists, this information is already included int he flist
-    #[clap(
-        short,
-        long = "storage-url",
-        default_value_t = String::from("redis://hub.grid.tf:9900")
-    )]
-    storage_url: String,
     /// path to metadata file (flist)
     #[clap(short, long)]
     meta: String,
@@ -142,25 +133,17 @@ async fn app(opts: Options) -> Result<()> {
         .await
         .context("failed to initialize metadata database")?;
 
-    //let store = store::Router::new();
-    let store = store::zdb::make(&opts.storage_url).await?;
+    let mut router = store::Router::new();
 
-    let cache = cache::Cache::new(opts.cache, store);
+    for route in meta.routes().await.context("failed to get store routes")? {
+        let store = store::make(&route.url)
+            .await
+            .with_context(|| format!("failed to initialize store '{}'", route.url))?;
+        router.add(route.start, route.end, store);
+    }
 
-    //TODO: print tags
-
-    // match mgr.tags().await {
-    //     Ok(tags) => {
-    //         debug!("flist has {} tags", tags.len());
-    //         for (k, v) in tags.iter() {
-    //             debug!("[tag][{}]: {}", k, v);
-    //         }
-    //     }
-    //     Err(err) => {
-    //         error!("failed to extract flist tags: {}", err);
-    //     }
-    // }
-
+    let cache = cache::Cache::new(opts.cache, router);
     let filesystem = fs::Filesystem::new(meta, cache);
+
     filesystem.mount(opts.target).await
 }
