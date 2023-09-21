@@ -31,24 +31,36 @@ const LRU_CAP: usize = 5; // Least Recently Used File Capacity
 type FHash = [u8; 32];
 type BlockSize = u64;
 
-#[derive(Clone)]
 pub struct Filesystem<S>
 where
-    S: Store + Clone,
+    S: Store,
 {
     meta: Reader,
-    cache: cache::Cache<S>,
+    cache: Arc<cache::Cache<S>>,
     lru: Arc<Mutex<lru::LruCache<FHash, (File, BlockSize)>>>,
+}
+
+impl<S> Clone for Filesystem<S>
+where
+    S: Store,
+{
+    fn clone(&self) -> Self {
+        Self {
+            meta: self.meta.clone(),
+            cache: Arc::clone(&self.cache),
+            lru: Arc::clone(&self.lru),
+        }
+    }
 }
 
 impl<S> Filesystem<S>
 where
-    S: Store + Clone,
+    S: Store,
 {
     pub fn new(meta: Reader, cache: cache::Cache<S>) -> Self {
         Filesystem {
             meta,
-            cache,
+            cache: Arc::new(cache),
             lru: Arc::new(Mutex::new(lru::LruCache::new(LRU_CAP))),
         }
     }

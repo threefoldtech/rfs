@@ -3,7 +3,24 @@ pub mod dir;
 mod router;
 pub mod zdb;
 
+use std::{collections::HashMap, pin::Pin};
+
 pub use bs::BlockStore;
+use futures::Future;
+
+lazy_static::lazy_static! {
+    pub static ref STORES: HashMap<String, Factory> = register_stores();
+}
+
+/// register_stores is used to register the stores built in types
+/// so they can be created with a url
+fn register_stores() -> HashMap<String, Factory> {
+    let mut m: HashMap<String, Factory> = HashMap::default();
+    m.insert("dir".into(), dir::make);
+    m.insert("zdb".into(), zdb::make);
+
+    m
+}
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -33,6 +50,8 @@ pub enum Error {
 
     #[error("url parse error: {0}")]
     Url(#[from] url::ParseError),
+    #[error("invalid schema '{0}' expected '{1}'")]
+    InvalidScheme(String, String),
     #[error("other: {0}")]
     Other(#[from] anyhow::Error),
 }
@@ -64,15 +83,10 @@ pub trait Store: Send + Sync + 'static {
     fn routes(&self) -> Vec<Route>;
 }
 
-/// The store factory trait works as a factory for a specific store
+/// The store factory works as a factory for a specific store
 /// this is only needed to be able dynamically create different types
 /// of stores based only on scheme of the store url.
-#[async_trait::async_trait]
-pub trait StoreFactory {
-    type Store: Store;
-
-    async fn build<U: AsRef<str> + Send>(&self, url: U) -> anyhow::Result<Self::Store>;
-}
+pub type Factory = fn(u: &str) -> Pin<Box<dyn Future<Output = Result<Box<dyn Store>>>>>;
 
 /// Router holds a set of shards (stores) where each store can be configured to serve
 /// a range of hashes.
@@ -138,5 +152,18 @@ impl Store for Router {
         }
 
         routes
+    }
+}
+
+#[async_trait::async_trait]
+impl Store for Box<dyn Store> {
+    async fn get(&self, key: &[u8]) -> Result<Vec<u8>> {
+        self.as_ref().get(key).await
+    }
+    async fn set(&self, key: &[u8], blob: &[u8]) -> Result<()> {
+        self.as_ref().set(key, blob).await
+    }
+    fn routes(&self) -> Vec<Route> {
+        self.as_ref().routes()
     }
 }

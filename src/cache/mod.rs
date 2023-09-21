@@ -8,7 +8,7 @@ use tokio::fs::{self, File, OpenOptions};
 use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 
 /// Cache implements a caching layer on top of a block store
-#[derive(Clone)]
+//#[derive(Clone)]
 pub struct Cache<S: Store> {
     store: BlockStore<S>,
     root: PathBuf,

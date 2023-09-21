@@ -9,7 +9,7 @@ use clap::{ArgAction, Parser};
 
 use rfs::cache;
 use rfs::fungi;
-use rfs::store::{self, StoreFactory};
+use rfs::store;
 
 mod fs;
 /// mount flists
@@ -142,7 +142,8 @@ async fn app(opts: Options) -> Result<()> {
         .await
         .context("failed to initialize metadata database")?;
 
-    let store = store::zdb::ZdbStoreFactory.build(&opts.storage_url).await?;
+    //let store = store::Router::new();
+    let store = store::zdb::make(&opts.storage_url).await?;
 
     let cache = cache::Cache::new(opts.cache, store);
 
