@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS inode (
 );
 
 CREATE INDEX IF NOT EXISTS parents ON inode (parent);
+CREATE INDEX IF NOT EXISTS names ON inode (name);
 
 -- extra data for each inode for special types (say link targets)
 CREATE TABLE IF NOT EXISTS extra (

@@ -107,6 +107,7 @@ where
 
         Ok(())
     }
+
     async fn statfs(&self, req: &Request, _op: op::Statfs<'_>) -> Result<()> {
         let out = StatfsOut::default();
         req.reply(out)?;
@@ -217,6 +218,8 @@ where
     }
 
     async fn getattr(&self, req: &Request, op: op::Getattr<'_>) -> Result<()> {
+        log::debug!("getattr({})", op.ino());
+
         let entry = self.meta.inode(op.ino()).await?;
 
         let mut attr = AttrOut::default();
@@ -230,6 +233,7 @@ where
     }
 
     async fn readdir(&self, req: &Request, op: op::Readdir<'_>) -> Result<()> {
+        log::debug!("readdir({})", op.ino());
         let root = self.meta.inode(op.ino()).await?;
 
         if !root.mode.is(FileType::Dir) {
@@ -239,6 +243,8 @@ where
 
         let mut out = ReaddirOut::new(op.size() as usize);
         let mut offset = op.offset();
+
+        let mut query_offset = offset;
         if offset == 0 {
             out.entry(".".as_ref(), op.ino(), libc::DT_DIR as u32, 1);
             out.entry(
@@ -250,15 +256,16 @@ where
                 libc::DT_DIR as u32,
                 2,
             );
+            offset = 2;
         } else {
             // we don't add the . and .. but
             // we also need to change the offset to
-            offset -= 2;
+            query_offset -= 2;
         }
 
-        let children = self.meta.children(root.ino, op.size(), offset).await?;
-        for (i, entry) in children.into_iter().enumerate() {
-            let offset = i as u64 + 3;
+        let children = self.meta.children(root.ino, 10, query_offset).await?;
+        for entry in children.iter() {
+            offset += 1;
 
             let full = match entry.mode.file_type() {
                 FileType::Dir => {
@@ -286,6 +293,7 @@ where
     }
 
     async fn lookup(&self, req: &Request, op: op::Lookup<'_>) -> Result<()> {
+        log::debug!("lookup(parent: {}, name: {:?})", op.parent(), op.name());
         let name = match op.name().to_str() {
             Some(name) => name,
             None => {
