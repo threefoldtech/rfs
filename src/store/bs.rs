@@ -1,12 +1,11 @@
 use super::{Error, Result, Store};
 use crate::fungi::meta::Block;
 use aes_gcm::{
-    aead::{generic_array::GenericArray, Aead, KeyInit},
+    aead::{Aead, KeyInit},
     Aes256Gcm, Nonce,
 };
-//use blake2::{Blake2s256, Digest};
-
-//type Hasher = Blake2s256;
+use blake2::{Blake2s256, Digest};
+type Hasher = Blake2s256;
 
 /// The block store builds on top of a store and adds encryption and compression
 #[derive(Clone, Debug)]
@@ -50,19 +49,16 @@ where
     pub async fn set(&self, blob: &[u8]) -> Result<Block> {
         // we first calculate the hash of the plain-text data
 
-        let key = blake2s_simd::blake2s(blob);
-
-        let enc_key = GenericArray::from_slice(key.as_array());
-        //let key = Hasher::digest(blob);
+        let key = Hasher::digest(blob);
         let mut encoder = snap::raw::Encoder::new();
         // data is then compressed
         let compressed = encoder.compress_vec(blob)?;
 
         // we then encrypt it using the hash of the plain-text as a key
-        let cipher = Aes256Gcm::new(enc_key);
+        let cipher = Aes256Gcm::new(&key);
         // the nonce is still driven from the key, a nonce is 12 bytes for aes
         // it's done like this so a store can still dedup the data
-        let nonce = Nonce::from_slice(&key.as_bytes()[..12]);
+        let nonce = Nonce::from_slice(&key[..12]);
 
         // we encrypt the data
         let encrypted = cipher
@@ -70,11 +66,11 @@ where
             .map_err(|_| Error::EncryptionError)?;
 
         // we hash it again, and use that as the store key
-        let id = blake2s_simd::blake2s(&encrypted);
+        let id = Hasher::digest(&encrypted);
 
         let block = Block {
-            id: *id.as_array(),
-            key: *key.as_array(),
+            id: id.into(),
+            key: key.into(),
         };
 
         self.store.set(&block.id, &encrypted).await?;
