@@ -1,11 +1,17 @@
 use super::{Error, Result, Store};
 use crate::fungi::meta::Block;
 use aes_gcm::{
-    aead::{Aead, KeyInit},
+    aead::{
+        generic_array::{self, GenericArray},
+        Aead, KeyInit,
+    },
     Aes256Gcm, Nonce,
 };
-use blake2::{Blake2s256, Digest};
-type Hasher = Blake2s256;
+
+fn hash(input: &[u8]) -> GenericArray<u8, generic_array::typenum::U32> {
+    let hash = blake2b_simd::Params::new().hash_length(32).hash(input);
+    GenericArray::from_slice(hash.as_bytes()).to_owned()
+}
 
 /// The block store builds on top of a store and adds encryption and compression
 #[derive(Clone, Debug)]
@@ -49,7 +55,7 @@ where
     pub async fn set(&self, blob: &[u8]) -> Result<Block> {
         // we first calculate the hash of the plain-text data
 
-        let key = Hasher::digest(blob);
+        let key = hash(blob);
         let mut encoder = snap::raw::Encoder::new();
         // data is then compressed
         let compressed = encoder.compress_vec(blob)?;
@@ -66,7 +72,7 @@ where
             .map_err(|_| Error::EncryptionError)?;
 
         // we hash it again, and use that as the store key
-        let id = Hasher::digest(&encrypted);
+        let id = hash(&encrypted);
 
         let block = Block {
             id: id.into(),
