@@ -3,6 +3,7 @@ extern crate log;
 use anyhow::Context;
 use fungi::meta::Ino;
 use fungi::Writer;
+use nix::unistd::{fchownat, FchownatFlags, Gid, Uid};
 use std::collections::LinkedList;
 use std::ffi::OsString;
 use std::fs::Metadata;
@@ -29,6 +30,7 @@ struct CopyVisitor<'a, S>
 where
     S: store::Store,
 {
+    preserve: bool,
     meta: &'a fungi::Reader,
     cache: &'a cache::Cache<S>,
     root: &'a Path,
@@ -38,8 +40,18 @@ impl<'a, S> CopyVisitor<'a, S>
 where
     S: store::Store,
 {
-    pub fn new(meta: &'a fungi::Reader, cache: &'a Cache<S>, root: &'a Path) -> Self {
-        Self { meta, cache, root }
+    pub fn new(
+        meta: &'a fungi::Reader,
+        cache: &'a Cache<S>,
+        root: &'a Path,
+        preserve: bool,
+    ) -> Self {
+        Self {
+            meta,
+            cache,
+            root,
+            preserve,
+        }
     }
 }
 
@@ -49,6 +61,8 @@ where
     S: Store,
 {
     async fn visit(&mut self, path: &Path, node: &Inode) -> Result<Walk> {
+        use std::fs::Permissions;
+        use std::os::unix::fs::PermissionsExt;
         use tokio::fs::OpenOptions;
 
         let rooted = self.root.join(path.strip_prefix("/").unwrap());
@@ -60,10 +74,9 @@ where
             }
             FileType::Regular => {
                 let mut fd = OpenOptions::new()
-                    .create(true)
+                    .create_new(true)
                     .write(true)
                     .truncate(true)
-                    .mode(node.mode.mode())
                     .open(&rooted)
                     .await
                     .with_context(|| format!("failed to create file '{:?}'", rooted))?;
@@ -72,7 +85,10 @@ where
                 self.cache
                     .direct(&blocks, &mut fd)
                     .await
-                    .with_context(|| format!("failed to create download file '{:?}'", rooted))?;
+                    .with_context(|| format!("failed to download file '{:?}'", rooted))?;
+
+                fd.set_permissions(Permissions::from_mode(node.mode.mode()))
+                    .await?;
             }
             FileType::Link => {
                 let target = node
@@ -91,9 +107,21 @@ where
                     .with_context(|| format!("failed to create symlink '{:?}'", rooted))?;
             }
             _ => {
-                debug!("unknown file kind: {:?}", node.mode.file_type());
+                warn!("unknown file kind: {:?}", node.mode.file_type());
+                return Ok(Walk::Continue);
             }
         };
+
+        if self.preserve {
+            fchownat(
+                None,
+                &rooted,
+                Some(Uid::from_raw(node.uid)),
+                Some(Gid::from_raw(node.gid)),
+                FchownatFlags::NoFollowSymlink,
+            )
+            .with_context(|| format!("failed to change ownership of '{:?}'", &rooted))?;
+        }
 
         Ok(Walk::Continue)
     }
@@ -105,8 +133,9 @@ pub async fn unpack<P: AsRef<Path>, S: Store>(
     meta: &Reader,
     cache: &Cache<S>,
     root: P,
+    preserve: bool,
 ) -> Result<()> {
-    let mut visitor = CopyVisitor::new(meta, cache, root.as_ref());
+    let mut visitor = CopyVisitor::new(meta, cache, root.as_ref(), preserve);
 
     meta.walk(&mut visitor).await
 }
@@ -333,7 +362,7 @@ mod test {
         assert_eq!((routers[0].start, routers[0].end), (0x00, 0x7f));
         assert_eq!((routers[1].start, routers[1].end), (0x80, 0xff));
 
-        unpack(&reader, &cache, root.join("destination"))
+        unpack(&reader, &cache, root.join("destination"), false)
             .await
             .unwrap();
 

@@ -81,6 +81,11 @@ struct UnpackOptions {
     #[clap(short, long, default_value_t = String::from("/tmp/cache"))]
     cache: String,
 
+    /// preserve files ownership from the FL, otherwise use the current user ownership
+    /// setting this flag to true normally requires sudo
+    #[clap(short, long, default_value_t = false)]
+    preserve_ownership: bool,
+
     /// target directory to upload
     target: String,
 }
@@ -132,7 +137,7 @@ fn unpack(opts: UnpackOptions) -> Result<()> {
         let router = get_router(&meta).await?;
 
         let cache = cache::Cache::new(opts.cache, router);
-        rfs::unpack(&meta, &cache, opts.target).await?;
+        rfs::unpack(&meta, &cache, opts.target, opts.preserve_ownership).await?;
         Ok(())
     })
 }

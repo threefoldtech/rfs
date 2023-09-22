@@ -59,13 +59,19 @@ where
     /// get a file block either from cache or from remote if it's already
     /// not cached
     pub async fn get(&self, block: &Block) -> Result<(u64, File)> {
-        let mut file = self.prepare(&block.id).await?;
+        let mut file = self
+            .prepare(&block.id)
+            .await
+            .context("failed to prepare cache block")?;
         // TODO: locking must happen here so no
         // other processes start downloading the same chunk
         let locker = Locker::new(&file);
         locker.lock().await?;
 
-        let meta = file.metadata().await?;
+        let meta = file
+            .metadata()
+            .await
+            .context("failed to get block metadata")?;
         if meta.len() > 0 {
             // chunk is already downloaded
             debug!("block cache hit: {}", block.id.as_slice().hex());
@@ -74,7 +80,10 @@ where
         }
 
         debug!("downloading block: {}", block.id.as_slice().hex());
-        let size = self.download(&mut file, block).await?;
+        let size = self
+            .download(&mut file, block)
+            .await
+            .context("failed to download block")?;
 
         // if file is just downloaded, we need
         // to seek to beginning of the file.
@@ -92,7 +101,7 @@ where
             let (_, mut chunk) = self.get(block).await?;
             copy(&mut chunk, out)
                 .await
-                .with_context(|| format!("failed to download block {}", index))?;
+                .with_context(|| format!("failed to copy block {}", index))?;
         }
 
         Ok(())
