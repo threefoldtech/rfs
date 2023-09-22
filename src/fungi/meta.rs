@@ -1,4 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::{
+    collections::LinkedList,
+    path::{Path, PathBuf},
+};
 
 use sqlx::{sqlite::SqliteRow, FromRow, Row, SqlitePool};
 
@@ -196,6 +199,8 @@ pub trait WalkVisitor {
     async fn visit(&mut self, path: &Path, node: &Inode) -> Result<Walk>;
 }
 
+struct WalkItem(PathBuf, Inode);
+
 #[derive(Clone)]
 pub struct Reader {
     pool: SqlitePool,
@@ -271,21 +276,25 @@ impl Reader {
 
     pub async fn walk<W: WalkVisitor + Send>(&self, visitor: &mut W) -> Result<()> {
         let node = self.inode(1).await?;
-        let path: PathBuf = "".into();
-        self.walk_node(&path, &node, visitor).await?;
+        let mut list = LinkedList::default();
+        let path: PathBuf = "/".into();
+        list.push_back(WalkItem(path, node));
+        while !list.is_empty() {
+            let item = list.pop_back().unwrap();
+            self.walk_node(&mut list, &item, visitor).await?;
+        }
+
         Ok(())
     }
 
-    #[async_recursion::async_recursion]
     async fn walk_node<W: WalkVisitor + Send>(
         &self,
-        path: &Path,
-        node: &Inode,
+        list: &mut LinkedList<WalkItem>,
+        WalkItem(path, node): &WalkItem,
         visitor: &mut W,
-    ) -> Result<Walk> {
-        let path = path.join(&node.name);
+    ) -> Result<()> {
         if visitor.visit(&path, node).await? == Walk::Break {
-            return Ok(Walk::Break);
+            return Ok(());
         }
 
         let mut offset = 0;
@@ -297,20 +306,19 @@ impl Reader {
 
             for child in children {
                 offset += 1;
-                if self.walk_node(&path, &child, visitor).await? == Walk::Break {
-                    // if a file return break, we stop scanning this directory
-                    if child.mode.is(FileType::Regular) {
-                        return Ok(Walk::Continue);
-                    }
-                    // if child was a directory we continue because it means
-                    // a directory returned a break on first visit so the
-                    // entire directory is skipped anyway
+                let child_path = path.join(&child.name);
+                if child.mode.is(FileType::Dir) {
+                    list.push_back(WalkItem(child_path, child));
                     continue;
+                }
+
+                if visitor.visit(&child_path, &child).await? == Walk::Break {
+                    return Ok(());
                 }
             }
         }
 
-        Ok(Walk::Continue)
+        Ok(())
     }
 }
 

@@ -9,7 +9,7 @@ use clap::{ArgAction, Args, Parser, Subcommand};
 
 use rfs::cache;
 use rfs::fungi;
-use rfs::store;
+use rfs::store::{self, Router};
 
 mod fs;
 /// mount flists
@@ -28,8 +28,11 @@ struct Options {
 enum Commands {
     /// mount an FL
     Mount(MountOptions),
-    /// create an FL and upload blocks
-    Create(CreateOptions),
+    /// create an FL and upload blocks to provided storage
+    Pack(PackOptions),
+
+    /// unpack (downloads) content of an FL the provided location
+    Unpack(UnpackOptions),
 }
 
 #[derive(Args, Debug)]
@@ -58,7 +61,7 @@ struct MountOptions {
 }
 
 #[derive(Args, Debug)]
-struct CreateOptions {
+struct PackOptions {
     /// path to metadata file (flist)
     #[clap(short, long)]
     meta: String,
@@ -66,6 +69,20 @@ struct CreateOptions {
     /// store url
     #[clap(short, long)]
     store: String,
+
+    /// target directory to upload
+    target: String,
+}
+
+#[derive(Args, Debug)]
+struct UnpackOptions {
+    /// path to metadata file (flist)
+    #[clap(short, long)]
+    meta: String,
+
+    /// directory used as cache for downloaded file chuncks
+    #[clap(short, long, default_value_t = String::from("/tmp/cache"))]
+    cache: String,
 
     /// target directory to upload
     target: String,
@@ -90,11 +107,12 @@ fn main() -> Result<()> {
 
     match opts.command {
         Commands::Mount(opts) => mount(opts),
-        Commands::Create(opts) => create(opts),
+        Commands::Pack(opts) => pack(opts),
+        Commands::Unpack(opts) => unpack(opts),
     }
 }
 
-fn create(opts: CreateOptions) -> Result<()> {
+fn pack(opts: PackOptions) -> Result<()> {
     let rt = tokio::runtime::Runtime::new()?;
 
     rt.block_on(async move {
@@ -102,6 +120,22 @@ fn create(opts: CreateOptions) -> Result<()> {
         let meta = fungi::Writer::new(opts.meta).await?;
         rfs::pack(meta, store, opts.target).await?;
 
+        Ok(())
+    })
+}
+
+fn unpack(opts: UnpackOptions) -> Result<()> {
+    let rt = tokio::runtime::Runtime::new()?;
+
+    rt.block_on(async move {
+        let meta = fungi::Reader::new(opts.meta)
+            .await
+            .context("failed to initialize metadata database")?;
+
+        let router = get_router(&meta).await?;
+
+        let cache = cache::Cache::new(opts.cache, router);
+        rfs::unpack(&meta, &cache, opts.target).await?;
         Ok(())
     })
 }
@@ -180,6 +214,15 @@ async fn fuse(opts: MountOptions) -> Result<()> {
         .await
         .context("failed to initialize metadata database")?;
 
+    let router = get_router(&meta).await?;
+
+    let cache = cache::Cache::new(opts.cache, router);
+    let filesystem = fs::Filesystem::new(meta, cache);
+
+    filesystem.mount(opts.target).await
+}
+
+async fn get_router(meta: &fungi::Reader) -> Result<Router> {
     let mut router = store::Router::new();
 
     for route in meta.routes().await.context("failed to get store routes")? {
@@ -189,8 +232,5 @@ async fn fuse(opts: MountOptions) -> Result<()> {
         router.add(route.start, route.end, store);
     }
 
-    let cache = cache::Cache::new(opts.cache, router);
-    let filesystem = fs::Filesystem::new(meta, cache);
-
-    filesystem.mount(opts.target).await
+    Ok(router)
 }

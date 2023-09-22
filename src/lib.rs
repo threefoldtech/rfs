@@ -347,34 +347,4 @@ mod test {
 
         assert!(status.success());
     }
-
-    #[tokio::test]
-    async fn test_ubuntu() {
-        const ROOT: &str = "/tmp/pack-unpack-test";
-        let _ = fs::remove_dir_all(ROOT).await;
-        let root: PathBuf = ROOT.into();
-
-        fs::create_dir_all(&root).await.unwrap();
-        let source = Path::new("/home/azmy/tmp/jammy");
-
-        println!("file generation complete");
-        let writer = meta::Writer::new(root.join("meta.fl")).await.unwrap();
-
-        // while we at it we can already create 2 stores and create a router store on top
-        // of that.
-        let store0 = store::make("zdb://localhost:9900").await.unwrap();
-
-        pack(writer, store0, &source).await.unwrap();
-
-        println!("packing complete");
-    }
-    struct WalkTest;
-
-    #[async_trait::async_trait]
-    impl WalkVisitor for WalkTest {
-        async fn visit(&mut self, path: &Path, node: &Inode) -> Result<Walk> {
-            println!("{} = {:?}", node.ino, path);
-            Ok(Walk::Continue)
-        }
-    }
 }

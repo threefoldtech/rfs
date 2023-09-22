@@ -44,7 +44,6 @@ clap = { version = "4.2", features = ["derive"] }
 tar = "0.4"
 flate2 = "1.0"
 snap = "1.0.5"
-async-recursion = "1.0.0"
 bb8-redis = "0.13"
 async-trait = "0.1.53"
 url = "2.3.1"
