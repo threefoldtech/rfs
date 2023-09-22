@@ -67,8 +67,8 @@ struct PackOptions {
     meta: String,
 
     /// store url
-    #[clap(short, long)]
-    store: String,
+    #[clap(short, long, action=ArgAction::Append)]
+    store: Vec<String>,
 
     /// target directory to upload
     target: String,
@@ -116,7 +116,7 @@ fn pack(opts: PackOptions) -> Result<()> {
     let rt = tokio::runtime::Runtime::new()?;
 
     rt.block_on(async move {
-        let store = store::make(opts.store).await?;
+        let store = parse_router(opts.store.as_slice()).await?;
         let meta = fungi::Writer::new(opts.meta).await?;
         rfs::pack(meta, store, opts.target).await?;
 
@@ -230,6 +230,34 @@ async fn get_router(meta: &fungi::Reader) -> Result<Router> {
             .await
             .with_context(|| format!("failed to initialize store '{}'", route.url))?;
         router.add(route.start, route.end, store);
+    }
+
+    Ok(router)
+}
+
+async fn parse_router(urls: &[String]) -> Result<Router> {
+    let mut router = Router::new();
+
+    for u in urls {
+        let ((start, end), store) = match u.split_once('=') {
+            None => ((0x00, 0xff), store::make(u).await?),
+            Some((rng, url)) => {
+                let store = store::make(url).await?;
+                let range = match rng.split_once('-') {
+                    None => anyhow::bail!("invalid range format"),
+                    Some((low, high)) => (
+                        u8::from_str_radix(low, 16)
+                            .with_context(|| format!("failed to parse low range '{}'", low))?,
+                        u8::from_str_radix(high, 16)
+                            .with_context(|| format!("failed to parse high range '{}'", high))?,
+                    ),
+                };
+
+                (range, store)
+            }
+        };
+
+        router.add(start, end, store);
     }
 
     Ok(router)
