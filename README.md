@@ -73,7 +73,7 @@ Options:
   -h, --help           Print help
 ```
 
-# Mounting an flist
+# Mounting an `fl`
 
 Once the `fl` is created it can be distributes to other people. Then they can mount the `fl` which will allow them then to traverse the packed filesystem and also access (read-only) the files.
 
@@ -105,7 +105,7 @@ Options:
   -h, --help           Print help
 ```
 
-# Unpack and fl
+# Unpack an `fl`
 
 Similar to `mount` rfs provides an `unpack` subcommand that downloads the entire content (extract) of an `fl` to a provided directory.
 
