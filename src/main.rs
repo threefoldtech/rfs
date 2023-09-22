@@ -30,7 +30,6 @@ enum Commands {
     Mount(MountOptions),
     /// create an FL and upload blocks to provided storage
     Pack(PackOptions),
-
     /// unpack (downloads) content of an FL the provided location
     Unpack(UnpackOptions),
 }
@@ -45,16 +44,13 @@ struct MountOptions {
     #[clap(short, long, default_value_t = String::from("/tmp/cache"))]
     cache: String,
 
+    /// run in the background.
     #[clap(short, long)]
     daemon: bool,
 
     /// log file only used with daemon mode
     #[clap(short, long)]
     log: Option<String>,
-
-    /// hidden value
-    #[clap(long = "ro", hide = true)]
-    ro: bool,
 
     /// target mountpoint
     target: String,
@@ -66,7 +62,8 @@ struct PackOptions {
     #[clap(short, long)]
     meta: String,
 
-    /// store url
+    /// store url in the format [xx-xx=]<url>. the range xx-xx is optional and used for
+    /// sharding. the URL is per store type, please check docs for more information
     #[clap(short, long, action=ArgAction::Append)]
     store: Vec<String>,
 
