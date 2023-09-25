@@ -3,6 +3,7 @@ pub mod dir;
 mod router;
 pub mod zdb;
 
+use rand::seq::SliceRandom;
 use std::{collections::HashMap, pin::Pin};
 
 pub use bs::BlockStore;
@@ -117,7 +118,12 @@ impl Store for Router {
             return Err(Error::InvalidKey);
         }
         let mut errors = Vec::default();
-        for store in self.route(key[0]) {
+
+        // to make it fare we shuffle the list of matching routers randomly everytime
+        // before we do a get
+        let mut routers: Vec<&Box<dyn Store>> = self.route(key[0]).collect();
+        routers.shuffle(&mut rand::thread_rng());
+        for store in routers {
             match store.get(key).await {
                 Ok(object) => return Ok(object),
                 Err(err) => errors.push(err),

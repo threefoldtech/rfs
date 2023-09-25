@@ -110,7 +110,7 @@ Options:
 Similar to `mount` rfs provides an `unpack` subcommand that downloads the entire content (extract) of an `fl` to a provided directory.
 
 ```bash
-fs unpack --help
+rfs unpack --help
 unpack (downloads) content of an FL the provided location
 
 Usage: rfs unpack [OPTIONS] --meta <META> <TARGET>
@@ -119,10 +119,13 @@ Arguments:
   <TARGET>  target directory to upload
 
 Options:
-  -m, --meta <META>    path to metadata file (flist)
-  -c, --cache <CACHE>  directory used as cache for downloaded file chuncks [default: /tmp/cache]
-  -h, --help           Print help
+  -m, --meta <META>         path to metadata file (flist)
+  -c, --cache <CACHE>       directory used as cache for downloaded file chuncks [default: /tmp/cache]
+  -p, --preserve-ownership  preserve files ownership from the FL, otherwise use the current user ownership setting this flag to true normally requires sudo
+  -h, --help                Print help
 ```
+
+By default when unpacking the `-p` flag is not set. which means downloaded files will be `owned` by the current user/group. If `-p` flag is set, the files ownership will be same as the original files used to create the fl (preserve `uid` and `gid` of the files and directories) this normally requires `sudo` while unpacking.
 
 # Specifications
 
