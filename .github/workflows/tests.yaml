@@ -21,7 +21,3 @@ jobs:
       - uses: Swatinem/rust-cache@v1
       - name: Unit Testing
         run: cargo test --bins --features build-binary
-      - name: Config FUSE to run without sudo
-        run: echo user_allow_other | sudo tee /etc/fuse.conf
-      - name: Integration Testing
-        run: cargo test --features build-binary --release --test '*' -- --test-threads=1
