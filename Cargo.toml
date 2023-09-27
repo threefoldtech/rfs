@@ -46,6 +46,9 @@ aes-gcm = "0.10"
 hex = "0.4"
 lazy_static = "1.4"
 rand = "0.8"
+rusoto_s3 = "0.48.0"
+rusoto_core = "0.48.0"
+
 # next are only needed for the binarys
 simple_logger = {version = "1.0.1", optional = true}
 daemonize = { version = "0.5", optional = true }
