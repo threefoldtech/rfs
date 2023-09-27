@@ -1,14 +1,41 @@
-use anyhow::{anyhow, Context, Result};
-use rusoto_core::{Region, RusotoError};
+use super::{Error, Result, Route, Store};
+use anyhow::Context;
+use futures::Future;
+use std::pin::Pin;
+
+use rusoto_core::{ByteStream, Region, RusotoError};
 use rusoto_s3::{
     CreateBucketError, CreateBucketRequest, GetObjectRequest, PutObjectRequest, S3Client, S3,
 };
 use tokio::io::AsyncReadExt;
 
+fn get_config() -> Result<(String, String, Credentials)> {
+    // TODO: get these from .env?
+    Ok((
+        String::from(""),
+        String::from(""),
+        Credentials {
+            access_key: String::from(""),
+            secret_key: String::from(""),
+        },
+    ))
+}
+
+async fn make_inner(url: String) -> Result<Box<dyn Store>> {
+    let (region, bucket, cred) = get_config()?;
+    // TODO: move creating the bucket here
+    Ok(Box::new(S3Store::new(&url, &region, &bucket, cred).await?))
+}
+
+pub fn make(url: &str) -> Pin<Box<dyn Future<Output = Result<Box<dyn Store>>>>> {
+    Box::pin(make_inner(url.into()))
+}
+
 #[derive(Clone)]
-struct BucketManager {
+struct S3Store {
     client: S3Client,
     bucket: String,
+    endpoint: String,
 }
 
 struct Credentials {
@@ -16,7 +43,7 @@ struct Credentials {
     secret_key: String,
 }
 
-impl BucketManager {
+impl S3Store {
     pub async fn new(
         endpoint: &str,
         region: &str,
@@ -29,7 +56,7 @@ impl BucketManager {
         };
 
         let dispatcher =
-            rusoto_core::request::HttpClient::new().context("Error creating http client.")?;
+            rusoto_core::request::HttpClient::new().context("failed to create http client.")?;
 
         let provider = rusoto_core::credential::StaticProvider::new_minimal(
             cred.access_key.clone(),
@@ -48,30 +75,20 @@ impl BucketManager {
                 Ok(Self {
                     client,
                     bucket: bucket.to_owned(),
+                    endpoint: endpoint.to_owned(),
                 })
             }
-            Err(err) => Err(err).context("Error creating bucket"),
+            Err(_) => return Err(Error::BucketCreationError),
         }
     }
+}
 
-    async fn set(&self, key: &str, data: &[u8]) -> Result<()> {
-        let put_object_request = PutObjectRequest {
-            bucket: self.bucket.clone(),
-            key: key.to_owned(),
-            body: Some(data.to_vec().into()),
-            ..Default::default()
-        };
-        self.client
-            .put_object(put_object_request)
-            .await
-            .context("Error uploading")?;
-        Ok(())
-    }
-
-    async fn get(&self, key: &str) -> Result<Vec<u8>> {
+#[async_trait::async_trait]
+impl Store for S3Store {
+    async fn get(&self, key: &[u8]) -> super::Result<Vec<u8>> {
         let get_object_request = GetObjectRequest {
             bucket: self.bucket.clone(),
-            key: key.to_owned(),
+            key: hex::encode(key),
             ..Default::default()
         };
 
@@ -79,19 +96,34 @@ impl BucketManager {
             .client
             .get_object(get_object_request)
             .await
-            .context("Error retrieving data")?;
+            .context("failed to get blob")?;
 
-        // ensure body in not none
-        let body = res
-            .body
-            .ok_or_else(|| anyhow!("No data found in S3 object"))?;
+        let body = res.body.ok_or(Error::KeyNotFound)?;
 
         let mut buffer = Vec::new();
-        body.into_async_read()
-            .read_to_end(&mut buffer)
-            .await
-            .context("Error reading data")?;
+        if let Err(_) = body.into_async_read().read_to_end(&mut buffer).await {
+            return Err(Error::InvalidBlob);
+        }
 
         Ok(buffer)
+    }
+
+    async fn set(&self, key: &[u8], blob: &[u8]) -> Result<()> {
+        let put_object_request = PutObjectRequest {
+            bucket: self.bucket.clone(),
+            key: hex::encode(key),
+            body: Some(ByteStream::from(blob.to_owned())),
+            ..Default::default()
+        };
+        self.client
+            .put_object(put_object_request)
+            .await
+            .context("failed to set blob")?;
+
+        Ok(())
+    }
+
+    fn routes(&self) -> Vec<Route> {
+        vec![Route::url(self.endpoint.clone())]
     }
 }

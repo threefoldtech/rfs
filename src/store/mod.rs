@@ -2,6 +2,7 @@ mod bs;
 pub mod dir;
 mod router;
 pub mod zdb;
+pub mod s3;
 
 use rand::seq::SliceRandom;
 use std::{collections::HashMap, pin::Pin};
@@ -19,6 +20,7 @@ fn register_stores() -> HashMap<String, Factory> {
     let mut m: HashMap<String, Factory> = HashMap::default();
     m.insert("dir".into(), dir::make);
     m.insert("zdb".into(), zdb::make);
+    m.insert("s3".into(), s3::make);
 
     m
 }
@@ -51,6 +53,9 @@ pub enum Error {
 
     #[error("encryption error")]
     EncryptionError,
+
+    #[error("bucket creation error")]
+    BucketCreationError,
 
     // TODO: better display for the Box<Vec<Self>>
     #[error("multiple error: {0:?}")]
