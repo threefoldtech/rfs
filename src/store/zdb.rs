@@ -126,6 +126,14 @@ impl Store for ZdbStore {
     async fn set(&self, key: &[u8], blob: &[u8]) -> Result<()> {
         let mut con = self.pool.get().await.context("failed to get connection")?;
 
+        if con
+            .exists(key)
+            .await
+            .context("failed to check if blob exists")?
+        {
+            return Ok(());
+        };
+
         con.set(key, blob).await.context("failed to set blob")?;
 
         Ok(())

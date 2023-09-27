@@ -9,10 +9,13 @@ use std::ffi::OsString;
 use std::fs::Metadata;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::{ffi::OsStr, fs};
 use store::Store;
+use workers::WorkerPool;
 
 const BLOB_SIZE: usize = 512 * 1024; // 512K
+const PARALLEL_UPLOAD: usize = 10; // number of files we can upload in parallel
 
 pub mod cache;
 pub mod fungi;
@@ -169,20 +172,23 @@ pub async fn pack<P: Into<PathBuf>, S: Store>(writer: Writer, store: S, root: P)
 
     let mut list = LinkedList::default();
 
+    let uploader = Uploader::new(store, writer.clone());
+    let mut pool = workers::WorkerPool::new(uploader.clone(), PARALLEL_UPLOAD);
+
     pack_one(
         &mut list,
         &writer,
-        &store,
+        &mut pool,
         Item(0, root, OsString::from("/"), meta),
     )
     .await?;
 
     while !list.is_empty() {
         let dir = list.pop_back().unwrap();
-
-        pack_one(&mut list, &writer, &store, dir).await?;
+        pack_one(&mut list, &writer, &mut pool, dir).await?;
     }
 
+    pool.close().await;
     Ok(())
 }
 
@@ -190,13 +196,11 @@ pub async fn pack<P: Into<PathBuf>, S: Store>(writer: Writer, store: S, root: P)
 async fn pack_one<S: Store>(
     list: &mut LinkedList<Item>,
     writer: &Writer,
-    store: &BlockStore<S>,
+    pool: &mut WorkerPool<Uploader<S>>,
     Item(parent, path, name, meta): Item,
 ) -> Result<()> {
     use std::os::unix::fs::MetadataExt;
     use tokio::fs;
-    use tokio::io::AsyncReadExt;
-    use tokio::io::BufReader;
 
     let current = writer
         .inode(Inode {
@@ -262,11 +266,53 @@ async fn pack_one<S: Store>(
             continue;
         }
 
+        let worker = pool.get().await;
+        worker
+            .send((child_ino, child_path))
+            .context("failed to schedule file upload")?;
+    }
+    Ok(())
+}
+
+struct Uploader<S>
+where
+    S: Store,
+{
+    store: Arc<BlockStore<S>>,
+    writer: Writer,
+}
+
+impl<S> Clone for Uploader<S>
+where
+    S: Store,
+{
+    fn clone(&self) -> Self {
+        Self {
+            store: Arc::clone(&self.store),
+            writer: self.writer.clone(),
+        }
+    }
+}
+
+impl<S> Uploader<S>
+where
+    S: Store,
+{
+    fn new(store: BlockStore<S>, writer: Writer) -> Self {
+        Self {
+            store: Arc::new(store),
+            writer,
+        }
+    }
+
+    async fn upload(&self, ino: Ino, path: &Path) -> Result<()> {
+        use tokio::fs;
+        use tokio::io::AsyncReadExt;
+        use tokio::io::BufReader;
+
         // create file blocks
-        let fd = fs::OpenOptions::default()
-            .read(true)
-            .open(&child_path)
-            .await?;
+        let fd = fs::OpenOptions::default().read(true).open(path).await?;
+
         let mut reader = BufReader::new(fd);
         let mut buffer: [u8; BLOB_SIZE] = [0; BLOB_SIZE];
         loop {
@@ -276,16 +322,33 @@ async fn pack_one<S: Store>(
             }
 
             // write block to remote store
-            let block = store
+            let block = self
+                .store
                 .set(&buffer[..size])
                 .await
                 .context("failed to store blob")?;
 
             // write block info to meta
-            writer.block(child_ino, &block.id, &block.key).await?;
+            self.writer.block(ino, &block.id, &block.key).await?;
+        }
+
+        Ok(())
+    }
+}
+
+#[async_trait::async_trait]
+impl<S> workers::Work for Uploader<S>
+where
+    S: Store,
+{
+    type Input = (Ino, PathBuf);
+    type Output = ();
+
+    async fn run(&self, (ino, path): Self::Input) -> Self::Output {
+        if let Err(err) = self.upload(ino, &path).await {
+            log::error!("failed to upload file ({:?}): {}", path, err);
         }
     }
-    Ok(())
 }
 
 #[cfg(test)]
