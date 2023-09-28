@@ -1,5 +1,4 @@
 use crate::cache::Cache;
-use crate::fungi::meta::{Block, Mode};
 use crate::fungi::{
     meta::{FileType, Inode, Result, Walk, WalkVisitor},
     Reader,
@@ -10,8 +9,7 @@ use nix::unistd::{fchownat, FchownatFlags, Gid, Uid};
 use std::fs::Permissions;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::path::Path;
 use std::{ffi::OsStr, fs};
 use tokio::fs::OpenOptions;
 
@@ -120,6 +118,12 @@ where
     }
 }
 
+/*
+TODO: parallel download ?
+
+this is a download worker that can be used in a worker pool to download files
+in parallel
+
 struct Downloader<S>
 where
     S: Store,
@@ -176,3 +180,5 @@ where
         }
     }
 }
+
+*/
