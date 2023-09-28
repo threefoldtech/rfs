@@ -2465,7 +2465,7 @@ dependencies = [
 [[package]]
 name = "workers"
 version = "0.1.0"
-source = "git+https://github.com/threefoldtech/tokio-worker-pool.git#5dbb1fbc02a1f1bdfc21456d4d4f1b6b08577051"
+source = "git+https://github.com/threefoldtech/tokio-worker-pool.git#70cbc96a547e6bdf9bd2e5341532438a48745e17"
 dependencies = [
  "anyhow",
  "async-trait",

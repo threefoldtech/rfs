@@ -280,6 +280,7 @@ where
 {
     store: Arc<BlockStore<S>>,
     writer: Writer,
+    buffer: [u8; BLOB_SIZE],
 }
 
 impl<S> Clone for Uploader<S>
@@ -290,6 +291,7 @@ where
         Self {
             store: Arc::clone(&self.store),
             writer: self.writer.clone(),
+            buffer: [0; BLOB_SIZE],
         }
     }
 }
@@ -302,10 +304,11 @@ where
         Self {
             store: Arc::new(store),
             writer,
+            buffer: [0; BLOB_SIZE],
         }
     }
 
-    async fn upload(&self, ino: Ino, path: &Path) -> Result<()> {
+    async fn upload(&mut self, ino: Ino, path: &Path) -> Result<()> {
         use tokio::fs;
         use tokio::io::AsyncReadExt;
         use tokio::io::BufReader;
@@ -314,9 +317,8 @@ where
         let fd = fs::OpenOptions::default().read(true).open(path).await?;
 
         let mut reader = BufReader::new(fd);
-        let mut buffer: [u8; BLOB_SIZE] = [0; BLOB_SIZE];
         loop {
-            let size = reader.read(&mut buffer).await?;
+            let size = reader.read(&mut self.buffer).await?;
             if size == 0 {
                 break;
             }
@@ -324,7 +326,7 @@ where
             // write block to remote store
             let block = self
                 .store
-                .set(&buffer[..size])
+                .set(&self.buffer[..size])
                 .await
                 .context("failed to store blob")?;
 
@@ -344,7 +346,7 @@ where
     type Input = (Ino, PathBuf);
     type Output = ();
 
-    async fn run(&self, (ino, path): Self::Input) -> Self::Output {
+    async fn run(&mut self, (ino, path): Self::Input) -> Self::Output {
         if let Err(err) = self.upload(ino, &path).await {
             log::error!("failed to upload file ({:?}): {}", path, err);
         }
