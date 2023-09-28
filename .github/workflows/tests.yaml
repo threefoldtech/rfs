@@ -20,4 +20,6 @@ jobs:
           toolchain: stable
       - uses: Swatinem/rust-cache@v1
       - name: Unit Testing
-        run: cargo test --bins --features build-binary
+        run: cargo test --features build-binary
+        env:
+          RUST_MIN_STACK: 8388608
