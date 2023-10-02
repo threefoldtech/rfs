@@ -1,37 +1,41 @@
 #[macro_use]
-extern crate anyhow;
-#[macro_use]
-extern crate thiserror;
-#[macro_use]
 extern crate log;
-use cache::{ConnectionInfo, IntoConnectionInfo};
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
 use std::io::Read;
 
 use anyhow::{Context, Result};
-use clap::{ArgAction, Parser};
+use clap::{ArgAction, Args, Parser, Subcommand};
 
-mod cache;
+use rfs::cache;
+use rfs::fungi;
+use rfs::store::{self, Router};
+
 mod fs;
-mod meta;
-pub mod schema_capnp {
-    include!(concat!(env!("OUT_DIR"), "/schema_capnp.rs"));
-}
-
 /// mount flists
 #[derive(Parser, Debug)]
 #[clap(name ="rfs", author, version = env!("GIT_VERSION"), about, long_about = None)]
 struct Options {
-    /// storage-url is a url to the backend where the data is stored
-    /// this is a backup url to fall back to for backward compatability.
-    /// In newered flists, this information is already included int he flist
-    #[clap(
-        short,
-        long = "storage-url",
-        default_value_t = String::from("redis://hub.grid.tf:9900")
-    )]
-    storage_url: String,
+    /// enable debugging logs
+    #[clap(long, action=ArgAction::Count)]
+    debug: u8,
+
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand, Debug)]
+enum Commands {
+    /// mount an FL
+    Mount(MountOptions),
+    /// create an FL and upload blocks to provided storage
+    Pack(PackOptions),
+    /// unpack (downloads) content of an FL the provided location
+    Unpack(UnpackOptions),
+}
+
+#[derive(Args, Debug)]
+struct MountOptions {
     /// path to metadata file (flist)
     #[clap(short, long)]
     meta: String,
@@ -40,22 +44,49 @@ struct Options {
     #[clap(short, long, default_value_t = String::from("/tmp/cache"))]
     cache: String,
 
+    /// run in the background.
     #[clap(short, long)]
     daemon: bool,
-
-    /// enable debugging logs
-    #[clap(long, action=ArgAction::Count)]
-    debug: u8,
 
     /// log file only used with daemon mode
     #[clap(short, long)]
     log: Option<String>,
 
-    /// hidden value
-    #[clap(long = "ro", hide = true)]
-    ro: bool,
-
     /// target mountpoint
+    target: String,
+}
+
+#[derive(Args, Debug)]
+struct PackOptions {
+    /// path to metadata file (flist)
+    #[clap(short, long)]
+    meta: String,
+
+    /// store url in the format [xx-xx=]<url>. the range xx-xx is optional and used for
+    /// sharding. the URL is per store type, please check docs for more information
+    #[clap(short, long, action=ArgAction::Append)]
+    store: Vec<String>,
+
+    /// target directory to upload
+    target: String,
+}
+
+#[derive(Args, Debug)]
+struct UnpackOptions {
+    /// path to metadata file (flist)
+    #[clap(short, long)]
+    meta: String,
+
+    /// directory used as cache for downloaded file chuncks
+    #[clap(short, long, default_value_t = String::from("/tmp/cache"))]
+    cache: String,
+
+    /// preserve files ownership from the FL, otherwise use the current user ownership
+    /// setting this flag to true normally requires sudo
+    #[clap(short, long, default_value_t = false)]
+    preserve_ownership: bool,
+
+    /// target directory to upload
     target: String,
 }
 
@@ -76,6 +107,42 @@ fn main() -> Result<()> {
 
     log::debug!("options: {:#?}", opts);
 
+    match opts.command {
+        Commands::Mount(opts) => mount(opts),
+        Commands::Pack(opts) => pack(opts),
+        Commands::Unpack(opts) => unpack(opts),
+    }
+}
+
+fn pack(opts: PackOptions) -> Result<()> {
+    let rt = tokio::runtime::Runtime::new()?;
+
+    rt.block_on(async move {
+        let store = parse_router(opts.store.as_slice()).await?;
+        let meta = fungi::Writer::new(opts.meta).await?;
+        rfs::pack(meta, store, opts.target).await?;
+
+        Ok(())
+    })
+}
+
+fn unpack(opts: UnpackOptions) -> Result<()> {
+    let rt = tokio::runtime::Runtime::new()?;
+
+    rt.block_on(async move {
+        let meta = fungi::Reader::new(opts.meta)
+            .await
+            .context("failed to initialize metadata database")?;
+
+        let router = get_router(&meta).await?;
+
+        let cache = cache::Cache::new(opts.cache, router);
+        rfs::unpack(&meta, &cache, opts.target, opts.preserve_ownership).await?;
+        Ok(())
+    })
+}
+
+fn mount(opts: MountOptions) -> Result<()> {
     if is_mountpoint(&opts.target)? {
         eprintln!("target {} is already a mount point", opts.target);
         std::process::exit(1);
@@ -98,14 +165,14 @@ fn main() -> Result<()> {
                 wait_child(target, pid_file);
                 return Ok(());
             }
-            daemonize::Outcome::Parent(Err(err)) => bail!("failed to daemonize: {}", err),
+            daemonize::Outcome::Parent(Err(err)) => anyhow::bail!("failed to daemonize: {}", err),
             _ => {}
         }
     }
 
     let rt = tokio::runtime::Runtime::new()?;
 
-    rt.block_on(app(opts))
+    rt.block_on(fuse(opts))
 }
 
 fn is_mountpoint<S: AsRef<str>>(target: S) -> Result<bool> {
@@ -144,38 +211,56 @@ fn wait_child(target: String, mut pid_file: tempfile::NamedTempFile) {
     std::process::exit(1);
 }
 
-async fn app(opts: Options) -> Result<()> {
-    let mgr = meta::Metadata::open(opts.meta)
+async fn fuse(opts: MountOptions) -> Result<()> {
+    let meta = fungi::Reader::new(opts.meta)
         .await
         .context("failed to initialize metadata database")?;
 
-    let cache_info: ConnectionInfo = match mgr
-        .backend()
-        .await
-        .context("failed to get backend information")?
-    {
-        None => opts.storage_url.into_connection_info()?,
-        Some(backend) => backend.into_connection_info()?,
-    };
+    let router = get_router(&meta).await?;
 
-    info!("backend: {}", cache_info);
-    let cache = cache::Cache::new(cache_info, opts.cache)
-        .await
-        .context("failed to initialize cache")?;
+    let cache = cache::Cache::new(opts.cache, router);
+    let filesystem = fs::Filesystem::new(meta, cache);
 
-    //print tags
-    match mgr.tags().await {
-        Ok(tags) => {
-            debug!("flist has {} tags", tags.len());
-            for (k, v) in tags.iter() {
-                debug!("[tag][{}]: {}", k, v);
-            }
-        }
-        Err(err) => {
-            error!("failed to extract flist tags: {}", err);
-        }
+    filesystem.mount(opts.target).await
+}
+
+async fn get_router(meta: &fungi::Reader) -> Result<Router> {
+    let mut router = store::Router::new();
+
+    for route in meta.routes().await.context("failed to get store routes")? {
+        let store = store::make(&route.url)
+            .await
+            .with_context(|| format!("failed to initialize store '{}'", route.url))?;
+        router.add(route.start, route.end, store);
     }
 
-    let filesystem = fs::Filesystem::new(mgr, cache);
-    filesystem.mount(opts.target).await
+    Ok(router)
+}
+
+async fn parse_router(urls: &[String]) -> Result<Router> {
+    let mut router = Router::new();
+
+    for u in urls {
+        let ((start, end), store) = match u.split_once('=') {
+            None => ((0x00, 0xff), store::make(u).await?),
+            Some((rng, url)) => {
+                let store = store::make(url).await?;
+                let range = match rng.split_once('-') {
+                    None => anyhow::bail!("invalid range format"),
+                    Some((low, high)) => (
+                        u8::from_str_radix(low, 16)
+                            .with_context(|| format!("failed to parse low range '{}'", low))?,
+                        u8::from_str_radix(high, 16)
+                            .with_context(|| format!("failed to parse high range '{}'", high))?,
+                    ),
+                };
+
+                (range, store)
+            }
+        };
+
+        router.add(start, end, store);
+    }
+
+    Ok(router)
 }

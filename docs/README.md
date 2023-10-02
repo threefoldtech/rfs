@@ -1,151 +1,72 @@
-# Prerequests
+# FungiList specifications
 
+## Introduction
 
-If the term User space is strange check this -> [**Kernel space** and **User space**](https://en.wikipedia.org/wiki/User_space_and_kernel_space)
+The idea behind the FL format is to build a full filesystem description that is compact and also easy to use from almost ANY language. The format need to be easy to edit by tools like `rfs` or any other tool.
 
+We decided to eventually use `sqlite`! Yes the `FL` file is just a `sqlite` database that has the following [schema](../schema/schema.sql)
 
-**FS** (File System): Is a way of managing How to store and retrive data, such as ext4 and NTFS.
+## Tables
 
-**How files stored and retrieved**: 
+### Inode
 
-- in linux, every file has an associated what called <u>Inode</u>
-- the Inode is a data structure which contains the following
-  
-    - the file's metadata
-    - 12 direct pointers to 12 data blocks from the file
-    - indirect pointer to a 12 direct pointers which points to the next 12 data blocks
-    - two doubly indirect pointers, each one points to an indirect pointer and that indirect pointer points to the next 12 data blocs 
-    - three tribly indirect pointers .. you know the idea :)
+Inode table describe each entry on the filesystem. It matches really closely the same `inode` structure on the linux operating system. Each inode has a unique id called `ino`, a parent `ino`, name, and other parameters (user, group, etc...).
 
+The type of the `inode` is defined by its `mode` which is a `1:1` mapping from the linux `mode`
 
-<u>Inode structure</u>
+> from the [inode manual](https://man7.org/linux/man-pages/man7/inode.7.html)
 
-    | meta data |
+```
+POSIX refers to the stat.st_mode bits corresponding to the mask
+S_IFMT (see below) as the file type, the 12 bits corresponding to
+the mask 07777 as the file mode bits and the least significant 9
+bits (0777) as the file permission bits.
 
-    |    12     |   ----> data blocks (0)
-    |  direct   |   ---->     ...
-    | pointers  |   ----> data blocks (11)
+The following mask values are defined for the file type:
 
-    |indirectPtr|   ---->   |    12     |   ----> data blocks (12)
-                            |  direct   |   ---->     ...
-                            | pointers  |   ----> data blocks (23)
+    S_IFMT     0170000   bit mask for the file type bit field
 
-    |two doubly |   ---->   |indirectPtr|   ---->   |    12     |   ----> data blocks (24)
-    |indirectPtr|   -----                           |  direct   |   ---->     ...
-                        |                           | pointers  |   ----> data blocks (23)
-                        |
-                        |
-                        --> |indirectPtr|   ---->   |    12     |   ----> data blocks (24)
-                                                    |  direct   |   ---->     ...
-                                                    | pointers  |   ----> data blocks (23)
+    S_IFSOCK   0140000   socket
+    S_IFLNK    0120000   symbolic link
+    S_IFREG    0100000   regular file
+    S_IFBLK    0060000   block device
+    S_IFDIR    0040000   directory
+    S_IFCHR    0020000   character device
+    S_IFIFO    0010000   FIFO
+```
 
-    |  three    |   ---->   |two doubly indirectPtr| ....
-    |  tribly   |   ---->   |two doubly indirectPtr| ....
-    |indirectPtr|   ---->   |two doubly indirectPtr| ....
+## Extra
 
-**VFS** (Virutal File System): is an abstraction layer on the actual mounted filesystems. The user space sees only the virtual file system and the VFS manages the underlying FileSystems. <u>so that</u> any file system must register at the VFS.
+the `extra` table holds any **optional** data associated to the inode based on its type. For now it holds the `link target` for symlink inodes.
 
-**FUSE** (File system in USEr space): Is a user space filesystem framework (consists of two parts) used to build your own file-system (a user-defined file-system).
+## Tag
 
+tag is key value for some user defined data associated with the FL. The standard keys are:
 
-**FUSE main components**:
+- `version`
+- `description`
+- `author`
 
- - FUSE file system daemon (with FUSE library i.e. libfuse)
- - FUSE driver (with a request queue)
+But an FL author can add other custom keys there
 
-These two componenet are communicates through `/dev/fuse` device, it works as IPC (Inter-Process Communication).
+## Block
 
-**How FUSE works**:
+the `block` table is used to associate data file blocks with files. An `id` field is the blob `id` in the `store`, the `key` is the key used to decrypt the blob. The current implementation of `rfs` does the following:
 
-![image](https://user-images.githubusercontent.com/18401282/160552509-d40ab27a-a002-4fae-a6b6-fb983f97babf.png)
+- For each blob (512k) the `sha256`. This becomes the encryption key of the block. We call it `key`
+- The block is then `snap` compressed
+- Then encrypted with `aes_gcm` using the `key`, and the first 12 bytes of the key as `nonce`
+- The final encrypted blocked is hashed again with `sha256` this becomes the `id` of the block
+- The final encrypted blob is then sent to the store using the `id` as a key.
 
+## Route
 
+the route table holds routing information for the blobs. It basically describe where to find `blobs` with certain `ids`. The routing is done as following:
 
-- suppose we take the `/tmp/rmnt` directory as a mount point for our own file system (i.e rfs)
-- The fuse driver registeres `/tmp/rmnt` as a mount point in the VFS
-- when you inside `/tmp/rmnt` and you run and application such as `ls` (which means you need to read the content of the current directory)
-- This will need to a call to the VFS
-- The VFS knows that the `/tmp/rmnt` is related to the fuse driver, so that the VFS routes the operation to it.
-- the driver allocates a FUSE request structure and puts it in the FUSE queue in a wait state
-- the FUSE daemon then picks the request from the kernel queue by reading from `/dev/fuse`.
-- the userspace filesystem (i.e. `rfs`) will read the request and process it.
+> Note routing table is loaded one time when `rfs` is started and
 
----
-# rfs (Rust File-System)
-rfs (Rust File-Sytems): is a FUSE file system which used in Zero-OS.
-
-**The main idea** of `rfs` is reading a remote file as needed chunk by chunk.
-
-<u>Explanation</u>:
-
-- your files is stored on a remote server which is [hub.grid.tf](hub.grid.tf)
-- and you want locally read a file or a video locally
-- rfs will only download the file or the video in chunks (not the whole file or video)
-- every chunk is actually a file with a hash that represent the id of that chunk
-- the downloaded chunks is saved in a cache (it is actually a directory on your local machine i.e. `/tmp/cache`)
-
-<u> But how rfs knows about the structure of the remote server's filesystem </u>
-
-- the server [hub.grid.tf](hub.grid.tf) recieves a `.tar.gz` file.
-- It containes the whole file system structure with its contents.
-- after uploading the `.tar.gz` file, the server builds a `.flist` file (accronym File LIST)
-- This `.flist` file is a sqlite database with the file system structure without the actual contents (only the names of the directories and the files).
-
-
-**The interaction between `rfs` and the `FUSE daemon`**
-
-- when the fuse daemon reading the request from the kernel queue by reading from `/dev/fuse`.
-- `rfs` reads the request and checkes which operation want to be served (the operation must be implemented to be served)
-- after handling the request the `rfs` replies with the result
-
-<u>Handling the read operation</u>
-
-
-- The request wants for example to read 400B from position x (where x < 400 and chunk size is 100B as an example)
-- Calculating the cursor offset and the chunk index (offset = x, chunk_index = x/chunk_size)
-- Reading the chunk (chunk_index) from the cache, But if the chunk is not in the cache, then it needs to be downloaded and cached
-- repeat the previous step until requested size fullfilled and response to the FUSE request
-
-
-<u>Use Case</u>
-(suppose that every block is 100B)
-
-    |-------0--------|--------1---------|---------2-------|---------3-------|--------4--------|
-
-                              ^--------offset = 150 && size = 250 - ---^
-
-- chunk_index = offset/chunk_size = 150/100 = 1
-- here the read operation will start from block (1) untile block(3) to fulfill the requested size
-- if such a block was downloaded it will be found in the cache and read
-- if the block is not in the cache, it will be downloaded from the server
-
-
----
-# rfs Usage
-    
-    rfs --help
-
-    USAGE:
-        rfs [FLAGS] [OPTIONS] <TARGET> --meta <META>
-    
-    FLAGS:
-        -d, --daemon     daemonize process
-            --debug      enable debug logging
-        -h, --help       Prints help information
-        -V, --version    Prints version information
-    
-    OPTIONS:
-            --cache <cache>        cache directory [default: /tmp/cache]
-            --storage-url <hub>    storage url to retrieve files from [default: redis://hub.grid.tf:9900]
-            --log <log>            log file only in daemon mode
-            --meta <META>          metadata file, can be a .flist file, a .sqlite3 file or a directory with a
-                                   `flistdb.sqlite3` inside
-    
-    ARGS:
-        <TARGET>
-
-
-
-### Use case
-
-    rfs --meta <filename>.flist /tmp/rmnt
+- We use the first byte of the blob `id` as the `route key`
+- The `route key`` is then consulted against the routing table
+- While building an `FL` all matching stores are updated with the new blob. This is how the system does replication
+- On `getting` an object, the list of matching routes are tried in random order the first one to return a value is used
+- Note that same range and overlapping ranges are allowed, this is how shards and replications are done.

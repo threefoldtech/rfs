@@ -2,13 +2,13 @@
 #![deny(clippy::unimplemented, clippy::todo)]
 
 use crate::cache;
-use crate::meta;
-use crate::meta::inode::Inode;
-use crate::meta::Entry;
-use crate::meta::Metadata;
+use crate::fungi::{
+    meta::{FileType, Inode},
+    Reader,
+};
+use crate::store::Store;
 
 use anyhow::{ensure, Result};
-use meta::types::EntryKind;
 use polyfuse::reply::FileAttr;
 use polyfuse::{
     op,
@@ -17,7 +17,7 @@ use polyfuse::{
 };
 use std::io::SeekFrom;
 use std::sync::Arc;
-use std::{io, os::unix::prelude::*, path::PathBuf, time::Duration};
+use std::{io, path::PathBuf, time::Duration};
 use tokio::fs::File;
 use tokio::sync::Mutex;
 use tokio::{
@@ -28,28 +28,48 @@ use tokio::{
 const CHUNK_SIZE: usize = 512 * 1024; // 512k and is hardcoded in the hub. the block_size value is not used
 const TTL: Duration = Duration::from_secs(60 * 60 * 24 * 365);
 const LRU_CAP: usize = 5; // Least Recently Used File Capacity
-type FHash = [u8; 16];
+const FS_BLOCK_SIZE: u32 = 4 * 1024;
+
+type FHash = [u8; 32];
 type BlockSize = u64;
 
-#[derive(Clone)]
-pub struct Filesystem {
-    meta: meta::Metadata,
-    cache: cache::Cache,
+pub struct Filesystem<S>
+where
+    S: Store,
+{
+    meta: Reader,
+    cache: Arc<cache::Cache<S>>,
     lru: Arc<Mutex<lru::LruCache<FHash, (File, BlockSize)>>>,
 }
 
-impl Filesystem {
-    pub fn new(meta: meta::Metadata, cache: cache::Cache) -> Filesystem {
+impl<S> Clone for Filesystem<S>
+where
+    S: Store,
+{
+    fn clone(&self) -> Self {
+        Self {
+            meta: self.meta.clone(),
+            cache: Arc::clone(&self.cache),
+            lru: Arc::clone(&self.lru),
+        }
+    }
+}
+
+impl<S> Filesystem<S>
+where
+    S: Store,
+{
+    pub fn new(meta: Reader, cache: cache::Cache<S>) -> Self {
         Filesystem {
             meta,
-            cache,
+            cache: Arc::new(cache),
             lru: Arc::new(Mutex::new(lru::LruCache::new(LRU_CAP))),
         }
     }
 
-    pub async fn mount<S>(&self, mnt: S) -> Result<()>
+    pub async fn mount<P>(&self, mnt: P) -> Result<()>
     where
-        S: Into<PathBuf>,
+        P: Into<PathBuf>,
     {
         let mountpoint: PathBuf = mnt.into();
         ensure!(mountpoint.is_dir(), "mountpoint must be a directory");
@@ -65,7 +85,7 @@ impl Filesystem {
         while let Some(req) = session.next_request().await? {
             let fs = self.clone();
 
-            let _: JoinHandle<Result<()>> = task::spawn(async move {
+            let handler: JoinHandle<Result<()>> = task::spawn(async move {
                 let result = match req.operation()? {
                     Operation::Lookup(op) => fs.lookup(&req, op).await,
                     Operation::Getattr(op) => fs.getattr(&req, op).await,
@@ -85,36 +105,40 @@ impl Filesystem {
 
                 Ok(())
             });
+
+            drop(handler);
         }
 
         Ok(())
     }
+
     async fn statfs(&self, req: &Request, _op: op::Statfs<'_>) -> Result<()> {
-        let out = StatfsOut::default();
+        let mut out = StatfsOut::default();
+        let stats = out.statfs();
+        stats.bsize(FS_BLOCK_SIZE);
         req.reply(out)?;
         Ok(())
     }
 
     async fn readlink(&self, req: &Request, op: op::Readlink<'_>) -> Result<()> {
-        let entry = self.meta.entry(op.ino()).await?;
-        let link = match entry.kind {
-            EntryKind::Link(l) => l,
-            _ => {
-                return Ok(req.reply_error(libc::ENOLINK)?);
-            }
-        };
+        let link = self.meta.inode(op.ino()).await?;
+        if !link.mode.is(FileType::Link) {
+            return Ok(req.reply_error(libc::ENOLINK)?);
+        }
 
-        req.reply(link.target)?;
-        Ok(())
+        if let Some(target) = link.data {
+            req.reply(target)?;
+            return Ok(());
+        }
+
+        Ok(req.reply_error(libc::ENOLINK)?)
     }
 
     async fn read(&self, req: &Request, op: op::Read<'_>) -> Result<()> {
-        let entry = self.meta.entry(op.ino()).await?;
-        let file_metadata = match entry.kind {
-            EntryKind::File(file) => file,
-            _ => {
-                return Ok(req.reply_error(libc::EISDIR)?);
-            }
+        let entry = self.meta.inode(op.ino()).await?;
+
+        if !entry.mode.is(FileType::Regular) {
+            return Ok(req.reply_error(libc::EISDIR)?);
         };
 
         let offset = op.offset() as usize;
@@ -122,7 +146,9 @@ impl Filesystem {
         let chunk_size = CHUNK_SIZE; // file.block_size as usize;
         let chunk_index = offset / chunk_size;
 
-        if chunk_index >= file_metadata.blocks.len() || op.size() == 0 {
+        let blocks = self.meta.blocks(op.ino()).await?;
+
+        if chunk_index >= blocks.len() || op.size() == 0 {
             // reading after the end of the file
             let data: &[u8] = &[];
             return Ok(req.reply(data)?);
@@ -133,9 +159,9 @@ impl Filesystem {
         let mut buf: Vec<u8> = vec![0; size];
         let mut total = 0;
 
-        'blocks: for block in file_metadata.blocks.iter().skip(chunk_index) {
+        'blocks: for block in blocks.iter().skip(chunk_index) {
             // hash works as a key inside the LRU
-            let hash = block.hash;
+            let hash = block.id;
 
             // getting the file descriptor from the LRU or from the cache if not found in the LRU
             let lru = self.lru.lock().await.pop(&hash);
@@ -198,76 +224,66 @@ impl Filesystem {
     }
 
     async fn getattr(&self, req: &Request, op: op::Getattr<'_>) -> Result<()> {
-        let entry = self.meta.entry(op.ino()).await?;
+        log::debug!("getattr({})", op.ino());
+
+        let entry = self.meta.inode(op.ino()).await?;
+
         let mut attr = AttrOut::default();
 
         let fill = attr.attr();
-        if entry.fill(&self.meta, fill).await.is_err() {
-            req.reply_error(libc::ENOENT)?;
-        }
+        entry.fill(fill);
 
-        if op.ino() == 1 {
-            fill.mode(libc::S_IFDIR | 0o755);
-        }
         req.reply(attr)?;
 
         Ok(())
     }
 
     async fn readdir(&self, req: &Request, op: op::Readdir<'_>) -> Result<()> {
-        let entry = self.meta.entry(op.ino()).await?;
+        log::debug!("readdir({})", op.ino());
+        let root = self.meta.inode(op.ino()).await?;
 
-        let dir = match entry.kind {
-            EntryKind::Dir(dir) => dir,
-            _ => {
-                req.reply_error(libc::ENOTDIR)?;
-                return Ok(());
-            }
-        };
+        if !root.mode.is(FileType::Dir) {
+            req.reply_error(libc::ENOTDIR)?;
+            return Ok(());
+        }
 
         let mut out = ReaddirOut::new(op.size() as usize);
         let mut offset = op.offset();
+
+        let mut query_offset = offset;
         if offset == 0 {
             out.entry(".".as_ref(), op.ino(), libc::DT_DIR as u32, 1);
             out.entry(
                 "..".as_ref(),
                 match op.ino() {
                     1 => 1,
-                    _ => self.meta.dir_inode(dir.parent).await?.ino(),
+                    _ => root.parent,
                 },
                 libc::DT_DIR as u32,
                 2,
             );
+            offset = 2;
         } else {
             // we don't add the . and .. but
             // we also need to change the offset to
-            offset -= 2;
+            query_offset -= 2;
         }
 
-        for (i, entry) in dir.entries.iter().enumerate().skip(offset as usize) {
-            let offset = i as u64 + 3;
-            let full = match &entry.kind {
-                EntryKind::SubDir(sub) => {
-                    let inode = self.meta.dir_inode(&sub.key).await?;
-                    out.entry(
-                        entry.node.name.as_ref(),
-                        inode.ino(),
-                        libc::DT_DIR as u32,
-                        offset,
-                    )
+        let children = self.meta.children(root.ino, 10, query_offset).await?;
+        for entry in children.iter() {
+            offset += 1;
+
+            let full = match entry.mode.file_type() {
+                FileType::Dir => {
+                    //let inode = self.meta.dir_inode(&sub.key).await?;
+                    out.entry(entry.name.as_ref(), entry.ino, libc::DT_DIR as u32, offset)
                 }
-                EntryKind::File(_) => out.entry(
-                    entry.node.name.as_ref(),
-                    entry.node.inode.ino(),
-                    libc::DT_REG as u32,
-                    offset,
-                ),
-                EntryKind::Link(_) => out.entry(
-                    entry.node.name.as_ref(),
-                    entry.node.inode.ino(),
-                    libc::DT_LNK as u32,
-                    offset,
-                ),
+                FileType::Regular => {
+                    out.entry(entry.name.as_ref(), entry.ino, libc::DT_REG as u32, offset)
+                }
+                FileType::Link => {
+                    out.entry(entry.name.as_ref(), entry.ino, libc::DT_LNK as u32, offset)
+                }
                 _ => {
                     warn!("unkonwn entry");
                     false
@@ -283,28 +299,32 @@ impl Filesystem {
     }
 
     async fn lookup(&self, req: &Request, op: op::Lookup<'_>) -> Result<()> {
-        let parent = self.meta.entry(op.parent()).await?;
-
-        let dir = match parent.kind {
-            EntryKind::Dir(dir) => dir,
-            _ => {
+        log::debug!("lookup(parent: {}, name: {:?})", op.parent(), op.name());
+        let name = match op.name().to_str() {
+            Some(name) => name,
+            None => {
                 req.reply_error(libc::ENOENT)?;
                 return Ok(());
             }
         };
 
-        for entry in dir.entries.iter() {
-            if entry.node.name.as_bytes() == op.name().as_bytes() {
-                let mut out = EntryOut::default();
-                let inode = entry.fill(&self.meta, out.attr()).await?;
-                out.ino(inode.ino());
-                out.ttl_attr(TTL);
-                out.ttl_entry(TTL);
-                return Ok(req.reply(out)?);
-            }
-        }
+        let node = self.meta.lookup(op.parent(), name).await?;
 
-        Ok(req.reply_error(libc::ENOENT)?)
+        let node = match node {
+            Some(node) => node,
+            None => {
+                req.reply_error(libc::ENOENT)?;
+                return Ok(());
+            }
+        };
+        let mut out = EntryOut::default();
+
+        node.fill(out.attr());
+        out.ino(node.ino);
+        out.ttl_attr(TTL);
+        out.ttl_entry(TTL);
+
+        Ok(req.reply(out)?)
     }
 }
 
@@ -346,60 +366,35 @@ impl AsyncSession {
     }
 }
 
-#[async_trait::async_trait]
 trait AttributeFiller {
-    async fn fill(&self, meta: &Metadata, attr: &mut FileAttr) -> Result<Inode>;
+    fn fill(&self, attr: &mut FileAttr);
 }
 
-#[async_trait::async_trait]
-impl AttributeFiller for Entry {
-    async fn fill(&self, meta: &Metadata, attr: &mut FileAttr) -> Result<Inode> {
-        use std::time::Duration;
+impl AttributeFiller for Inode {
+    fn fill(&self, attr: &mut FileAttr) {
+        attr.mode(self.mode.mode());
 
-        let mode = match meta.aci(&self.node.acl).await {
-            Ok(aci) => {
-                attr.uid(aci.user);
-                attr.gid(aci.group);
-                aci.mode & 0o777
-            }
-            Err(_) => 0o444,
+        attr.ino(self.ino);
+        attr.ctime(Duration::from_secs(self.ctime as u64));
+        attr.mtime(Duration::from_secs(self.mtime as u64));
+        attr.uid(self.uid);
+        attr.gid(self.gid);
+        attr.size(self.size);
+        attr.rdev(self.rdev as u32);
+        attr.blksize(FS_BLOCK_SIZE);
+
+        let mut blocks = self.size / 512;
+        blocks += match self.size % 512 {
+            0 => 0,
+            _ => 1,
         };
 
-        let inode = self.node.inode;
-        attr.ino(inode.ino());
-        attr.ctime(Duration::from_secs(self.node.creation as u64));
-        attr.mtime(Duration::from_secs(self.node.modification as u64));
-        attr.size(self.node.size);
+        attr.blocks(blocks);
 
-        let inode = match &self.kind {
-            EntryKind::Unknown => bail!("unkown entry"),
-            EntryKind::Dir(_) => {
-                attr.nlink(2);
-                attr.mode(libc::S_IFDIR | mode);
-                inode
-            }
-            EntryKind::SubDir(sub) => {
-                let inode = meta.dir_inode(&sub.key).await?;
-                // reset inode
-                attr.ino(inode.ino());
-                attr.nlink(2);
-                attr.mode(libc::S_IFDIR | mode);
-                inode
-            }
-            EntryKind::File(_) => {
-                attr.nlink(1);
-                attr.mode(libc::S_IFREG | mode);
-                attr.blksize(4 * 1024);
-                inode
-            }
-            EntryKind::Link(link) => {
-                attr.nlink(1);
-                attr.size(link.target.len() as u64);
-                attr.mode(libc::S_IFLNK | 0o555);
-                inode
-            }
+        match self.mode.file_type() {
+            FileType::Dir => attr.nlink(2),
+            FileType::Regular => attr.blksize(4 * 1024),
+            _ => (),
         };
-
-        Ok(inode)
     }
 }
