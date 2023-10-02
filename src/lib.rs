@@ -344,7 +344,7 @@ where
     type Input = (Ino, PathBuf);
     type Output = ();
 
-    async fn run(&self, (ino, path): Self::Input) -> Self::Output {
+    async fn run(&mut self, (ino, path): Self::Input) -> Self::Output {
         if let Err(err) = self.upload(ino, &path).await {
             log::error!("failed to upload file ({:?}): {}", path, err);
         }

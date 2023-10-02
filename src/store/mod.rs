@@ -2,13 +2,14 @@ mod bs;
 pub mod dir;
 mod router;
 pub mod zdb;
-pub mod s3;
+pub mod s3store;
 
 use rand::seq::SliceRandom;
 use std::{collections::HashMap, pin::Pin};
 
 pub use bs::BlockStore;
 use futures::Future;
+use s3;
 
 lazy_static::lazy_static! {
     static ref STORES: HashMap<String, Factory> = register_stores();
@@ -20,7 +21,7 @@ fn register_stores() -> HashMap<String, Factory> {
     let mut m: HashMap<String, Factory> = HashMap::default();
     m.insert("dir".into(), dir::make);
     m.insert("zdb".into(), zdb::make);
-    m.insert("s3".into(), s3::make);
+    m.insert("s3".into(), s3store::make);
 
     m
 }
@@ -57,6 +58,10 @@ pub enum Error {
     #[error("bucket creation error")]
     BucketCreationError,
 
+    #[error("invalid host")]
+    InvalidHost,
+    #[error("invalid url configuration")]
+    InvalidConfigs,
     // TODO: better display for the Box<Vec<Self>>
     #[error("multiple error: {0:?}")]
     Multiple(Box<Vec<Self>>),
@@ -66,6 +71,10 @@ pub enum Error {
 
     #[error("url parse error: {0}")]
     Url(#[from] url::ParseError),
+    #[error("create bucket error")]
+    S3Error(#[from] s3::error::S3Error),
+    #[error("utf8 error")]
+    Utf8Error(#[from] std::str::Utf8Error),
     #[error("unknown store type '{0}'")]
     UnknownStore(String),
     #[error("invalid schema '{0}' expected '{1}'")]
