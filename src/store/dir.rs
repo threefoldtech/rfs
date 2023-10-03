@@ -1,9 +1,7 @@
-use super::{Error, Result, Route, Store};
-use futures::Future;
+use super::{Error, FactoryFuture, Result, Route, Store};
 use std::io::ErrorKind;
 use std::os::unix::prelude::OsStrExt;
 use std::path::PathBuf;
-use std::pin::Pin;
 use tokio::fs;
 use url;
 
@@ -18,7 +16,7 @@ async fn make_inner(url: String) -> Result<Box<dyn Store>> {
     Ok(Box::new(DirStore::new(u.path()).await?))
 }
 
-pub fn make(url: &str) -> Pin<Box<dyn Future<Output = Result<Box<dyn Store>>>>> {
+pub fn make(url: &str) -> FactoryFuture {
     Box::pin(make_inner(url.into()))
 }
 

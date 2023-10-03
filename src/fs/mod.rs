@@ -85,7 +85,7 @@ where
         while let Some(req) = session.next_request().await? {
             let fs = self.clone();
 
-            let _: JoinHandle<Result<()>> = task::spawn(async move {
+            let handler: JoinHandle<Result<()>> = task::spawn(async move {
                 let result = match req.operation()? {
                     Operation::Lookup(op) => fs.lookup(&req, op).await,
                     Operation::Getattr(op) => fs.getattr(&req, op).await,
@@ -105,6 +105,8 @@ where
 
                 Ok(())
             });
+
+            drop(handler);
         }
 
         Ok(())

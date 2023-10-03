@@ -1,6 +1,4 @@
-use std::pin::Pin;
-
-use super::{Error, Result, Route, Store};
+use super::{Error, FactoryFuture, Result, Route, Store};
 use anyhow::Context;
 
 use bb8_redis::{
@@ -11,7 +9,6 @@ use bb8_redis::{
     },
     RedisConnectionManager,
 };
-use futures::Future;
 
 #[derive(Debug)]
 struct WithNamespace {
@@ -96,7 +93,7 @@ async fn make_inner(url: String) -> Result<Box<dyn Store>> {
     Ok(Box::from(ZdbStore { url, pool }))
 }
 
-pub fn make(url: &str) -> Pin<Box<dyn Future<Output = Result<Box<dyn Store>>>>> {
+pub fn make(url: &str) -> FactoryFuture {
     Box::pin(make_inner(url.into()))
 }
 

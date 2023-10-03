@@ -113,7 +113,12 @@ pub trait Store: Send + Sync + 'static {
 /// The store factory works as a factory for a specific store
 /// this is only needed to be able dynamically create different types
 /// of stores based only on scheme of the store url.
-pub type Factory = fn(u: &str) -> Pin<Box<dyn Future<Output = Result<Box<dyn Store>>>>>;
+/// the Factory returns a factory future that resolved to a Box<dyn Store>
+pub type Factory = fn(u: &str) -> FactoryFuture;
+
+/// FactoryFuture is a future that resolves to a Result<Box<dyn Store>> this
+/// is returned by a factory function like above
+pub type FactoryFuture = Pin<Box<dyn Future<Output = Result<Box<dyn Store>>>>>;
 
 /// Router holds a set of shards (stores) where each store can be configured to serve
 /// a range of hashes.

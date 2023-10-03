@@ -293,7 +293,7 @@ impl Reader {
         WalkItem(path, node): &WalkItem,
         visitor: &mut W,
     ) -> Result<()> {
-        if visitor.visit(&path, node).await? == Walk::Break {
+        if visitor.visit(path, node).await? == Walk::Break {
             return Ok(());
         }
 
