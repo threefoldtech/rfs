@@ -104,6 +104,15 @@ mod test {
 
     #[test]
     fn test_get_config() {
-        let (cred, region, bucket_name) = get_config("s3//minioadmin:minioadmin@127.0.0.1:9000/mybucket")?;
+        let (cred, region, bucket_name) = get_config("s3://minioadmin:minioadmin@127.0.0.1:9000/mybucket").unwrap();
+        assert_eq!(cred, Credentials {
+            access_key: Some("minioadmin".to_string()),
+            secret_key: Some("minioadmin".to_string()),
+            security_token: None,
+            session_token: None,
+            expiration: None,
+        });
+        assert_eq!(region, Region::Custom { region: REGION_NAME.to_string(), endpoint: "127.0.0.1:9000".to_string() });
+        assert_eq!(bucket_name, "mybucket".to_string())
     }
 }
