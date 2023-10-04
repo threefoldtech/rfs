@@ -1,34 +1,46 @@
 use super::{Error, Result, Route, Store};
+
 use futures::Future;
 use std::pin::Pin;
 
-use s3::creds::Credentials;
-use s3::{Bucket, Region};
-
-const REGION_NAME: &str = "minio";
+use s3::{creds::Credentials, Bucket, Region};
 
 fn get_config(url: &str) -> Result<(Credentials, Region, String)> {
     let url = url::Url::parse(url.as_ref())?;
 
-    let (access_key, access_secret, endpoint, bucket_name) = match url.host() {
+    let (access_key, access_secret, endpoint, bucket_name, region_name) = match url.host() {
         Some(_) => {
-            let access_key = url.username().into();
-            let access_secret = url.password().unwrap_or_default().into();
-
-            let host = url.host_str().unwrap_or_default();
-            let port = url.port().unwrap_or(9000);
+            let access_key = url.username().to_string();
+            let access_secret = url
+                .password()
+                .ok_or(Error::InvalidConfigs(String::from(
+                    "did not find secret key",
+                )))?
+                .to_string();
+            let host = url
+                .host_str()
+                .ok_or(Error::InvalidConfigs(String::from("did not find host")))?
+                .to_string();
+            let port = url
+                .port()
+                .ok_or(Error::InvalidConfigs(String::from("did not find port")))?;
             let endpoint = format!("{}:{}", host, port);
 
-            let bucket_name = url.path().trim_start_matches('/').into();
+            let bucket_name = url.path().trim_start_matches('/').to_string();
 
-            // TODO: add region to the url?
+            let region = match url.query_pairs().find(|(key, _)| key == "region") {
+                Some((_, value)) => value.to_string(),
+                None => return Err(Error::InvalidConfigs(String::from("did not find region"))),
+            };
 
-            (access_key, access_secret, endpoint, bucket_name)
+            (access_key, access_secret, endpoint, bucket_name, region)
         }
-        None => return Err(Error::InvalidConfigs),
+        None => {
+            return Err(Error::InvalidConfigs(String::from(
+                "failed parsing the url",
+            )))
+        }
     };
-
-    let region_name = String::from(REGION_NAME);
 
     Ok((
         Credentials {
@@ -104,15 +116,25 @@ mod test {
 
     #[test]
     fn test_get_config() {
-        let (cred, region, bucket_name) = get_config("s3://minioadmin:minioadmin@127.0.0.1:9000/mybucket").unwrap();
-        assert_eq!(cred, Credentials {
-            access_key: Some("minioadmin".to_string()),
-            secret_key: Some("minioadmin".to_string()),
-            security_token: None,
-            session_token: None,
-            expiration: None,
-        });
-        assert_eq!(region, Region::Custom { region: REGION_NAME.to_string(), endpoint: "127.0.0.1:9000".to_string() });
+        let (cred, region, bucket_name) =
+            get_config("s3://minioadmin:minioadmin@127.0.0.1:9000/mybucket?region=minio").unwrap();
+        assert_eq!(
+            cred,
+            Credentials {
+                access_key: Some("minioadmin".to_string()),
+                secret_key: Some("minioadmin".to_string()),
+                security_token: None,
+                session_token: None,
+                expiration: None,
+            }
+        );
+        assert_eq!(
+            region,
+            Region::Custom {
+                region: "minio".to_string(),
+                endpoint: "127.0.0.1:9000".to_string()
+            }
+        );
         assert_eq!(bucket_name, "mybucket".to_string())
     }
 }

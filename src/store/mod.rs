@@ -60,8 +60,8 @@ pub enum Error {
 
     #[error("invalid host")]
     InvalidHost,
-    #[error("invalid url configuration")]
-    InvalidConfigs,
+    #[error("invalid url configuration: {0}")]
+    InvalidConfigs(String),
     // TODO: better display for the Box<Vec<Self>>
     #[error("multiple error: {0:?}")]
     Multiple(Box<Vec<Self>>),
