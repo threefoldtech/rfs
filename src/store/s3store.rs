@@ -24,7 +24,15 @@ fn get_config(url: &str) -> Result<(Credentials, Region, String)> {
             let port = url
                 .port()
                 .ok_or(Error::InvalidConfigs(String::from("did not find port")))?;
-            let endpoint = format!("{}:{}", host, port);
+
+            // rust-s3 implementation force tls unless it found `://` in the endpoint
+            // check rust-s3/aws-region/src/region.rs #fn scheme
+            let scheme = match url.query_pairs().find(|(key, _)| key == "tls") {
+                Some((_, value)) if value == "false" => "http://",
+                _ => "",
+            };
+
+            let endpoint = format!("{}{}:{}", scheme, host, port);
 
             let bucket_name = url.path().trim_start_matches('/').to_string();
 
@@ -136,5 +144,50 @@ mod test {
             }
         );
         assert_eq!(bucket_name, "mybucket".to_string())
+    }
+
+    #[test]
+    fn test_get_config_without_tls() {
+        let (cred, region, bucket_name) =
+            get_config("s3://minioadmin:minioadmin@127.0.0.1:9000/mybucket?region=minio&tls=false")
+                .unwrap();
+        assert_eq!(
+            cred,
+            Credentials {
+                access_key: Some("minioadmin".to_string()),
+                secret_key: Some("minioadmin".to_string()),
+                security_token: None,
+                session_token: None,
+                expiration: None,
+            }
+        );
+        assert_eq!(
+            region,
+            Region::Custom {
+                region: "minio".to_string(),
+                endpoint: "http://127.0.0.1:9000".to_string()
+            }
+        );
+        assert_eq!(bucket_name, "mybucket".to_string())
+    }
+
+    #[ignore]
+    #[tokio::test]
+    async fn test_set_get() {
+        let url = "s3://minioadmin:minioadmin@127.0.0.1:9000/mybucket?region=minio&tls=false";
+        let (cred, region, bucket_name) = get_config(url).unwrap();
+
+        let store = S3Store::new(url, &bucket_name, region, cred).await;
+        let store = store.unwrap();
+
+        let key = b"test.txt";
+        let blob = b"# Hello, World!";
+
+        _ = store.set(key, blob).await;
+
+        let get_res = store.get(key).await;
+        let get_res = get_res.unwrap();
+
+        assert_eq!(get_res, blob)
     }
 }
