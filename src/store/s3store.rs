@@ -4,63 +4,47 @@ use futures::Future;
 use std::pin::Pin;
 
 use s3::{creds::Credentials, Bucket, Region};
+use url::Url;
 
 fn get_config(url: &str) -> Result<(Credentials, Region, String)> {
-    let url = url::Url::parse(url.as_ref())?;
+    let url = Url::parse(url)?;
 
-    let (access_key, access_secret, endpoint, bucket_name, region_name) = match url.host() {
-        Some(_) => {
-            let access_key = url.username().to_string();
-            let access_secret = url
-                .password()
-                .ok_or(Error::InvalidConfigs(String::from(
-                    "did not find secret key",
-                )))?
-                .to_string();
-            let host = url
-                .host_str()
-                .ok_or(Error::InvalidConfigs(String::from("did not find host")))?
-                .to_string();
-            let port = url
-                .port()
-                .ok_or(Error::InvalidConfigs(String::from("did not find port")))?;
+    let access_key = url.username().to_string();
+    let access_secret = url.password().map(|s| s.to_owned());
 
-            // rust-s3 implementation force tls unless it found `://` in the endpoint
-            // check rust-s3/aws-region/src/region.rs #fn scheme
-            let scheme = match url.query_pairs().find(|(key, _)| key == "tls") {
-                Some((_, value)) if value == "false" => "http://",
-                _ => "",
-            };
-
-            let endpoint = format!("{}{}:{}", scheme, host, port);
-
-            let bucket_name = url.path().trim_start_matches('/').to_string();
-
-            let region = match url.query_pairs().find(|(key, _)| key == "region") {
-                Some((_, value)) => value.to_string(),
-                None => return Err(Error::InvalidConfigs(String::from("did not find region"))),
-            };
-
-            (access_key, access_secret, endpoint, bucket_name, region)
-        }
-        None => {
-            return Err(Error::InvalidConfigs(String::from(
-                "failed parsing the url",
-            )))
-        }
+    let host = url
+        .host_str()
+        .ok_or(Error::Other(anyhow::Error::msg("no host found")))?;
+    let port = url
+        .port()
+        .ok_or(Error::Other(anyhow::Error::msg("no port found")))?;
+    let scheme = match url.scheme() {
+        "s3" => "http://",
+        "s3+tls" => "",
+        _ => return Err(Error::Other(anyhow::Error::msg("invalid scheme"))),
     };
+
+    let endpoint = format!("{}{}:{}", scheme, host, port);
+
+    let bucket_name = url.path().trim_start_matches('/').to_string();
+
+    let region_name = url
+        .query_pairs()
+        .find(|(key, _)| key == "region")
+        .map(|(_, value)| value.to_string())
+        .ok_or(Error::Other(anyhow::Error::msg("no region name found")))?;
 
     Ok((
         Credentials {
             access_key: Some(access_key),
-            secret_key: Some(access_secret),
+            secret_key: access_secret,
             security_token: None,
             session_token: None,
             expiration: None,
         },
         Region::Custom {
             region: region_name,
-            endpoint: endpoint,
+            endpoint,
         },
         bucket_name,
     ))
@@ -68,9 +52,7 @@ fn get_config(url: &str) -> Result<(Credentials, Region, String)> {
 
 async fn make_inner(url: String) -> Result<Box<dyn Store>> {
     let (cred, region, bucket_name) = get_config(&url)?;
-    Ok(Box::new(
-        S3Store::new(&url, &bucket_name, region, cred).await?,
-    ))
+    Ok(Box::new(S3Store::new(&url, &bucket_name, region, cred)?))
 }
 
 pub fn make(url: &str) -> Pin<Box<dyn Future<Output = Result<Box<dyn Store>>>>> {
@@ -84,13 +66,15 @@ struct S3Store {
 }
 
 impl S3Store {
-    pub async fn new(
-        url: &str,
-        bucket_name: &str,
-        region: Region,
-        cred: Credentials,
-    ) -> Result<Self> {
-        let bucket = Bucket::new(bucket_name, region, cred)?.with_path_style();
+    pub fn new(url: &str, bucket_name: &str, region: Region, cred: Credentials) -> Result<Self> {
+        let bucket = match Bucket::new(bucket_name, region, cred) {
+            Ok(res) => res.with_path_style(),
+            Err(_) => {
+                return Err(Error::Other(anyhow::Error::msg(
+                    "failed instantiate bucket",
+                )))
+            }
+        };
 
         Ok(Self {
             bucket: bucket,
@@ -102,15 +86,17 @@ impl S3Store {
 #[async_trait::async_trait]
 impl Store for S3Store {
     async fn get(&self, key: &[u8]) -> super::Result<Vec<u8>> {
-        let response = self.bucket.get_object(std::str::from_utf8(key)?).await?;
-        Ok(response.to_vec())
+        match self.bucket.get_object(hex::encode(key)).await {
+            Ok(res) => Ok(res.to_vec()),
+            Err(err) => Err(Error::Other(anyhow::Error::from(err))),
+        }
     }
 
     async fn set(&self, key: &[u8], blob: &[u8]) -> Result<()> {
-        self.bucket
-            .put_object(std::str::from_utf8(key)?, blob)
-            .await?;
-        Ok(())
+        match self.bucket.put_object(hex::encode(key), blob).await {
+            Ok(_) => Ok(()),
+            Err(err) => Err(Error::Other(anyhow::Error::from(err))),
+        }
     }
 
     fn routes(&self) -> Vec<Route> {
@@ -125,7 +111,8 @@ mod test {
     #[test]
     fn test_get_config() {
         let (cred, region, bucket_name) =
-            get_config("s3://minioadmin:minioadmin@127.0.0.1:9000/mybucket?region=minio").unwrap();
+            get_config("s3+tls://minioadmin:minioadmin@127.0.0.1:9000/mybucket?region=minio")
+                .unwrap();
         assert_eq!(
             cred,
             Credentials {
@@ -149,8 +136,7 @@ mod test {
     #[test]
     fn test_get_config_without_tls() {
         let (cred, region, bucket_name) =
-            get_config("s3://minioadmin:minioadmin@127.0.0.1:9000/mybucket?region=minio&tls=false")
-                .unwrap();
+            get_config("s3://minioadmin:minioadmin@127.0.0.1:9000/mybucket?region=minio").unwrap();
         assert_eq!(
             cred,
             Credentials {
@@ -174,10 +160,10 @@ mod test {
     #[ignore]
     #[tokio::test]
     async fn test_set_get() {
-        let url = "s3://minioadmin:minioadmin@127.0.0.1:9000/mybucket?region=minio&tls=false";
+        let url = "s3://minioadmin:minioadmin@127.0.0.1:9000/mybucket?region=minio";
         let (cred, region, bucket_name) = get_config(url).unwrap();
 
-        let store = S3Store::new(url, &bucket_name, region, cred).await;
+        let store = S3Store::new(url, &bucket_name, region, cred);
         let store = store.unwrap();
 
         let key = b"test.txt";
