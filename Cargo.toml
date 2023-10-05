@@ -52,6 +52,7 @@ daemonize = { version = "0.5", optional = true }
 tempfile = { version = "3.3.0", optional = true }
 workers = { git="https://github.com/threefoldtech/tokio-worker-pool.git" }
 rust-s3 = "0.33"
+openssl = { version = "0.10", features = ["vendored"] }
 
 [dependencies.polyfuse]
 branch = "master"

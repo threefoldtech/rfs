@@ -1,26 +1,23 @@
 use super::{Error, Result, Route, Store};
 
+use anyhow::Context;
 use futures::Future;
 use std::pin::Pin;
 
-use s3::{creds::Credentials, Bucket, Region};
+use s3::{creds::Credentials, error::S3Error, Bucket, Region};
 use url::Url;
 
-fn get_config(url: &str) -> Result<(Credentials, Region, String)> {
-    let url = Url::parse(url)?;
+fn get_config<U: AsRef<str>>(u: U) -> Result<(Credentials, Region, String)> {
+    let url = Url::parse(u.as_ref())?;
 
     let access_key = url.username().to_string();
     let access_secret = url.password().map(|s| s.to_owned());
 
-    let host = url
-        .host_str()
-        .ok_or(Error::Other(anyhow::Error::msg("no host found")))?;
-    let port = url
-        .port()
-        .ok_or(Error::Other(anyhow::Error::msg("no port found")))?;
+    let host = url.host_str().context("host not found")?;
+    let port = url.port().context("port not found")?;
     let scheme = match url.scheme() {
         "s3" => "http://",
-        "s3+tls" => "",
+        "s3+tls" | "s3s" => "https://",
         _ => return Err(Error::Other(anyhow::Error::msg("invalid scheme"))),
     };
 
@@ -32,7 +29,7 @@ fn get_config(url: &str) -> Result<(Credentials, Region, String)> {
         .query_pairs()
         .find(|(key, _)| key == "region")
         .map(|(_, value)| value.to_string())
-        .ok_or(Error::Other(anyhow::Error::msg("no region name found")))?;
+        .context("region name not found")?;
 
     Ok((
         Credentials {
@@ -67,14 +64,9 @@ struct S3Store {
 
 impl S3Store {
     pub fn new(url: &str, bucket_name: &str, region: Region, cred: Credentials) -> Result<Self> {
-        let bucket = match Bucket::new(bucket_name, region, cred) {
-            Ok(res) => res.with_path_style(),
-            Err(_) => {
-                return Err(Error::Other(anyhow::Error::msg(
-                    "failed instantiate bucket",
-                )))
-            }
-        };
+        let bucket = Bucket::new(bucket_name, region, cred)
+            .context("failed instantiate bucket")?
+            .with_path_style();
 
         Ok(Self {
             bucket: bucket,
@@ -88,6 +80,8 @@ impl Store for S3Store {
     async fn get(&self, key: &[u8]) -> super::Result<Vec<u8>> {
         match self.bucket.get_object(hex::encode(key)).await {
             Ok(res) => Ok(res.to_vec()),
+            Err(S3Error::Http(404, _)) => Err(Error::KeyNotFound),
+            Err(S3Error::Io(err)) => Err(Error::IO(err)),
             Err(err) => Err(Error::Other(anyhow::Error::from(err))),
         }
     }
@@ -111,7 +105,7 @@ mod test {
     #[test]
     fn test_get_config() {
         let (cred, region, bucket_name) =
-            get_config("s3+tls://minioadmin:minioadmin@127.0.0.1:9000/mybucket?region=minio")
+            get_config("s3s://minioadmin:minioadmin@127.0.0.1:9000/mybucket?region=minio")
                 .unwrap();
         assert_eq!(
             cred,
@@ -127,7 +121,7 @@ mod test {
             region,
             Region::Custom {
                 region: "minio".to_string(),
-                endpoint: "127.0.0.1:9000".to_string()
+                endpoint: "https://127.0.0.1:9000".to_string()
             }
         );
         assert_eq!(bucket_name, "mybucket".to_string())

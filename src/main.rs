@@ -244,6 +244,9 @@ async fn parse_router(urls: &[String]) -> Result<Router> {
         let ((start, end), store) = match u.split_once('=') {
             None => ((0x00, 0xff), store::make(u).await?),
             Some((rng, url)) => {
+                if url.split_once("://").is_none() {
+                    ((0x00, 0xff), store::make(u).await?)
+                } else {
                 let store = store::make(url).await?;
                 let range = match rng.split_once('-') {
                     None => anyhow::bail!("invalid range format"),
@@ -254,8 +257,8 @@ async fn parse_router(urls: &[String]) -> Result<Router> {
                             .with_context(|| format!("failed to parse high range '{}'", high))?,
                     ),
                 };
-
                 (range, store)
+                }
             }
         };
 
