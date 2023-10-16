@@ -23,18 +23,21 @@ pub async fn pack<P: Into<PathBuf>, S: Store>(writer: Writer, store: S, root: P,
 
     // building routing table from store information
     for route in store.routes() {
-        let url = url::Url::parse(&route.url).expect("failed to parse store url");
+        let mut store_url = route.url;
 
-        let username = url.username();
-        let password = url.password().unwrap();
-        let stripped = format!("{}:{}@", username, password);
-        let stripped_url = str::replace(&route.url, &stripped, "");
-
+        if strip_password {
+            let url = url::Url::parse(&store_url).expect("failed to parse store url");
+            let username = url.username();
+            let password = url.password().unwrap();
+            let stripped = format!("{}:{}@", username, password);
+            store_url = str::replace(&store_url, &stripped, "");    
+        }
+        
         writer
             .route(
                 route.start.unwrap_or(u8::MIN),
                 route.end.unwrap_or(u8::MAX),
-                if strip_password { stripped_url } else { route.url }, 
+                store_url, 
             )
             .await?;
     }
