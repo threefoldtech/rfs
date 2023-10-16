@@ -46,7 +46,7 @@ pub enum Error {
     #[error("store is not available")]
     Unavailable,
 
-    #[error("compression error: {0}")]
+    #[error("compression error: {0:#}")]
     Compression(#[from] snap::Error),
 
     #[error("encryption error")]
@@ -56,7 +56,7 @@ pub enum Error {
     #[error("multiple error: {0:?}")]
     Multiple(Box<Vec<Self>>),
 
-    #[error("io error: {0}")]
+    #[error("io error: {0:#}")]
     IO(#[from] std::io::Error),
 
     #[error("url parse error: {0}")]
@@ -65,7 +65,7 @@ pub enum Error {
     UnknownStore(String),
     #[error("invalid schema '{0}' expected '{1}'")]
     InvalidScheme(String, String),
-    #[error("other: {0}")]
+    #[error("{0:#}")]
     Other(#[from] anyhow::Error),
 }
 

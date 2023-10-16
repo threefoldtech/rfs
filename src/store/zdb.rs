@@ -45,7 +45,13 @@ fn get_connection_info<U: AsRef<str>>(u: U) -> Result<(ConnectionInfo, Option<St
 
     let (address, namespace) = match u.host() {
         Some(host) => {
-            let addr = ConnectionAddr::Tcp(host.to_string(), u.port().unwrap_or(9900));
+            let addr = match host {
+                url::Host::Domain(domain) => domain.to_owned(),
+                url::Host::Ipv4(ipv4) => ipv4.to_string(),
+                url::Host::Ipv6(ipv6) => ipv6.to_string(),
+            };
+
+            let addr = ConnectionAddr::Tcp(addr, u.port().unwrap_or(9900));
             let ns: Option<String> = u
                 .path_segments()
                 .and_then(|s| s.last().map(|s| s.to_owned()));
@@ -79,7 +85,9 @@ async fn make_inner(url: String) -> Result<Box<dyn Store>> {
         password: info.redis.password.take(),
     };
 
+    log::debug!("connection {:#?}", info);
     log::debug!("switching namespace to: {:?}", namespace.namespace);
+
     let mgr =
         RedisConnectionManager::new(info).context("failed to create redis connection manager")?;
 

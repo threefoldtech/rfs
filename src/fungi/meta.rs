@@ -41,7 +41,7 @@ static SCHEMA: &str = include_str!("../../schema/schema.sql");
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    #[error("failed to execute query: {0}")]
+    #[error("failed to execute query: {0:#}")]
     SqlError(#[from] sqlx::Error),
 
     #[error("invalid hash length")]
@@ -50,10 +50,10 @@ pub enum Error {
     #[error("invalid key length")]
     InvalidKey,
 
-    #[error("io error: {0}")]
+    #[error("io error: {0:#}")]
     IO(#[from] std::io::Error),
 
-    #[error("{0}")]
+    #[error("{0:#}")]
     Anyhow(#[from] anyhow::Error),
 }
 
