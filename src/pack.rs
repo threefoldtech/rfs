@@ -18,16 +18,23 @@ struct Item(Ino, PathBuf, OsString, Metadata);
 /// it's logically incorrect to store multiple filessytem in the same FL.
 /// All file chunks will then be uploaded to the provided store
 ///
-pub async fn pack<P: Into<PathBuf>, S: Store>(writer: Writer, store: S, root: P) -> Result<()> {
+pub async fn pack<P: Into<PathBuf>, S: Store>(writer: Writer, store: S, root: P, strip_password: bool) -> Result<()> {
     use tokio::fs;
 
     // building routing table from store information
     for route in store.routes() {
+        let url = url::Url::parse(&route.url).expect("failed to parse store url");
+
+        let username = url.username();
+        let password = url.password().unwrap();
+        let stripped = format!("{}:{}@", username, password);
+        let stripped_url = str::replace(&route.url, &stripped, "");
+
         writer
             .route(
                 route.start.unwrap_or(u8::MIN),
                 route.end.unwrap_or(u8::MAX),
-                route.url,
+                if strip_password { stripped_url } else { route.url }, 
             )
             .await?;
     }
