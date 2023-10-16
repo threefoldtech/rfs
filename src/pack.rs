@@ -217,7 +217,7 @@ where
 
     async fn run(&mut self, (ino, path): Self::Input) -> Self::Output {
         if let Err(err) = self.upload(ino, &path).await {
-            log::error!("failed to upload file ({:?}): {}", path, err);
+            log::error!("failed to upload file ({:?}): {:#}", path, err);
         }
     }
 }
