@@ -27,7 +27,7 @@ pub async fn pack<P: Into<PathBuf>, S: Store>(writer: Writer, store: S, root: P,
 
         if strip_password {
             let mut url = url::Url::parse(&store_url).expect("failed to parse store url");
-            url.set_password(Some("")).expect("failed to remove password from url");
+            url.set_password(None).expect("failed to remove password from url");
             store_url = url.to_string();
         }
         
