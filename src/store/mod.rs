@@ -52,7 +52,6 @@ pub enum Error {
     #[error("encryption error")]
     EncryptionError,
 
-
     // TODO: better display for the Box<Vec<Self>>
     #[error("multiple error: {0:?}")]
     Multiple(Box<Vec<Self>>),
