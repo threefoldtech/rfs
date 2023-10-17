@@ -1,4 +1,4 @@
-use crate::fungi::meta::{Ino, Inode, Error};
+use crate::fungi::meta::{Ino, Inode};
 use crate::fungi::{Result, Writer};
 use crate::store::{BlockStore, Store};
 use anyhow::Context;
@@ -12,14 +12,18 @@ use workers::WorkerPool;
 
 const BLOB_SIZE: usize = 512 * 1024; // 512K
 
-
 #[derive(Debug)]
 struct Item(Ino, PathBuf, OsString, Metadata);
 /// creates an FL from the given root location. It takes ownership of the writer because
 /// it's logically incorrect to store multiple filessytem in the same FL.
 /// All file chunks will then be uploaded to the provided store
 ///
-pub async fn pack<P: Into<PathBuf>, S: Store>(writer: Writer, store: S, root: P, strip_password: bool) -> Result<()> {
+pub async fn pack<P: Into<PathBuf>, S: Store>(
+    writer: Writer,
+    store: S,
+    root: P,
+    strip_password: bool,
+) -> Result<()> {
     use tokio::fs;
 
     // building routing table from store information
@@ -28,22 +32,19 @@ pub async fn pack<P: Into<PathBuf>, S: Store>(writer: Writer, store: S, root: P,
 
         if strip_password {
             let mut url = url::Url::parse(&store_url).context("failed to parse store url")?;
-            let password = url.password(); 	
-            if password != None {
-                let _ = match url.set_password(None) {
-                    Err(_) => Err(Error::FailedToSetPassword),
-                    _ => Ok(()),
-                };
-                
+            if url.password().is_some() {
+                url.set_password(None)
+                    .map_err(|_| anyhow::anyhow!("failed to strip password"))?;
+
                 store_url = url.to_string();
             }
         }
-        
+
         writer
             .route(
                 route.start.unwrap_or(u8::MIN),
                 route.end.unwrap_or(u8::MAX),
-                store_url, 
+                store_url,
             )
             .await?;
     }
