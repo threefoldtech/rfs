@@ -67,6 +67,11 @@ struct PackOptions {
     #[clap(short, long, action=ArgAction::Append)]
     store: Vec<String>,
 
+		/// no_strip_password strips password from store url, otherwise password will be stored in the fl and then shipped
+		/// some stores like ZDB has a public namespace which means writing requires a password
+		#[clap(long, default_value_t = false)]
+    no_strip_password: bool,
+
     /// target directory to upload
     target: String,
 }
@@ -120,7 +125,7 @@ fn pack(opts: PackOptions) -> Result<()> {
     rt.block_on(async move {
         let store = parse_router(opts.store.as_slice()).await?;
         let meta = fungi::Writer::new(opts.meta).await?;
-        rfs::pack(meta, store, opts.target).await?;
+        rfs::pack(meta, store, opts.target, !opts.no_strip_password).await?;
 
         Ok(())
     })
