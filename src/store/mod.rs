@@ -52,6 +52,7 @@ pub enum Error {
     #[error("encryption error")]
     EncryptionError,
 
+
     // TODO: better display for the Box<Vec<Self>>
     #[error("multiple error: {0:?}")]
     Multiple(Box<Vec<Self>>),
@@ -65,7 +66,7 @@ pub enum Error {
     UnknownStore(String),
     #[error("invalid schema '{0}' expected '{1}'")]
     InvalidScheme(String, String),
-    #[error("{0:#}")]
+		#[error("{0:#}")]
     Other(#[from] anyhow::Error),
 }
 

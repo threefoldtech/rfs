@@ -47,6 +47,9 @@ pub enum Error {
     #[error("invalid hash length")]
     InvalidHash,
 
+	#[error("failed to set password")]
+    FailedToSetPassword,
+
     #[error("invalid key length")]
     InvalidKey,
 

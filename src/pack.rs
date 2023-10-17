@@ -1,4 +1,4 @@
-use crate::fungi::meta::{Ino, Inode};
+use crate::fungi::meta::{Ino, Inode, Error};
 use crate::fungi::{Result, Writer};
 use crate::store::{BlockStore, Store};
 use anyhow::Context;
@@ -11,6 +11,7 @@ use std::sync::Arc;
 use workers::WorkerPool;
 
 const BLOB_SIZE: usize = 512 * 1024; // 512K
+
 
 #[derive(Debug)]
 struct Item(Ino, PathBuf, OsString, Metadata);
@@ -26,9 +27,16 @@ pub async fn pack<P: Into<PathBuf>, S: Store>(writer: Writer, store: S, root: P,
         let mut store_url = route.url;
 
         if strip_password {
-            let mut url = url::Url::parse(&store_url).expect("failed to parse store url");
-            url.set_password(None).expect("failed to remove password from url");
-            store_url = url.to_string();
+            let mut url = url::Url::parse(&store_url).context("failed to parse store url")?;
+            let password = url.password(); 	
+            if password != None {
+                match url.set_password(None) {
+                    Err(_) => Err(Error::FailedToSetPassword),
+										_ => (),
+									};
+                
+                store_url = url.to_string();
+            }
         }
         
         writer
