@@ -70,6 +70,8 @@ Arguments:
 Options:
   -m, --meta <META>    path to metadata file (flist)
   -s, --store <STORE>  store url in the format [xx-xx=]<url>. the range xx-xx is optional and used for sharding. the URL is per store type, please check docs for more information
+      --no-strip-password  no_strip_password strips password from store url, otherwise password will be stored in the fl 
+	and then shipped some stores like ZDB has a public namespace which means writing requires a password
   -h, --help           Print help
 ```
 
