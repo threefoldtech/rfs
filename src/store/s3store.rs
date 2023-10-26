@@ -29,7 +29,7 @@ fn get_config<U: AsRef<str>>(u: U) -> Result<(Credentials, Region, String)> {
         .query_pairs()
         .find(|(key, _)| key == "region")
         .map(|(_, value)| value.to_string())
-        .context("region name not found")?;
+        .unwrap_or("".to_string());
 
     Ok((
         Credentials {
@@ -161,6 +161,26 @@ mod test {
         let store = store.unwrap();
 
         let key = b"test.txt";
+        let blob = b"# Hello, World!";
+
+        _ = store.set(key, blob).await;
+
+        let get_res = store.get(key).await;
+        let get_res = get_res.unwrap();
+
+        assert_eq!(get_res, blob)
+    }
+
+    #[ignore]
+    #[tokio::test]
+    async fn test_set_get_without_region() {
+        let url = "s3://minioadmin:minioadmin@127.0.0.1:9000/mybucket";
+        let (cred, region, bucket_name) = get_config(url).unwrap();
+
+        let store = S3Store::new(url, &bucket_name, region, cred);
+        let store = store.unwrap();
+
+        let key = b"test2.txt";
         let blob = b"# Hello, World!";
 
         _ = store.set(key, blob).await;
