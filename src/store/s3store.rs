@@ -2,9 +2,9 @@ use super::{Error, Result, Route, Store};
 
 use anyhow::Context;
 use futures::Future;
-use std::pin::Pin;
-
 use s3::{creds::Credentials, error::S3Error, Bucket, Region};
+use std::{pin::Pin, sync::Arc};
+use tokio::sync::Mutex;
 use url::Url;
 
 fn get_config<U: AsRef<str>>(u: U) -> Result<(Credentials, Region, String)> {
@@ -60,6 +60,12 @@ pub fn make(url: &str) -> Pin<Box<dyn Future<Output = Result<Box<dyn Store>>>>> 
 struct S3Store {
     bucket: Bucket,
     url: String,
+    // this is only here as a work around for this bug https://github.com/durch/rust-s3/issues/337
+    // because rfs uses the store in async (and parallel) matter to upload/download blobs
+    // we need to synchronize this locally in that store which will hurt performance
+    // the 2 solutions now is to either wait until this bug is fixed, or switch to another client
+    // but for now we keep this work around
+    m: Arc<Mutex<()>>,
 }
 
 impl S3Store {
@@ -71,6 +77,7 @@ impl S3Store {
         Ok(Self {
             bucket: bucket,
             url: url.to_owned(),
+            m: Arc::new(Mutex::new(())),
         })
     }
 }
@@ -78,19 +85,23 @@ impl S3Store {
 #[async_trait::async_trait]
 impl Store for S3Store {
     async fn get(&self, key: &[u8]) -> super::Result<Vec<u8>> {
+        let _m = self.m.lock().await;
         match self.bucket.get_object(hex::encode(key)).await {
             Ok(res) => Ok(res.to_vec()),
             Err(S3Error::Http(404, _)) => Err(Error::KeyNotFound),
             Err(S3Error::Io(err)) => Err(Error::IO(err)),
-            Err(err) => Err(Error::Other(anyhow::Error::from(err))),
+            Err(err) => Err(anyhow::Error::from(err).into()),
         }
     }
 
     async fn set(&self, key: &[u8], blob: &[u8]) -> Result<()> {
-        match self.bucket.put_object(hex::encode(key), blob).await {
-            Ok(_) => Ok(()),
-            Err(err) => Err(Error::Other(anyhow::Error::from(err))),
-        }
+        let _m = self.m.lock().await;
+        self.bucket
+            .put_object(hex::encode(key), blob)
+            .await
+            .context("put object over s3 storage")?;
+
+        Ok(())
     }
 
     fn routes(&self) -> Vec<Route> {
@@ -105,8 +116,7 @@ mod test {
     #[test]
     fn test_get_config() {
         let (cred, region, bucket_name) =
-            get_config("s3s://minioadmin:minioadmin@127.0.0.1:9000/mybucket?region=minio")
-                .unwrap();
+            get_config("s3s://minioadmin:minioadmin@127.0.0.1:9000/mybucket?region=minio").unwrap();
         assert_eq!(
             cred,
             Credentials {
