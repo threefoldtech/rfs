@@ -29,7 +29,7 @@ fn get_config<U: AsRef<str>>(u: U) -> Result<(Credentials, Region, String)> {
         .query_pairs()
         .find(|(key, _)| key == "region")
         .map(|(_, value)| value.to_string())
-        .unwrap_or("".to_string());
+        .unwrap_or_default();
 
     Ok((
         Credentials {
