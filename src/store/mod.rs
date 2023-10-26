@@ -1,6 +1,7 @@
 mod bs;
 pub mod dir;
 mod router;
+pub mod s3store;
 pub mod zdb;
 
 use rand::seq::SliceRandom;
@@ -19,6 +20,7 @@ fn register_stores() -> HashMap<String, Factory> {
     let mut m: HashMap<String, Factory> = HashMap::default();
     m.insert("dir".into(), dir::make);
     m.insert("zdb".into(), zdb::make);
+    m.insert("s3".into(), s3store::make);
 
     m
 }

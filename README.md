@@ -22,7 +22,7 @@ to be able to use from anywhere on your system.
 
 ## Stores
 
-A store in where the actual data lives. A store can be as simple as a `directory` on your local machine in that case the files on the `fl` are only 'accessible' on your local machine. A store can also be a `zdb` running remotely or a cluster of `zdb`. Right now only `dir` and `zdb` stores are supported but this will change in the future to support even more stores.
+A store in where the actual data lives. A store can be as simple as a `directory` on your local machine in that case the files on the `fl` are only 'accessible' on your local machine. A store can also be a `zdb` running remotely or a cluster of `zdb`. Right now only `dir`, `zdb` and `s3` stores are supported but this will change in the future to support even more stores.
 
 ## Usage
 
@@ -38,6 +38,9 @@ The simplest form of `<store-specs>` is a `url`. the store `url` defines the sto
 
 - `dir`: dir is a very simple store that is mostly used for testing. A dir store will store the fs blobs in another location defined by the url path. An example of a valid dir url is `dir:///tmp/store`
 - `zdb`: [zdb](https://github.com/threefoldtech/0-db) is a append-only key value store and provides a redis like API. An example zdb url can be something like `zdb://<hostname>[:port][/namespace]`
+- `s3`: aws-s3 is used for storing and retrieving large amounts of data (blobs) in buckets (directories). An example `s3://<username>:<password>@<host>:<port>/<bucket-name>`
+  
+  `region` is an optional param for s3 stores, if you want to provide one you can add it as a query to the url `?region=<region-name>` 
 
 `<store-specs>` can also be of the form `<start>-<end>=<url>` where `start` and `end` are a hex bytes for partitioning of blob keys. rfs will then store a set of blobs on the defined store if they blob key falls in the `[start:end]` range (inclusive).
 

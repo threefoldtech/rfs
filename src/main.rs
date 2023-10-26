@@ -11,6 +11,8 @@ use rfs::cache;
 use rfs::fungi;
 use rfs::store::{self, Router};
 
+use regex::Regex;
+
 mod fs;
 /// mount flists
 #[derive(Parser, Debug)]
@@ -244,11 +246,19 @@ async fn get_router(meta: &fungi::Reader) -> Result<Router> {
 
 async fn parse_router(urls: &[String]) -> Result<Router> {
     let mut router = Router::new();
+    let pattern = r"^(?P<range>[0-9a-f]{2}-[0-9a-f]{2})=(?P<url>.+)$";
+    let re = Regex::new(pattern)?;
 
     for u in urls {
-        let ((start, end), store) = match u.split_once('=') {
+        let ((start, end), store) = match re.captures(u) {
             None => ((0x00, 0xff), store::make(u).await?),
-            Some((rng, url)) => {
+            Some(captures) => {
+                let url = captures.name("url").context("missing url group")?.as_str();
+                let rng = captures
+                    .name("range")
+                    .context("missing range group")?
+                    .as_str();
+
                 let store = store::make(url).await?;
                 let range = match rng.split_once('-') {
                     None => anyhow::bail!("invalid range format"),
@@ -259,7 +269,6 @@ async fn parse_router(urls: &[String]) -> Result<Router> {
                             .with_context(|| format!("failed to parse high range '{}'", high))?,
                     ),
                 };
-
                 (range, store)
             }
         };
