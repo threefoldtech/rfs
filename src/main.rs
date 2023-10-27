@@ -69,9 +69,9 @@ struct PackOptions {
     #[clap(short, long, action=ArgAction::Append)]
     store: Vec<String>,
 
-		/// no_strip_password strips password from store url, otherwise password will be stored in the fl and then shipped.
-		/// Some stores like ZDB has a public namespace which means writing requires a password
-		#[clap(long, default_value_t = false)]
+    /// no_strip_password strips password from store url, otherwise password will be stored in the fl and then shipped.
+    /// Some stores like ZDB has a public namespace which means writing requires a password
+    #[clap(long, default_value_t = false)]
     no_strip_password: bool,
 
     /// target directory to upload
@@ -168,11 +168,11 @@ fn mount(opts: MountOptions) -> Result<()> {
         }
 
         match daemon.execute() {
-            daemonize::Outcome::Parent(Ok(_)) => {
+            daemonize::Outcome::Parent(result) => {
+                result.context("daemonize")?;
                 wait_child(target, pid_file);
                 return Ok(());
             }
-            daemonize::Outcome::Parent(Err(err)) => anyhow::bail!("failed to daemonize: {}", err),
             _ => {}
         }
     }
@@ -203,11 +203,11 @@ fn wait_child(target: String, mut pid_file: tempfile::NamedTempFile) {
     }
     let mut buf = String::new();
     if let Err(e) = pid_file.read_to_string(&mut buf) {
-        error!("failed to read pid_file: {}", e);
+        error!("failed to read pid_file: {:#}", e);
     }
     let pid = buf.parse::<i32>();
     match pid {
-        Err(e) => error!("failed to parse pid_file contents {}: {}", buf, e),
+        Err(e) => error!("failed to parse pid_file contents {}: {:#}", buf, e),
         Ok(v) => {
             let _ = signal::kill(Pid::from_raw(v), Signal::SIGTERM);
         } // probably the child exited on its own

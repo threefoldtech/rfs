@@ -5,6 +5,8 @@ use std::{
 
 use sqlx::{sqlite::SqliteRow, FromRow, Row, SqlitePool};
 
+use crate::store;
+
 const ID_LEN: usize = 32;
 const KEY_LEN: usize = 32;
 const TYPE_MASK: u32 = nix::libc::S_IFMT;
@@ -41,7 +43,7 @@ static SCHEMA: &str = include_str!("../../schema/schema.sql");
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    #[error("failed to execute query: {0:#}")]
+    #[error("failed to execute query: {0}")]
     SqlError(#[from] sqlx::Error),
 
     #[error("invalid hash length")]
@@ -53,7 +55,10 @@ pub enum Error {
     #[error("io error: {0:#}")]
     IO(#[from] std::io::Error),
 
-    #[error("{0:#}")]
+    #[error("store error: {0}")]
+    Store(#[from] store::Error),
+
+    #[error("unknown meta error: {0}")]
     Anyhow(#[from] anyhow::Error),
 }
 

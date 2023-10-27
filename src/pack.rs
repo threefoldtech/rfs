@@ -210,11 +210,7 @@ where
             }
 
             // write block to remote store
-            let block = self
-                .store
-                .set(&self.buffer[..size])
-                .await
-                .context("failed to store blob")?;
+            let block = self.store.set(&self.buffer[..size]).await?;
 
             // write block info to meta
             self.writer.block(ino, &block.id, &block.key).await?;
@@ -233,6 +229,7 @@ where
     type Output = ();
 
     async fn run(&mut self, (ino, path): Self::Input) -> Self::Output {
+        log::info!("uploading {:?}", path);
         if let Err(err) = self.upload(ino, &path).await {
             log::error!("failed to upload file ({:?}): {:#}", path, err);
         }
