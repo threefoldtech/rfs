@@ -3,7 +3,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use sqlx::{sqlite::SqliteRow, FromRow, Row, SqlitePool};
+use sqlx::{
+    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteRow},
+    FromRow, Row, SqlitePool,
+};
 
 use crate::store;
 
@@ -213,8 +216,11 @@ pub struct Reader {
 
 impl Reader {
     pub async fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let con = format!("sqlite://{}", path.as_ref().to_str().unwrap());
-        let pool = SqlitePool::connect(&con).await?;
+        let opts = SqliteConnectOptions::new()
+            .journal_mode(SqliteJournalMode::Delete)
+            .filename(path.as_ref());
+
+        let pool = SqlitePool::connect_with(opts).await?;
 
         Ok(Self { pool })
     }
