@@ -17,7 +17,8 @@ build-binary = [
     "dep:polyfuse",
     "dep:simple_logger",
     "dep:tempfile",
-    "dep:daemonize"
+    "dep:daemonize",
+    "dep:clap"
     ]
 
 [lib]
@@ -36,7 +37,6 @@ bytes = "1.1.0"
 log = "0.4"
 lru = "0.7.0"
 nix = "0.23.0"
-clap = { version = "4.2", features = ["derive"] }
 snap = "1.0.5"
 bb8-redis = "0.13"
 async-trait = "0.1.53"
@@ -47,6 +47,7 @@ hex = "0.4"
 lazy_static = "1.4"
 rand = "0.8"
 # next are only needed for the binarys
+clap = { version = "4.2", features = ["derive"], optional = true}
 simple_logger = {version = "1.0.1", optional = true}
 daemonize = { version = "0.5", optional = true }
 tempfile = { version = "3.3.0", optional = true }
