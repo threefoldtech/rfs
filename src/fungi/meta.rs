@@ -218,7 +218,7 @@ impl Reader {
     pub async fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
         let opts = SqliteConnectOptions::new()
             .journal_mode(SqliteJournalMode::Delete)
-            .filename(path.as_ref());
+            .filename(path);
 
         let pool = SqlitePool::connect_with(opts).await?;
 
@@ -341,15 +341,14 @@ pub struct Writer {
 impl Writer {
     /// create a new mkondo writer
     pub async fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
-        tokio::fs::OpenOptions::default()
-            .write(true)
-            .truncate(true)
-            .create(true)
-            .open(&path)
-            .await?;
+        let _ = tokio::fs::remove_file(&path).await;
 
-        let con = format!("sqlite://{}", path.as_ref().to_str().unwrap());
-        let pool = SqlitePool::connect(&con).await?;
+        let opts = SqliteConnectOptions::new()
+            .create_if_missing(true)
+            .journal_mode(SqliteJournalMode::Delete)
+            .filename(path);
+
+        let pool = SqlitePool::connect_with(opts).await?;
 
         sqlx::query(SCHEMA).execute(&pool).await?;
 
