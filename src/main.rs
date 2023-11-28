@@ -69,8 +69,7 @@ struct PackOptions {
     #[clap(short, long, action=ArgAction::Append)]
     store: Vec<String>,
 
-    /// no_strip_password strips password from store url, otherwise password will be stored in the fl and then shipped.
-    /// Some stores like ZDB has a public namespace which means writing requires a password
+    /// no_strip_password disable automatic password stripping from store url, otherwise password will be stored in the fl.
     #[clap(long, default_value_t = false)]
     no_strip_password: bool,
 

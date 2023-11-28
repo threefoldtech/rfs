@@ -39,8 +39,8 @@ The simplest form of `<store-specs>` is a `url`. the store `url` defines the sto
 - `dir`: dir is a very simple store that is mostly used for testing. A dir store will store the fs blobs in another location defined by the url path. An example of a valid dir url is `dir:///tmp/store`
 - `zdb`: [zdb](https://github.com/threefoldtech/0-db) is a append-only key value store and provides a redis like API. An example zdb url can be something like `zdb://<hostname>[:port][/namespace]`
 - `s3`: aws-s3 is used for storing and retrieving large amounts of data (blobs) in buckets (directories). An example `s3://<username>:<password>@<host>:<port>/<bucket-name>`
-  
-  `region` is an optional param for s3 stores, if you want to provide one you can add it as a query to the url `?region=<region-name>` 
+
+  `region` is an optional param for s3 stores, if you want to provide one you can add it as a query to the url `?region=<region-name>`
 
 `<store-specs>` can also be of the form `<start>-<end>=<url>` where `start` and `end` are a hex bytes for partitioning of blob keys. rfs will then store a set of blobs on the defined store if they blob key falls in the `[start:end]` range (inclusive).
 
@@ -73,10 +73,20 @@ Arguments:
 Options:
   -m, --meta <META>    path to metadata file (flist)
   -s, --store <STORE>  store url in the format [xx-xx=]<url>. the range xx-xx is optional and used for sharding. the URL is per store type, please check docs for more information
-      --no-strip-password  no_strip_password strips password from store url, otherwise password will be stored in the fl 
-	and then shipped. Some stores like ZDB has a public namespace which means writing requires a password
+      --no-strip-password  disables automatic password stripping from store url, otherwise password will be stored in the fl.
   -h, --help           Print help
 ```
+
+#### Password stripping
+
+During creation of an flist you will probably provide a password in the URL of the store. This is normally needed to allow write operation to the store (say s3 bucket)
+Normally this password is removed from the store info so it's safe to ship the fl to users. A user of the flist then will only have read access, if configured correctly
+in the store
+
+For example a `zdb` store has the notion of a public namespace which is password protected for writes, but open for reads. An S3 bucket can have the policy to allow public reads, but protected writes (minio supports that via bucket settings)
+
+If you wanna disable the password stripping from the store url, you can provide the `--no-strip-password` flag during creation. This also means someone can extract
+this information from the fl and gain write access to your store, so be careful how u use it.
 
 # Mounting an `fl`
 
