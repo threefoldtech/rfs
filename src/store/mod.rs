@@ -21,6 +21,8 @@ fn register_stores() -> HashMap<String, Factory> {
     m.insert("dir".into(), dir::make);
     m.insert("zdb".into(), zdb::make);
     m.insert("s3".into(), s3store::make);
+    m.insert("s3s".into(), s3store::make);
+    m.insert("s3s+tls".into(), s3store::make);
 
     m
 }
