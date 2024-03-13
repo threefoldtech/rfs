@@ -1,3 +1,4 @@
 /target
 /tests/*.flist.d
 result
+.direnv/
