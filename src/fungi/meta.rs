@@ -217,7 +217,7 @@ pub struct Reader {
 impl Reader {
     pub async fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
         let opts = SqliteConnectOptions::new()
-            .journal_mode(SqliteJournalMode::Delete)
+            .journal_mode(SqliteJournalMode::Wal)
             .filename(path);
 
         let pool = SqlitePool::connect_with(opts).await?;
@@ -345,7 +345,7 @@ impl Writer {
 
         let opts = SqliteConnectOptions::new()
             .create_if_missing(true)
-            .journal_mode(SqliteJournalMode::Delete)
+            .journal_mode(SqliteJournalMode::Wal)
             .filename(path);
 
         let pool = SqlitePool::connect_with(opts).await?;
