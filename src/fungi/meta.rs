@@ -217,7 +217,7 @@ pub struct Reader {
 impl Reader {
     pub async fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
         let opts = SqliteConnectOptions::new()
-            .journal_mode(SqliteJournalMode::Wal)
+            .journal_mode(SqliteJournalMode::Delete)
             .busy_timeout(std::time::Duration::from_secs(30))
             .filename(path);
 
@@ -346,7 +346,7 @@ impl Writer {
 
         let opts = SqliteConnectOptions::new()
             .create_if_missing(true)
-            .journal_mode(SqliteJournalMode::Wal)
+            .journal_mode(SqliteJournalMode::Delete)
             .busy_timeout(std::time::Duration::from_secs(30))
             .filename(path);
 
