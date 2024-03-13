@@ -219,6 +219,7 @@ impl Reader {
         let opts = SqliteConnectOptions::new()
             .journal_mode(SqliteJournalMode::Delete)
             .busy_timeout(std::time::Duration::from_secs(30))
+            .read_only(true)
             .filename(path);
 
         let pool = SqlitePool::connect_with(opts).await?;
