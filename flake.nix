@@ -15,8 +15,14 @@
       flake-utils.lib.system.aarch64-darwin
     ] (system: let
       pkgs = nixpkgs.legacyPackages.${system};
+      craneLib = crane.lib.${system};
     in {
-      packages.default = crane.lib.${system}.buildPackage {
+      devShells.default = craneLib.devShell {
+        packages = [
+          pkgs.rust-analyzer
+        ];
+      };
+      packages.default = craneLib.buildPackage {
         src = self;
 
         # 2024-03-07 failing test:
