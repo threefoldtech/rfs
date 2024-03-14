@@ -79,7 +79,7 @@ where
             return Ok((meta.len(), file));
         }
 
-        debug!("downloading block: {}", block.id.as_slice().hex());
+        debug!("downloading block with key: {}", block.id.as_slice().hex());
         let size = self
             .download(&mut file, block)
             .await

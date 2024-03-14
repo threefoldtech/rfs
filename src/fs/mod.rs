@@ -174,7 +174,8 @@ where
                 None => {
                     let (bsize, descriptor) = match self.cache.get(block).await {
                         Ok(out) => out,
-                        Err(_) => {
+                        Err(err) => {
+                            error!("io cache error: {:#}", err);
                             return Ok(req.reply_error(libc::EIO)?);
                         }
                     };
@@ -191,7 +192,8 @@ where
                 // read the file bytes into buf
                 let read = match fd.read(&mut buf[total..]).await {
                     Ok(n) => n,
-                    Err(_) => {
+                    Err(err) => {
+                        error!("read error: {:#}", err);
                         return Ok(req.reply_error(libc::EIO)?);
                     }
                 };
