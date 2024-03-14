@@ -8,7 +8,7 @@ use crate::fungi::{
 };
 use crate::store::Store;
 
-use anyhow::{ensure, Result};
+use anyhow::{ensure, Result, Context};
 use polyfuse::reply::FileAttr;
 use polyfuse::{
     op,
@@ -78,6 +78,11 @@ where
             "ro,allow_other,fsname={},subtype=g8ufs,default_permissions",
             std::process::id()
         ));
+
+        // polyfuse assumes an absolute path, see https://github.com/ubnt-intrepid/polyfuse/issues/83
+        let fusermount_path =
+            which::which("fusermount").context("looking up 'fusermount' in PATH")?;
+        options.fusermount_path(fusermount_path);
 
         let session = AsyncSession::mount(mountpoint, options).await?;
 

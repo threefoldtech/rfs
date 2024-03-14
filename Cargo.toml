@@ -55,6 +55,7 @@ workers = { git="https://github.com/threefoldtech/tokio-worker-pool.git" }
 rust-s3 = "0.34.0-rc3"
 openssl = { version = "0.10", features = ["vendored"] }
 regex = "1.9.6"
+which = "6.0"
 
 [dependencies.polyfuse]
 branch = "master"
