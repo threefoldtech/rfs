@@ -218,6 +218,8 @@ impl Reader {
     pub async fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
         let opts = SqliteConnectOptions::new()
             .journal_mode(SqliteJournalMode::Delete)
+            .busy_timeout(std::time::Duration::from_secs(30))
+            .read_only(true)
             .filename(path);
 
         let pool = SqlitePool::connect_with(opts).await?;
@@ -346,6 +348,8 @@ impl Writer {
         let opts = SqliteConnectOptions::new()
             .create_if_missing(true)
             .journal_mode(SqliteJournalMode::Delete)
+            .synchronous(sqlx::sqlite::SqliteSynchronous::Extra)
+            .busy_timeout(std::time::Duration::from_secs(30))
             .filename(path);
 
         let pool = SqlitePool::connect_with(opts).await?;
