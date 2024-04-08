@@ -90,10 +90,10 @@ pub async fn pack<P: Into<PathBuf>, S: Store>(
         log::error!("  - failed to upload file {}: {}", file.display(), error);
     }
 
-    return Err(Error::Anyhow(anyhow::anyhow!(
+    Err(Error::Anyhow(anyhow::anyhow!(
         "failed to upload ({}) files",
         failures.len()
-    )));
+    )))
 }
 
 /// pack_one is called for each dir
