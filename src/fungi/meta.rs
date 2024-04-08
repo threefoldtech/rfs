@@ -4,7 +4,7 @@ use std::{
 };
 
 use sqlx::{
-    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteRow},
+    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteRow},
     FromRow, Row, SqlitePool,
 };
 
@@ -348,7 +348,10 @@ impl Writer {
             .journal_mode(SqliteJournalMode::Delete)
             .filename(path);
 
-        let pool = SqlitePool::connect_with(opts).await?;
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(opts)
+            .await?;
 
         sqlx::query(SCHEMA).execute(&pool).await?;
 
