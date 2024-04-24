@@ -6,6 +6,14 @@
     crane.inputs.nixpkgs.follows = "nixpkgs";
 
     flake-utils.inputs.nixpkgs.follows = "nixpkgs";
+
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs = {
+        nixpkgs.follows = "nixpkgs";
+        flake-utils.follows = "flake-utils";
+      };
+    };
   };
 
   outputs = {
@@ -13,6 +21,7 @@
     nixpkgs,
     crane,
     flake-utils,
+    rust-overlay,
   }:
     flake-utils.lib.eachSystem
     [
@@ -20,8 +29,13 @@
       flake-utils.lib.system.aarch64-linux
       flake-utils.lib.system.aarch64-darwin
     ] (system: let
-      pkgs = nixpkgs.legacyPackages.${system};
-      craneLib = crane.lib.${system};
+      pkgs = import nixpkgs {
+        inherit system;
+        overlays = [(import rust-overlay)];
+      };
+
+      customToolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
+      craneLib = (crane.mkLib pkgs).overrideToolchain customToolchain;
     in {
       devShells.default = craneLib.devShell {
         packages = [
