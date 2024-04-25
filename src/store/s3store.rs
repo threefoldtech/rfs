@@ -73,7 +73,7 @@ impl S3Store {
             .with_path_style();
 
         Ok(Self {
-            bucket: bucket,
+            bucket,
             url: url.to_owned(),
         })
     }

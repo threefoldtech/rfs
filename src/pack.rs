@@ -1,7 +1,8 @@
 use crate::fungi::meta::{Ino, Inode};
-use crate::fungi::{Result, Writer};
+use crate::fungi::{Error, Result, Writer};
 use crate::store::{BlockStore, Store};
 use anyhow::Context;
+use futures::lock::Mutex;
 use std::collections::LinkedList;
 use std::ffi::OsString;
 use std::fs::Metadata;
@@ -11,6 +12,8 @@ use std::sync::Arc;
 use workers::WorkerPool;
 
 const BLOB_SIZE: usize = 512 * 1024; // 512K
+
+type FailuresList = Arc<Mutex<Vec<(PathBuf, Error)>>>;
 
 #[derive(Debug)]
 struct Item(Ino, PathBuf, OsString, Metadata);
@@ -58,7 +61,8 @@ pub async fn pack<P: Into<PathBuf>, S: Store>(
 
     let mut list = LinkedList::default();
 
-    let uploader = Uploader::new(store, writer.clone());
+    let failures = FailuresList::default();
+    let uploader = Uploader::new(store, writer.clone(), Arc::clone(&failures));
     let mut pool = workers::WorkerPool::new(uploader.clone(), super::PARALLEL_UPLOAD);
 
     pack_one(
@@ -75,7 +79,21 @@ pub async fn pack<P: Into<PathBuf>, S: Store>(
     }
 
     pool.close().await;
-    Ok(())
+
+    let failures = failures.lock().await;
+    if failures.is_empty() {
+        return Ok(());
+    }
+
+    log::error!("failed to upload one or more files");
+    for (file, error) in failures.iter() {
+        log::error!("  - failed to upload file {}: {}", file.display(), error);
+    }
+
+    Err(Error::Anyhow(anyhow::anyhow!(
+        "failed to upload ({}) files",
+        failures.len()
+    )))
 }
 
 /// pack_one is called for each dir
@@ -165,6 +183,7 @@ where
     S: Store,
 {
     store: Arc<BlockStore<S>>,
+    failures: FailuresList,
     writer: Writer,
     buffer: [u8; BLOB_SIZE],
 }
@@ -176,6 +195,7 @@ where
     fn clone(&self) -> Self {
         Self {
             store: Arc::clone(&self.store),
+            failures: Arc::clone(&self.failures),
             writer: self.writer.clone(),
             buffer: [0; BLOB_SIZE],
         }
@@ -186,9 +206,10 @@ impl<S> Uploader<S>
 where
     S: Store,
 {
-    fn new(store: BlockStore<S>, writer: Writer) -> Self {
+    fn new(store: BlockStore<S>, writer: Writer, failures: FailuresList) -> Self {
         Self {
             store: Arc::new(store),
+            failures,
             writer,
             buffer: [0; BLOB_SIZE],
         }
@@ -231,7 +252,8 @@ where
     async fn run(&mut self, (ino, path): Self::Input) -> Self::Output {
         log::info!("uploading {:?}", path);
         if let Err(err) = self.upload(ino, &path).await {
-            log::error!("failed to upload file ({:?}): {:#}", path, err);
+            log::error!("failed to upload file {}: {:#}", path.display(), err);
+            self.failures.lock().await.push((path, err));
         }
     }
 }
