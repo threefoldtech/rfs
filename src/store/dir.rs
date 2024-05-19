@@ -1,24 +1,11 @@
-use super::{Error, FactoryFuture, Result, Route, Store};
+use super::{Error, Result, Route, Store};
 use std::io::ErrorKind;
 use std::os::unix::prelude::OsStrExt;
 use std::path::PathBuf;
 use tokio::fs;
 use url;
 
-const SCHEME: &str = "dir";
-
-async fn make_inner(url: String) -> Result<Box<dyn Store>> {
-    let u = url::Url::parse(&url)?;
-    if u.scheme() != SCHEME {
-        return Err(Error::InvalidScheme(u.scheme().into(), SCHEME.into()));
-    }
-
-    Ok(Box::new(DirStore::new(u.path()).await?))
-}
-
-pub fn make(url: &str) -> FactoryFuture {
-    Box::pin(make_inner(url.into()))
-}
+pub const SCHEME: &str = "dir";
 
 /// DirStore is a simple store that store blobs on the filesystem
 /// and is mainly used for testing
@@ -29,6 +16,14 @@ pub struct DirStore {
 }
 
 impl DirStore {
+    pub async fn make<U: AsRef<str>>(url: &U) -> Result<DirStore> {
+        let u = url::Url::parse(url.as_ref())?;
+        if u.scheme() != SCHEME {
+            return Err(Error::InvalidScheme(u.scheme().into(), SCHEME.into()));
+        }
+
+        Ok(DirStore::new(u.path()).await?)
+    }
     pub async fn new<P: Into<PathBuf>>(root: P) -> Result<Self> {
         let root = root.into();
         fs::create_dir_all(&root).await?;
