@@ -5,36 +5,35 @@ pub mod s3store;
 pub mod zdb;
 
 use rand::seq::SliceRandom;
-use std::{collections::HashMap, pin::Pin};
 
 pub use bs::BlockStore;
-use futures::Future;
 
-lazy_static::lazy_static! {
-    static ref STORES: HashMap<String, Factory> = register_stores();
-}
-
-/// register_stores is used to register the stores built in types
-/// so they can be created with a url
-fn register_stores() -> HashMap<String, Factory> {
-    let mut m: HashMap<String, Factory> = HashMap::default();
-    m.insert("dir".into(), dir::make);
-    m.insert("zdb".into(), zdb::make);
-    m.insert("s3".into(), s3store::make);
-    m.insert("s3s".into(), s3store::make);
-    m.insert("s3s+tls".into(), s3store::make);
-
-    m
-}
-
-pub async fn make<U: AsRef<str>>(u: U) -> Result<Box<dyn Store>> {
+pub async fn make<U: AsRef<str>>(u: U) -> Result<Stores> {
     let parsed = url::Url::parse(u.as_ref())?;
-    let factory = match STORES.get(parsed.scheme()) {
-        None => return Err(Error::UnknownStore(parsed.scheme().into())),
-        Some(factory) => factory,
-    };
 
-    factory(u.as_ref()).await
+    if parsed.scheme() == dir::SCHEME {
+        return Ok(Stores::Dir(
+            dir::DirStore::make(&u)
+                .await
+                .expect("failed to make dir store"),
+        ));
+    }
+    if parsed.scheme() == "s3" {
+        return Ok(Stores::S3(
+            s3store::S3Store::make(&u)
+                .await
+                .expect("failed to make s3 store"),
+        ));
+    }
+    if parsed.scheme() == "zdb" {
+        return Ok(Stores::ZDB(
+            zdb::ZdbStore::make(&u)
+                .await
+                .expect("failed to make zdb store"),
+        ));
+    }
+
+    Err(Error::UnknownStore(parsed.scheme().into()))
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -101,16 +100,6 @@ pub trait Store: Send + Sync + 'static {
     fn routes(&self) -> Vec<Route>;
 }
 
-/// The store factory works as a factory for a specific store
-/// this is only needed to be able dynamically create different types
-/// of stores based only on scheme of the store url.
-/// the Factory returns a factory future that resolved to a Box<dyn Store>
-pub type Factory = fn(u: &str) -> FactoryFuture;
-
-/// FactoryFuture is a future that resolves to a Result<Box<dyn Store>> this
-/// is returned by a factory function like above
-pub type FactoryFuture = Pin<Box<dyn Future<Output = Result<Box<dyn Store>>>>>;
-
 /// Router holds a set of shards (stores) where each store can be configured to serve
 /// a range of hashes.
 ///
@@ -119,7 +108,7 @@ pub type FactoryFuture = Pin<Box<dyn Future<Output = Result<Box<dyn Store>>>>>;
 ///
 /// On set, the router set the object on all matching stores, and fails if at least
 /// one store fails, or if no store matches the key
-pub type Router = router::Router<Box<dyn Store>>;
+pub type Router = router::Router<Stores>;
 
 #[async_trait::async_trait]
 impl Store for Router {
@@ -131,7 +120,7 @@ impl Store for Router {
 
         // to make it fare we shuffle the list of matching routers randomly everytime
         // before we do a get
-        let mut routers: Vec<&Box<dyn Store>> = self.route(key[0]).collect();
+        let mut routers: Vec<&Stores> = self.route(key[0]).collect();
         routers.shuffle(&mut rand::thread_rng());
         for store in routers {
             match store.get(key).await {
@@ -182,16 +171,33 @@ impl Store for Router {
         routes
     }
 }
+pub enum Stores {
+    S3(s3store::S3Store),
+    Dir(dir::DirStore),
+    ZDB(zdb::ZdbStore),
+}
 
 #[async_trait::async_trait]
-impl Store for Box<dyn Store> {
+impl Store for Stores {
     async fn get(&self, key: &[u8]) -> Result<Vec<u8>> {
-        self.as_ref().get(key).await
+        match self {
+            self::Stores::S3(s3_store) => s3_store.get(key).await,
+            self::Stores::Dir(dir_store) => dir_store.get(key).await,
+            self::Stores::ZDB(zdb_store) => zdb_store.get(key).await,
+        }
     }
     async fn set(&self, key: &[u8], blob: &[u8]) -> Result<()> {
-        self.as_ref().set(key, blob).await
+        match self {
+            self::Stores::S3(s3_store) => s3_store.set(key, blob).await,
+            self::Stores::Dir(dir_store) => dir_store.set(key, blob).await,
+            self::Stores::ZDB(zdb_store) => zdb_store.set(key, blob).await,
+        }
     }
     fn routes(&self) -> Vec<Route> {
-        self.as_ref().routes()
+        match self {
+            self::Stores::S3(s3_store) => s3_store.routes(),
+            self::Stores::Dir(dir_store) => dir_store.routes(),
+            self::Stores::ZDB(zdb_store) => zdb_store.routes(),
+        }
     }
 }

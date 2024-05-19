@@ -1,4 +1,4 @@
-use super::{Error, FactoryFuture, Result, Route, Store};
+use super::{Error, Result, Route, Store};
 use anyhow::Context;
 
 use bb8_redis::{
@@ -77,41 +77,40 @@ fn get_connection_info<U: AsRef<str>>(u: U) -> Result<(ConnectionInfo, Option<St
     ))
 }
 
-async fn make_inner(url: String) -> Result<Box<dyn Store>> {
-    let (mut info, namespace) = get_connection_info(&url)?;
-
-    let namespace = WithNamespace {
-        namespace,
-        password: info.redis.password.take(),
-    };
-
-    log::debug!("connection {:#?}", info);
-    log::debug!("switching namespace to: {:?}", namespace.namespace);
-
-    let mgr =
-        RedisConnectionManager::new(info).context("failed to create redis connection manager")?;
-
-    let pool = Pool::builder()
-        .max_size(20)
-        .connection_customizer(Box::new(namespace))
-        .build(mgr)
-        .await
-        .context("failed to create connection pool")?;
-
-    Ok(Box::from(ZdbStore { url, pool }))
-}
-
-pub fn make(url: &str) -> FactoryFuture {
-    Box::pin(make_inner(url.into()))
-}
-
 #[derive(Clone)]
 pub struct ZdbStore {
     url: String,
     pool: Pool<RedisConnectionManager>,
 }
 
-impl ZdbStore {}
+impl ZdbStore {
+    pub async fn make<U: AsRef<str>>(url: &U) -> Result<ZdbStore> {
+        let (mut info, namespace) = get_connection_info(url.as_ref())?;
+
+        let namespace = WithNamespace {
+            namespace,
+            password: info.redis.password.take(),
+        };
+
+        log::debug!("connection {:#?}", info);
+        log::debug!("switching namespace to: {:?}", namespace.namespace);
+
+        let mgr = RedisConnectionManager::new(info)
+            .context("failed to create redis connection manager")?;
+
+        let pool = Pool::builder()
+            .max_size(20)
+            .connection_customizer(Box::new(namespace))
+            .build(mgr)
+            .await
+            .context("failed to create connection pool")?;
+
+        Ok(ZdbStore {
+            url: url.as_ref().to_string(),
+            pool,
+        })
+    }
+}
 
 #[async_trait::async_trait]
 impl Store for ZdbStore {
