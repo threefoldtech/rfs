@@ -13,29 +13,24 @@ pub use self::router::Router;
 pub async fn make<U: AsRef<str>>(u: U) -> Result<Stores> {
     let parsed = url::Url::parse(u.as_ref())?;
 
-    if parsed.scheme() == dir::SCHEME {
-        return Ok(Stores::Dir(
+    match parsed.scheme() {
+        dir::SCHEME => return Ok(Stores::Dir(
             dir::DirStore::make(&u)
                 .await
                 .expect("failed to make dir store"),
-        ));
-    }
-    if parsed.scheme() == "s3" {
-        return Ok(Stores::S3(
+        )),
+        "s3" | "s3s" | "s3s+tls" => return Ok(Stores::S3(
             s3store::S3Store::make(&u)
                 .await
-                .expect("failed to make s3 store"),
-        ));
-    }
-    if parsed.scheme() == "zdb" {
-        return Ok(Stores::ZDB(
+                .expect(format!("failed to make {} store", parsed.scheme()).as_str()),
+        )),
+        "zdb" => return Ok(Stores::ZDB(
             zdb::ZdbStore::make(&u)
                 .await
                 .expect("failed to make zdb store"),
-        ));
+        )),
+        _ => return Err(Error::UnknownStore(parsed.scheme().into())),
     }
-
-    Err(Error::UnknownStore(parsed.scheme().into()))
 }
 
 #[derive(thiserror::Error, Debug)]
