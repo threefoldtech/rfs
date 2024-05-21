@@ -8,6 +8,8 @@ use rand::seq::SliceRandom;
 
 pub use bs::BlockStore;
 
+pub use self::router::Router;
+
 pub async fn make<U: AsRef<str>>(u: U) -> Result<Stores> {
     let parsed = url::Url::parse(u.as_ref())?;
 
@@ -100,18 +102,11 @@ pub trait Store: Send + Sync + 'static {
     fn routes(&self) -> Vec<Route>;
 }
 
-/// Router holds a set of shards (stores) where each store can be configured to serve
-/// a range of hashes.
-///
-/// On get, all possible stores that is configured to serve this key are tried until the first
-/// one succeed
-///
-/// On set, the router set the object on all matching stores, and fails if at least
-/// one store fails, or if no store matches the key
-pub type Router = router::Router<Stores>;
-
 #[async_trait::async_trait]
-impl Store for Router {
+impl<S> Store for Router<S>
+where
+    S: Store,
+{
     async fn get(&self, key: &[u8]) -> Result<Vec<u8>> {
         if key.is_empty() {
             return Err(Error::InvalidKey);
@@ -120,7 +115,7 @@ impl Store for Router {
 
         // to make it fare we shuffle the list of matching routers randomly everytime
         // before we do a get
-        let mut routers: Vec<&Stores> = self.route(key[0]).collect();
+        let mut routers: Vec<&S> = self.route(key[0]).collect();
         routers.shuffle(&mut rand::thread_rng());
         for store in routers {
             match store.get(key).await {
