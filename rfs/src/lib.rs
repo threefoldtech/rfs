@@ -18,7 +18,7 @@ mod test {
     use crate::{
         cache::Cache,
         fungi::meta,
-        store::{dir::DirStore, Router, Stores},
+        store::{dir::DirStore, Router},
     };
     use std::path::PathBuf;
     use tokio::{fs, io::AsyncReadExt};
@@ -61,8 +61,8 @@ mod test {
         let store1 = DirStore::new(root.join("store1")).await.unwrap();
         let mut store = Router::new();
 
-        store.add(0x00, 0x7f, Stores::Dir(store0));
-        store.add(0x80, 0xff, Stores::Dir(store1));
+        store.add(0x00, 0x7f, store0);
+        store.add(0x80, 0xff, store1);
 
         pack(writer, store, &source, false).await.unwrap();
 
@@ -72,8 +72,8 @@ mod test {
         let store1 = DirStore::new(root.join("store1")).await.unwrap();
         let mut store = Router::new();
 
-        store.add(0x00, 0x7f, Stores::Dir(store0));
-        store.add(0x80, 0xff, Stores::Dir(store1));
+        store.add(0x00, 0x7f, store0);
+        store.add(0x80, 0xff, store1);
 
         let cache = Cache::new(root.join("cache"), store);
 
