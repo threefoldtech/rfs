@@ -230,8 +230,9 @@ async fn container_boot(
         }
     }
 
-    if container_config.working_dir.is_some() {
-        cwd = container_config.working_dir.unwrap();
+    let working_dir = container_config.working_dir.unwrap();
+    if !working_dir.is_empty() {
+        cwd = working_dir;
     }
 
     let metadata = json!({
@@ -250,9 +251,9 @@ async fn container_boot(
 
     let toml_metadata: toml::Value = serde_json::from_str(&metadata.to_string())?;
 
-    log::debug!(
-        "Creating '.startup.toml' file from container {}",
-        container_name
+    log::info!(
+        "Creating '.startup.toml' file from container {} contains {}",
+        container_name, toml_metadata.to_string()
     );
 
     fs::write(
