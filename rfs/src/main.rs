@@ -11,8 +11,6 @@ use rfs::cache;
 use rfs::fungi;
 use rfs::store::{self, Router, Stores};
 
-use regex::Regex;
-
 mod fs;
 /// mount flists
 #[derive(Parser, Debug)]

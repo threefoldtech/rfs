@@ -253,7 +253,8 @@ async fn container_boot(
 
     log::info!(
         "Creating '.startup.toml' file from container {} contains {}",
-        container_name, toml_metadata.to_string()
+        container_name,
+        toml_metadata.to_string()
     );
 
     fs::write(
