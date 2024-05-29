@@ -48,7 +48,7 @@ If the `start-end` range is not provided a `00-FF` range is assume basically a c
 
 This is only useful because `rfs` can accept multiple stores on the command line with different and/or overlapping ranges.
 
-For example `-s 00-80=dir:///tmp/store0 -s 81-ff=dir://tmp/store1` means all keys that has prefix byte in range `[00-80]` will be written to /tmp/store0 all other keys `00-ff` will be written to store1.
+For example `-s 00-80=dir:///tmp/store0 -s 81-ff=dir:///tmp/store1` means all keys that has prefix byte in range `[00-80]` will be written to /tmp/store0 all other keys `00-ff` will be written to store1.
 
 The same range can appear multiple times, which means the blob will be replicated to all the stores that matches its key prefix.
 
