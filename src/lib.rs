@@ -61,8 +61,8 @@ mod test {
         let store1 = DirStore::new(root.join("store1")).await.unwrap();
         let mut store = Router::new();
 
-        store.add(0x00, 0x7f, Box::new(store0));
-        store.add(0x80, 0xff, Box::new(store1));
+        store.add(0x00, 0x7f, store0);
+        store.add(0x80, 0xff, store1);
 
         pack(writer, store, &source, false).await.unwrap();
 
@@ -72,8 +72,8 @@ mod test {
         let store1 = DirStore::new(root.join("store1")).await.unwrap();
         let mut store = Router::new();
 
-        store.add(0x00, 0x7f, Box::new(store0));
-        store.add(0x80, 0xff, Box::new(store1));
+        store.add(0x00, 0x7f, store0);
+        store.add(0x80, 0xff, store1);
 
         let cache = Cache::new(root.join("cache"), store);
 

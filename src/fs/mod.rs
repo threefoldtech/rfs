@@ -8,7 +8,7 @@ use crate::fungi::{
 };
 use crate::store::Store;
 
-use anyhow::{ensure, Result, Context};
+use anyhow::{ensure, Context, Result};
 use polyfuse::reply::FileAttr;
 use polyfuse::{
     op,

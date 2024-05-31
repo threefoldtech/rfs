@@ -1,9 +1,7 @@
 use super::{Error, Result, Route, Store};
 
 use anyhow::Context;
-use futures::Future;
 use s3::{creds::Credentials, error::S3Error, Bucket, Region};
-use std::pin::Pin;
 use url::Url;
 
 fn get_config<U: AsRef<str>>(u: U) -> Result<(Credentials, Region, String)> {
@@ -46,17 +44,8 @@ fn get_config<U: AsRef<str>>(u: U) -> Result<(Credentials, Region, String)> {
     ))
 }
 
-async fn make_inner(url: String) -> Result<Box<dyn Store>> {
-    let (cred, region, bucket_name) = get_config(&url)?;
-    Ok(Box::new(S3Store::new(&url, &bucket_name, region, cred)?))
-}
-
-pub fn make(url: &str) -> Pin<Box<dyn Future<Output = Result<Box<dyn Store>>>>> {
-    Box::pin(make_inner(url.into()))
-}
-
 #[derive(Clone)]
-struct S3Store {
+pub struct S3Store {
     bucket: Bucket,
     url: String,
     // this is only here as a work around for this bug https://github.com/durch/rust-s3/issues/337
@@ -67,6 +56,10 @@ struct S3Store {
 }
 
 impl S3Store {
+    pub async fn make<U: AsRef<str>>(url: &U) -> Result<S3Store> {
+        let (cred, region, bucket_name) = get_config(url.as_ref())?;
+        Ok(S3Store::new(url.as_ref(), &bucket_name, region, cred)?)
+    }
     pub fn new(url: &str, bucket_name: &str, region: Region, cred: Credentials) -> Result<Self> {
         let bucket = Bucket::new(bucket_name, region, cred)
             .context("failed instantiate bucket")?

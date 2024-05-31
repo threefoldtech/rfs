@@ -9,7 +9,7 @@ use clap::{ArgAction, Args, Parser, Subcommand};
 
 use rfs::cache;
 use rfs::fungi;
-use rfs::store::{self, Router};
+use rfs::store::{self, Router, Stores};
 
 use regex::Regex;
 
@@ -230,7 +230,7 @@ async fn fuse(opts: MountOptions) -> Result<()> {
     filesystem.mount(opts.target).await
 }
 
-async fn get_router(meta: &fungi::Reader) -> Result<Router> {
+async fn get_router(meta: &fungi::Reader) -> Result<Router<Stores>> {
     let mut router = store::Router::new();
 
     for route in meta.routes().await.context("failed to get store routes")? {
@@ -243,7 +243,7 @@ async fn get_router(meta: &fungi::Reader) -> Result<Router> {
     Ok(router)
 }
 
-async fn parse_router(urls: &[String]) -> Result<Router> {
+async fn parse_router(urls: &[String]) -> Result<Router<Stores>> {
     let mut router = Router::new();
     let pattern = r"^(?P<range>[0-9a-f]{2}-[0-9a-f]{2})=(?P<url>.+)$";
     let re = Regex::new(pattern)?;
