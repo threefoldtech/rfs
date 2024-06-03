@@ -17,6 +17,7 @@ The type of the `inode` is defined by its `mode` which is a `1:1` mapping from t
 > from the [inode manual](https://man7.org/linux/man-pages/man7/inode.7.html)
 
 ```
+
 POSIX refers to the stat.st_mode bits corresponding to the mask
 S_IFMT (see below) as the file type, the 12 bits corresponding to
 the mask 07777 as the file mode bits and the least significant 9
