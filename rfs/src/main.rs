@@ -11,8 +11,6 @@ use rfs::cache;
 use rfs::fungi;
 use rfs::store::{self, Router, Stores};
 
-use regex::Regex;
-
 mod fs;
 /// mount flists
 #[derive(Parser, Debug)]
@@ -124,7 +122,7 @@ fn pack(opts: PackOptions) -> Result<()> {
     let rt = tokio::runtime::Runtime::new()?;
 
     rt.block_on(async move {
-        let store = parse_router(opts.store.as_slice()).await?;
+        let store = store::parse_router(opts.store.as_slice()).await?;
         let meta = fungi::Writer::new(opts.meta).await?;
         rfs::pack(meta, store, opts.target, !opts.no_strip_password).await?;
 
@@ -238,41 +236,6 @@ async fn get_router(meta: &fungi::Reader) -> Result<Router<Stores>> {
             .await
             .with_context(|| format!("failed to initialize store '{}'", route.url))?;
         router.add(route.start, route.end, store);
-    }
-
-    Ok(router)
-}
-
-async fn parse_router(urls: &[String]) -> Result<Router<Stores>> {
-    let mut router = Router::new();
-    let pattern = r"^(?P<range>[0-9a-f]{2}-[0-9a-f]{2})=(?P<url>.+)$";
-    let re = Regex::new(pattern)?;
-
-    for u in urls {
-        let ((start, end), store) = match re.captures(u) {
-            None => ((0x00, 0xff), store::make(u).await?),
-            Some(captures) => {
-                let url = captures.name("url").context("missing url group")?.as_str();
-                let rng = captures
-                    .name("range")
-                    .context("missing range group")?
-                    .as_str();
-
-                let store = store::make(url).await?;
-                let range = match rng.split_once('-') {
-                    None => anyhow::bail!("invalid range format"),
-                    Some((low, high)) => (
-                        u8::from_str_radix(low, 16)
-                            .with_context(|| format!("failed to parse low range '{}'", low))?,
-                        u8::from_str_radix(high, 16)
-                            .with_context(|| format!("failed to parse high range '{}'", high))?,
-                    ),
-                };
-                (range, store)
-            }
-        };
-
-        router.add(start, end, store);
     }
 
     Ok(router)

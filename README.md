@@ -22,9 +22,13 @@ rustup target add x86_64-unknown-linux-musl
 cargo build --features build-binary --release --target=x86_64-unknown-linux-musl
 ```
 
-the rfs binary will be available under `./target/x86_64-unknown-linux-musl/release/rfs` you can copy that binary then to `/usr/bin/`
-to be able to use from anywhere on your system.
+The rfs binary will be available under `./target/x86_64-unknown-linux-musl/release/rfs`
+
+The docker2fl binary will be available under `./target/x86_64-unknown-linux-musl/release/docker2fl`
+
+you can copy the binaries then to `/usr/bin/` to be able to use from anywhere on your system.
 
 ## Binaries and libraries
 
 -   [rfs](./rfs/README.md)
+-   [docker2fl](./docker2fl/README.md)

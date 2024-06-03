@@ -4,9 +4,11 @@ mod router;
 pub mod s3store;
 pub mod zdb;
 
+use anyhow::Context;
 use rand::seq::SliceRandom;
 
 pub use bs::BlockStore;
+use regex::Regex;
 
 pub use self::router::Router;
 
@@ -161,6 +163,42 @@ where
         routes
     }
 }
+
+pub async fn parse_router(urls: &[String]) -> anyhow::Result<Router<Stores>> {
+    let mut router = Router::new();
+    let pattern = r"^(?P<range>[0-9a-f]{2}-[0-9a-f]{2})=(?P<url>.+)$";
+    let re = Regex::new(pattern)?;
+
+    for u in urls {
+        let ((start, end), store) = match re.captures(u) {
+            None => ((0x00, 0xff), make(u).await?),
+            Some(captures) => {
+                let url = captures.name("url").context("missing url group")?.as_str();
+                let rng = captures
+                    .name("range")
+                    .context("missing range group")?
+                    .as_str();
+
+                let store = make(url).await?;
+                let range = match rng.split_once('-') {
+                    None => anyhow::bail!("invalid range format"),
+                    Some((low, high)) => (
+                        u8::from_str_radix(low, 16)
+                            .with_context(|| format!("failed to parse low range '{}'", low))?,
+                        u8::from_str_radix(high, 16)
+                            .with_context(|| format!("failed to parse high range '{}'", high))?,
+                    ),
+                };
+                (range, store)
+            }
+        };
+
+        router.add(start, end, store);
+    }
+
+    Ok(router)
+}
+
 pub enum Stores {
     S3(s3store::S3Store),
     Dir(dir::DirStore),
