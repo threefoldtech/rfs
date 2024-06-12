@@ -1,18 +1,6 @@
 #!/bin/bash
 
-set -ex 
-
-if [ -z ${MNEMONIC+x} ]
-then
-    echo 'Error! $MNEMONIC is required.'
-    exit 64
-fi
-
-if [ -z ${NETWORK+x} ]
-then
-    echo 'Error! $NETWORK is required.'
-    exit 64
-fi
+set -ex
 
 if [ -z ${DOMAIN+x} ]
 then
@@ -20,21 +8,9 @@ then
     exit 64
 fi
 
-echo MNEMONIC=$MNEMONIC
-echo NETWORK=$NETWORK
+# Deploy a vm for garage server with mycelium and public IP for s3 server TODO: mycelium and remove public IP
 
-# Install tfcmd to deploy vms
-
-wget https://github.com/threefoldtech/tfgrid-sdk-go/releases/download/v0.15.5/tfgrid-sdk-go_Linux_x86_64.tar.gz
-mkdir tfgrid-sdk-go
-tar -xzf tfgrid-sdk-go_Linux_x86_64.tar.gz -C tfgrid-sdk-go
-mv tfgrid-sdk-go/tfcmd /usr/bin/
-rm -rf tfgrid-sdk-go_Linux_x86_64.tar.gz tfgrid-sdk-go
-printf "$MNEMONIC\n$NETWORK\n" | tfcmd login
-
-# Deploy a vm with mycelium and public IP (mycelium not suppoerted yet) for s3 server TODO: mycelium and remove public IP
-
-tfcmd deploy vm --name s3_server --ssh ~/.ssh/id_rsa.pub --cpu 8 --memory 16 --disk 50 --ipv4
+tfcmd deploy vm --name s3_server --ssh ~/.ssh/id_rsa.pub --cpu 8 --memory 16 --disk 50 --ipv4 --rootfs 10
 sleep 6 # wait deployment
 OUTPUT=$(tfcmd get vm s3_server 2>&1 | tail -n +3 | tr { '\n' | tr , '\n' | tr } '\n')
 MYCELIUM_IP=$(echo "$OUTPUT" | grep -Eo '"mycelium_ip"[^,]*' | awk  -F'"' '{print $4}')
@@ -42,7 +18,8 @@ PUBLIC_IP=$(echo "$OUTPUT" | grep -Eo '"computedip"[^,]*' | awk  -F'"' '{print $
 
 # Deploy a name gateway to expose a domain for garage web
 
-tfcmd deploy gateway name -n $DOMAIN --backends http://$PUBLIC_IP:3902
+tfcmd deploy gateway name -n flist.$DOMAIN --backends http://$PUBLIC_IP:3902
+tfcmd deploy gateway name -n blobs.$DOMAIN --backends http://$PUBLIC_IP:3902
 sleep 6 # wait deployment
 OUTPUT=$(tfcmd get gateway name $DOMAIN 2>&1 | tail -n +3 | tr { '\n' | tr , '\n' | tr } '\n')
 FQDN=$(echo "$OUTPUT" | grep -Eo '"FQDN"[^,]*' | awk  -F'"' '{print $4}')
