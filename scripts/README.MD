@@ -1,4 +1,4 @@
-# Garage s3 server with flists
+# Garage s3 server with flist
 
 ## Requirements
 
@@ -7,8 +7,9 @@
 - rust
 - docker
 - git
-- sqllite
-- aws-cli (or any client you want to use)
+- sqlite
+- minio (or any third-party tool you want to use)
+- caddy
 
 ### Install tfcmd
 
@@ -64,20 +65,31 @@ mv ./target/x86_64-unknown-linux-musl/release/docker2fl /usr/local/bin
 mv ./target/x86_64-unknown-linux-musl/release/rfs /usr/local/bin
 ```
 
-### Install sqllite
+### Install sqlite
 
 ```bash
 apt update
 apt install sqlite3 
 ```
 
-### Install aws-cli
+### Install minio
 
 ```bash
-apt-get install unzip
-curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-unzip awscliv2.zip
-./aws/install
+curl https://dl.min.io/client/mc/release/linux-amd64/mc \
+  --create-dirs \
+  -o $HOME/minio-binaries/mc
+chmod +x $HOME/minio-binaries/mc
+export PATH=$PATH:$HOME/minio-binaries/
+```
+
+### Install Caddy
+
+```bash
+sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo apt update
+sudo apt install caddy
 ```
 
 ## Usage
@@ -94,10 +106,9 @@ chmod +x deploy_garage.sh
 
 This script includes:
 
-1. Deploy a vm with mycelium IP and public IP to run garage s3 server over it.
-2. Deploy 2 name gateways for the chosen domain, one to serve the `flist` and the other one for the `blobs`. In the end we should have `flist.$DOMAIN.gateway_domain` and `blobs.$DOMAIN.gateway_domain`
-3. Install garage in the vm and add the `domain FQDN from your name gateway -.$DOMAIN.gateway_domain-` to `s3 web root_domain` to be able to serve the server buckets.
-4. Run the garage server with the given configuration.
+1. Deploy a vm with mycelium IP to run garage s3 server over it.
+2. Install garage in the vm.
+3. Run the garage server with the given configuration.
 
 ### Manage buckets in garage server
 
@@ -113,12 +124,12 @@ This script includes:
 
 1. Create 2 buckets in garage server one for `flist` and the other for `blobs`.
 2. Allow web for both buckets to be able to serve them.
-3. Create 2 keys one for write and the othe for read only. The `write-key` will be used to upload the flist and the blobs through rfs. The `read-key` should be updated for flist and blobs to prevent updating them.
+3. Create 2 keys one for write and the other for read only. The `write-key` will be used to upload the flist and the blobs through rfs. The `read-key` should be updated for flist and blobs to prevent updating them.
 4. Adding the keys with their permissions to the bucket.
 
 > *NOTE:*  Don't forget to save your read and write keys (ID and secret).
 
-### Convert docker images to flists
+### Convert docker images to flist and upload it
 
 - Convert your image to an flist, The content will be uploaded over blobs buckets
 
@@ -126,9 +137,9 @@ This script includes:
 export IMAGE=<"Your image for example `threefolddev/ubuntu:22.04`">
 export WRITE_KEY_ID=<"your key ID">
 export WRITE_KEY_SECRET=<"your key secret">
-export PUBLIC_IP=<"your machine public IP which has your garage server">
+export MYCELIUM_IP=<"your machine mycelium IP which has your garage server">
 
-docker2fl -i <Image name> -s 's3://$WRITE_KEY_ID:$WRITE_KEY_SECRET@$PUBLIC_IP:3900/blobs?region=garage'
+docker2fl -i $IMAGE -s 's3://$WRITE_KEY_ID:$WRITE_KEY_SECRET@$[$MYCELIUM_IP]:3900/blobs?region=garage'
 ```
 
 - Update the key to the read only key
@@ -136,20 +147,52 @@ docker2fl -i <Image name> -s 's3://$WRITE_KEY_ID:$WRITE_KEY_SECRET@$PUBLIC_IP:39
 ```bash
 sqlite3 
 .open "<your flist file name>"
-update route set url="s3://<your read key ID>:<your read key secret>@<your vm public IP>:3900/blobs?region=garage"
+update route set url="s3://<your read key ID>:<your read key secret>@[<your vm mycelium IP>]:3900/blobs?region=garage"
 ```
 
-- Upload your flist to flist bucket using aws (you can use any other client).
+- Upload your flist to flist bucket using minio (you can use any other client).
 
 ```bash
-export AWS_ACCESS_KEY_ID=$WRITE_KEY_ID   
-export AWS_SECRET_ACCESS_KEY=$WRITE_KEY_SECRET
-export AWS_DEFAULT_REGION='garage'
-export AWS_ENDPOINT_URL='http://$PUBLIC_IP:3900'
+mc alias set \
+  garage \
+  "http://[$MYCELIUM_IP]:3900" \
+  "$WRITE_KEY_ID" \
+  "$WRITE_KEY_SECRET" \
+  --api S3v4
 
 export FLIST_NAME=<"your flist name">
 
-aws s3 cp $FLIST_NAME "s3://flist/$FLIST_NAME"
+mc cp $FLIST_NAME "s3://flist/$FLIST_NAME"
 ```
 
-Finally, you can get your flist using `https://flist.$DOMAIN.gateway_domain/<your flist file name>`.
+### Serve the flist
+
+- Deploy a name gateway for any domain you want and get the fqdn
+
+```bash
+tfcmd deploy gateway name -n "<domain name>" --backends http://[$MYCELIUM_IP]:80
+```
+
+- Create Caddyfile
+
+```Caddyfile
+http://<fqdn> {
+  route /flists/* {
+      uri strip_prefix /flists
+      reverse_proxy http://127.0.0.1:3902 {
+          header_up Host "flist"
+      }
+  }
+  route /blobs/* {
+      uri strip_prefix /blobs
+      reverse_proxy http://127.0.0.1:3902 {
+          header_up Host "blobs"
+      }
+  }
+}
+```
+
+- Run `caddy run`
+  
+Finally, you can get your flist using `https://<fqdn>/flists/<your flist file name>`.
+and get your blobs using `https://<fqdn>/blobs/<your blob file name>`.
