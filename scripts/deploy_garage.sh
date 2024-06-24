@@ -2,12 +2,6 @@
 
 set -ex
 
-if [ -z ${DOMAIN+x} ]
-then
-    echo 'Error! $DOMAIN is required.'
-    exit 64
-fi
-
 # Deploy a vm for garage server with mycelium for s3 server
 
 tfcmd deploy vm --name s3_server --ssh ~/.ssh/id_rsa.pub --cpu 8 --memory 16 --disk 50 --rootfs 10
@@ -40,7 +34,7 @@ root_domain = '.s3.garage.localhost'
 
 [s3_web]
 bind_addr = '[::]:3902'
-root_domain = ".web.garage.localhost"
+root_domain = '.web.garage.localhost'
 index = 'index.html'
 
 [k2v_api]

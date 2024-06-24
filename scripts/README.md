@@ -62,7 +62,6 @@ cd rfs
 rustup target add x86_64-unknown-linux-musl
 cargo build --features build-binary --release --target=x86_64-unknown-linux-musl
 mv ./target/x86_64-unknown-linux-musl/release/docker2fl /usr/local/bin
-mv ./target/x86_64-unknown-linux-musl/release/rfs /usr/local/bin
 ```
 
 ### Install sqlite
@@ -99,7 +98,6 @@ sudo apt install caddy
 Run garage server using garage server [script](./deploy_garage.sh)
 
 ```bash
-export DOMAIN=<"your domain name for example threefold">
 chmod +x deploy_garage.sh
 ./deploy_garage.sh
 ```
@@ -115,7 +113,7 @@ This script includes:
 Manage your buckets using manage buckets [script](./manage_buckets.sh)
 
 ```bash
-export DOMAIN=<"your domain name for example 'threefold'">
+export MYCELIUM_IP=<"your machine mycelium IP which has your garage server">
 chmod +x manage_buckets.sh
 ./manage_buckets.sh
 ```
@@ -144,8 +142,8 @@ docker2fl -i $IMAGE -s 's3://$WRITE_KEY_ID:$WRITE_KEY_SECRET@$[$MYCELIUM_IP]:390
 
 - Update the key to the read only key
 
-```bash
-sqlite3 
+```bash TODO:
+sqlite3
 .open "<your flist file name>"
 update route set url="s3://<your read key ID>:<your read key secret>@[<your vm mycelium IP>]:3900/blobs?region=garage"
 ```
@@ -153,6 +151,7 @@ update route set url="s3://<your read key ID>:<your read key secret>@[<your vm m
 - Upload your flist to flist bucket using minio (you can use any other client).
 
 ```bash
+export PATH=$PATH:$HOME/minio-binaries/
 mc alias set \
   garage \
   "http://[$MYCELIUM_IP]:3900" \
