@@ -938,6 +938,33 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8fcfdc7a0362c9f4444381a9e697c79d435fe65b52a37466fc2c1184cee9edc6"
 
 [[package]]
+name = "fl-server"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "bollard",
+ "chrono",
+ "clap",
+ "docker2fl",
+ "futures-util",
+ "git-version",
+ "log",
+ "regex",
+ "rfs",
+ "serde",
+ "serde_json",
+ "simple_logger",
+ "tempdir",
+ "tokio",
+ "tokio-async-drop",
+ "toml",
+ "tower",
+ "tower-http",
+ "uuid",
+]
+
+[[package]]
 name = "flate2"
 version = "1.0.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
