@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block title %}Error Occured when listing directory for {{ cur_path }}{% endblock %}
+
+{% block content %}
+  <h1>Error</h1>
+
+  <hr>
+
+  <dl>
+    <dt> Request Path: </dt>  <dd> <span class="directory">/{{ cur_path }}</span> </dd>
+    <dt> Error Message: </dt>  <dd> <span class="error">{{ message }} </span> </dd>
+  </dl>
+
+  <hr />
+{% endblock %}

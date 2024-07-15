@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Directory listing for /{{ cur_path }}{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+{% endblock %}
+
+
+{% block content %}
+<h1>Directory listing for <span class="directory">/{{ cur_path }}</span></h1>
+<hr>
+
+<ol>
+    {% for file in lister.files %}
+
+    {% if file.is_file %}
+			<li class="item">
+					<a class="file"
+					href="/{{ file.path_uri|urlencode }}"
+					data-src="{{ file.path_uri|urlencode }}"
+					title="{{file.name}} {{ file.last_modified|datetime }}">
+
+					<span class="fa fa-file"></span> {{file.name}}
+					</a>
+			</li>
+
+    {% else %}
+			<li>
+				<a href="{{ file.path_uri|urlencode }}/" title="{{ file.last_modified|datetime }}">
+					<span class="fa fa-folder"></span> {{file.name}}/
+				</a>
+			</li>
+    {% endif %}
+
+    {% endfor %}
+</ol>
+
+<hr>
+
+{% endblock %}
