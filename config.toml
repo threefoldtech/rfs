@@ -1,0 +1,6 @@
+host="localhost"
+port=4000
+store_url=["dir:///tmp/store0"]
+flist_dir="flists"
+version="v1"
+tokens_file_path="tokens.toml"
