@@ -18,10 +18,12 @@ use std::{
 };
 use tokio::{runtime::Builder, signal};
 use tower::ServiceBuilder;
+use tower_http::trace::TraceLayer;
 use tower_http::{add_extension::AddExtensionLayer, cors::CorsLayer};
-use tower_http::{services::ServeDir, trace::TraceLayer};
 
-use crate::handler::{create_flist_handler, get_flist_state_handler, health_check_handler};
+use crate::handler::{
+    create_flist_handler, get_flist_state_handler, get_flists, health_check_handler,
+};
 
 #[derive(Parser, Debug)]
 #[clap(name ="fl-server", author, version = env!("GIT_VERSION"), about, long_about = None)]
@@ -36,7 +38,11 @@ struct Options {
 }
 
 fn main() -> Result<()> {
-    let rt = Builder::new_multi_thread().thread_stack_size(8 * 1024 * 1024).enable_all().build().unwrap();
+    let rt = Builder::new_multi_thread()
+        .thread_stack_size(8 * 1024 * 1024)
+        .enable_all()
+        .build()
+        .unwrap();
     rt.block_on(app())
 }
 
@@ -81,17 +87,7 @@ async fn app() -> Result<()> {
             &format!("/{}/api/fl/:job_id", config.version),
             get(get_flist_state_handler),
         )
-        // TODO: add username to the flist path
-        // .nest_service(
-        //     &format!("/{}/api/fl/:name", config.version),
-        //     get(get_flist_handler),
-        // )
-        .nest_service(
-            "/flists", ServeDir::new("/")
-            // &format!("/{}/username", config.flist_dir),
-            // "/fsDir::new(&config.flist_dir),
-        )
-        // Add middleware to all routes
+        .route(&format!("/{}/*path", config.flist_dir), get(get_flists))
         .layer(
             ServiceBuilder::new()
                 // Handle errors from middleware
@@ -101,7 +97,6 @@ async fn app() -> Result<()> {
                 .timeout(Duration::from_secs(10))
                 .layer(TraceLayer::new_for_http()),
         )
-        // .layer(Extension(sender))
         .layer(AddExtensionLayer::new(config.clone()))
         .with_state(Arc::clone(&app_state))
         .layer(cors);
