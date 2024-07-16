@@ -1,10 +1,12 @@
+mod auth;
 mod config;
-mod handler;
+mod handlers;
 
 use anyhow::{Context, Result};
 use axum::{
     error_handling::HandleErrorLayer,
     http::StatusCode,
+    middleware,
     response::IntoResponse,
     routing::{get, post},
     BoxError, Router,
@@ -20,10 +22,6 @@ use tokio::{runtime::Builder, signal};
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 use tower_http::{add_extension::AddExtensionLayer, cors::CorsLayer};
-
-use crate::handler::{
-    create_flist_handler, get_flist_state_handler, get_flists, health_check_handler,
-};
 
 #[derive(Parser, Debug)]
 #[clap(name ="fl-server", author, version = env!("GIT_VERSION"), about, long_about = None)]
@@ -77,17 +75,33 @@ async fn app() -> Result<()> {
     let app = Router::new()
         .route(
             &format!("/{}/api", config.version),
-            get(health_check_handler),
+            get(handlers::health_check_handler),
+        )
+        .route(
+            &format!("/{}/api/signin", config.version),
+            post(auth::sign_in_handler),
         )
         .route(
             &format!("/{}/api/fl", config.version),
-            post(create_flist_handler),
+            post(handlers::create_flist_handler).layer(middleware::from_fn_with_state(
+                config.clone(),
+                auth::authorize,
+            )),
         )
         .route(
             &format!("/{}/api/fl/:job_id", config.version),
-            get(get_flist_state_handler),
+            get(handlers::get_flist_state_handler).layer(middleware::from_fn_with_state(
+                config.clone(),
+                auth::authorize,
+            )),
         )
-        .route(&format!("/{}/*path", config.flist_dir), get(get_flists))
+        .route(
+            &format!("/{}/*path", config.flist_dir),
+            get(handlers::get_flists_handler).layer(middleware::from_fn_with_state(
+                config.clone(),
+                auth::authorize,
+            )),
+        )
         .layer(
             ServiceBuilder::new()
                 // Handle errors from middleware

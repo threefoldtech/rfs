@@ -57,6 +57,7 @@ pub async fn health_check_handler() -> impl IntoResponse {
 pub async fn create_flist_handler(
     State(state): State<Arc<config::AppState>>,
     Extension(config): Extension<config::Config>,
+    Extension(username): Extension<String>,
     Json(body): Json<FlistInputs>,
 ) -> Result<String, StatusCode> {
     let credentials = Some(DockerCredentials {
@@ -75,8 +76,7 @@ pub async fn create_flist_handler(
     }
 
     let fl_name = docker_image.replace([':', '/'], "-") + ".fl";
-    // TODO: username
-    let username_dir = format!("{}/{}", config.flist_dir, "username");
+    let username_dir = format!("{}/{}", config.flist_dir, username);
     let created = fs::create_dir_all(&username_dir);
     if created.is_err() {
         log::error!(
@@ -180,9 +180,30 @@ pub async fn get_flist_state_handler(
     )
 }
 
+// TODO: add auth to templates
 #[debug_handler]
-pub async fn get_flists(req: Request<Body>) -> impl IntoResponse {
+pub async fn get_flists_handler(
+    Extension(username): Extension<String>,
+    req: Request<Body>,
+) -> impl IntoResponse {
     let path = req.uri().path().to_string();
+
+    let mut splitted_path = path.split("/");
+    let (_, _, path_username) = (
+        splitted_path.next(),
+        splitted_path.next(),
+        splitted_path.next(),
+    );
+
+    if path_username.unwrap() != username {
+        return Err(ErrorTemplate {
+            err: ResponseError::Unauthorized(
+                "You are not authorized to the specified path".to_string(),
+            ),
+            cur_path: path.to_string(),
+            message: "You are not authorized to the specified path".to_string(),
+        });
+    }
 
     return match ServeDir::new("").oneshot(req).await {
         Ok(res) => {
@@ -347,6 +368,11 @@ impl IntoResponse for ErrorTemplate {
                         resp.headers_mut()
                             .insert(FAIL_REASON_HEADER_NAME, reason.parse().unwrap());
                     }
+                    ResponseError::Unauthorized(reason) => {
+                        *resp.status_mut() = StatusCode::UNAUTHORIZED;
+                        resp.headers_mut()
+                            .insert(FAIL_REASON_HEADER_NAME, reason.parse().unwrap());
+                    }
                 }
                 resp
             }
@@ -366,4 +392,5 @@ enum ResponseError {
     BadRequest(String),
     FileNotFound(String),
     InternalError(String),
+    Unauthorized(String),
 }

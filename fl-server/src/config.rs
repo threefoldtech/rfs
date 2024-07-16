@@ -1,7 +1,8 @@
-use crate::handler::FlistState;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fs, sync::Mutex};
+
+use crate::{auth, handlers};
 
 #[derive(Debug, Clone, Serialize, Eq, Hash, PartialEq)]
 pub struct JobID(pub String);
@@ -9,7 +10,7 @@ pub struct JobID(pub String);
 // add configs
 #[derive(Debug)]
 pub struct AppState {
-    pub jobs_state: Mutex<HashMap<JobID, FlistState>>,
+    pub jobs_state: Mutex<HashMap<JobID, handlers::FlistState>>,
 }
 
 #[derive(Debug, Default, Clone, Deserialize)]
@@ -20,8 +21,10 @@ pub struct Config {
     pub flist_dir: String,
     pub version: String,
 
-    // TODO: add token for every username
-    pub tokens_file_path: String,
+    pub jwt_secret: String,
+    pub jwt_expire: i64,
+
+    pub users: Vec<auth::User>,
 }
 
 // TODO: validate

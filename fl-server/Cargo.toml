@@ -17,7 +17,7 @@ anyhow = "1.0.44"
 regex = "1.9.6"
 rfs = { path = "../rfs"}
 docker2fl = { path = "../docker2fl"}
-tokio = { version = "1", features = [ "rt", "rt-multi-thread", "macros", "signal"] }
+tokio = { version = "1", features = ["full"] }
 bollard = "0.15.0"
 futures-util = "0.3"
 simple_logger = {version = "1.0.1"}
@@ -40,3 +40,5 @@ tracing = "0.1.40"
 askama = "0.12.1"
 hyper = { version = "1.4.0", features = ["server", "http1", "http2"] }
 time = { version = "0.3.36", features = ["formatting"] }
+chrono = "0.4.38"
+jsonwebtoken = "9.3.0"
