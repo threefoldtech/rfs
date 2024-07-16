@@ -2,6 +2,7 @@
 extern crate log;
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
+use std::error::Error;
 use std::io::Read;
 
 use anyhow::{Context, Result};
@@ -32,6 +33,8 @@ enum Commands {
     Pack(PackOptions),
     /// unpack (downloads) content of an FL the provided location
     Unpack(UnpackOptions),
+    /// list or modify FL metadata and stores
+    Config(ConfigOptions),
 }
 
 #[derive(Args, Debug)]
@@ -90,8 +93,42 @@ struct UnpackOptions {
     #[clap(short, long, default_value_t = false)]
     preserve_ownership: bool,
 
-    /// target directory to upload
+    /// target directory for unpacking
     target: String,
+}
+
+#[derive(Args, Debug)]
+struct ConfigOptions {
+    /// path to metadata file (flist)
+    #[clap(short, long)]
+    meta: String,
+
+    /// pair of key-values separated with '='
+    #[clap(short, long, value_parser = parse_key_val::<String, String>, number_of_values = 1)]
+    tag: Vec<(String, String)>,
+
+    /// store url in the format [xx-xx=]<url>. the range xx-xx is optional and used for
+    /// sharding. the URL is per store type, please check docs for more information
+    #[clap(short, long, action=ArgAction::Append)]
+    store: Vec<String>,
+
+    /// replace the current metadata with the provided ones
+    #[clap(long, default_value_t = true, action=ArgAction::Set)]
+    replace: bool,
+}
+
+/// Parse a single key-value pair
+fn parse_key_val<T, U>(s: &str) -> Result<(T, U), Box<dyn Error + Send + Sync + 'static>>
+where
+    T: std::str::FromStr,
+    T::Err: Error + Send + Sync + 'static,
+    U: std::str::FromStr,
+    U::Err: Error + Send + Sync + 'static,
+{
+    let pos = s
+        .find('=')
+        .ok_or_else(|| format!("invalid KEY=value: no `=` found in `{s}`"))?;
+    Ok((s[..pos].parse()?, s[pos + 1..].parse()?))
 }
 
 fn main() -> Result<()> {
@@ -115,6 +152,7 @@ fn main() -> Result<()> {
         Commands::Mount(opts) => mount(opts),
         Commands::Pack(opts) => pack(opts),
         Commands::Unpack(opts) => unpack(opts),
+        Commands::Config(opts) => config(opts),
     }
 }
 
@@ -123,7 +161,7 @@ fn pack(opts: PackOptions) -> Result<()> {
 
     rt.block_on(async move {
         let store = store::parse_router(opts.store.as_slice()).await?;
-        let meta = fungi::Writer::new(opts.meta).await?;
+        let meta = fungi::Writer::new(opts.meta, true).await?;
         rfs::pack(meta, store, opts.target, !opts.no_strip_password).await?;
 
         Ok(())
@@ -239,4 +277,24 @@ async fn get_router(meta: &fungi::Reader) -> Result<Router<Stores>> {
     }
 
     Ok(router)
+}
+
+fn config(opts: ConfigOptions) -> Result<()> {
+    let rt = tokio::runtime::Runtime::new()?;
+
+    rt.block_on(async move {
+        let writer = fungi::Writer::new(opts.meta.clone(), false)
+            .await
+            .context("failed to initialize metadata database")?;
+
+        let reader = fungi::Reader::new(opts.meta)
+            .await
+            .context("failed to initialize metadata database")?;
+
+        let store = store::parse_router(opts.store.as_slice()).await?;
+
+        rfs::config(writer, reader, store, opts.tag, opts.store, opts.replace).await?;
+
+        Ok(())
+    })
 }

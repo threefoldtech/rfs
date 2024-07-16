@@ -9,6 +9,8 @@ mod pack;
 pub use pack::pack;
 mod unpack;
 pub use unpack::unpack;
+mod config;
+pub use config::config;
 
 const PARALLEL_UPLOAD: usize = 10; // number of files we can upload in parallel
 
@@ -53,7 +55,7 @@ mod test {
         }
 
         println!("file generation complete");
-        let writer = meta::Writer::new(root.join("meta.fl")).await.unwrap();
+        let writer = meta::Writer::new(root.join("meta.fl"), true).await.unwrap();
 
         // while we at it we can already create 2 stores and create a router store on top
         // of that.

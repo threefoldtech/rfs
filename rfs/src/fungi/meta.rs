@@ -277,6 +277,14 @@ impl Reader {
         Ok(value.map(|v| v.0))
     }
 
+    pub async fn tags(&self) -> Result<Vec<(String, String)>> {
+        let tags: Vec<(String, String)> = sqlx::query_as("select key, value from tag;")
+            .fetch_all(&self.pool)
+            .await?;
+
+        Ok(tags)
+    }
+
     pub async fn routes(&self) -> Result<Vec<Route>> {
         let results: Vec<Route> = sqlx::query_as("select start, end, url from route;")
             .fetch_all(&self.pool)
@@ -340,8 +348,10 @@ pub struct Writer {
 
 impl Writer {
     /// create a new mkondo writer
-    pub async fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let _ = tokio::fs::remove_file(&path).await;
+    pub async fn new<P: AsRef<Path>>(path: P, remove: bool) -> Result<Self> {
+        if remove {
+            let _ = tokio::fs::remove_file(&path).await;
+        }
 
         let opts = SqliteConnectOptions::new()
             .create_if_missing(true)
@@ -409,9 +419,19 @@ impl Writer {
     }
 
     pub async fn tag<V: AsRef<str>>(&self, tag: Tag<'_>, value: V) -> Result<()> {
-        sqlx::query("insert into tag (key, value) values (?, ?);")
+        sqlx::query("insert or replace into tag (key, value) values (?, ?);")
             .bind(tag.key())
             .bind(value.as_ref())
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+    pub async fn delete_tags(&self) -> Result<()> {
+        sqlx::query("delete from tag;").execute(&self.pool).await?;
+        Ok(())
+    }
+    pub async fn delete_routes(&self) -> Result<()> {
+        sqlx::query("delete from route;")
             .execute(&self.pool)
             .await?;
         Ok(())
@@ -425,7 +445,7 @@ mod test {
     #[tokio::test]
     async fn test_inode() {
         const PATH: &str = "/tmp/inode.fl";
-        let meta = Writer::new(PATH).await.unwrap();
+        let meta = Writer::new(PATH, true).await.unwrap();
 
         let ino = meta
             .inode(Inode {
@@ -449,7 +469,7 @@ mod test {
     #[tokio::test]
     async fn test_get_children() {
         const PATH: &str = "/tmp/children.fl";
-        let meta = Writer::new(PATH).await.unwrap();
+        let meta = Writer::new(PATH, true).await.unwrap();
 
         let ino = meta
             .inode(Inode {
@@ -486,7 +506,7 @@ mod test {
     #[tokio::test]
     async fn test_get_block() {
         const PATH: &str = "/tmp/block.fl";
-        let meta = Writer::new(PATH).await.unwrap();
+        let meta = Writer::new(PATH, true).await.unwrap();
         let hash: [u8; ID_LEN] = [
             1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
             25, 26, 27, 28, 29, 30, 31, 32,
@@ -509,7 +529,7 @@ mod test {
     #[tokio::test]
     async fn test_get_tag() {
         const PATH: &str = "/tmp/tag.fl";
-        let meta = Writer::new(PATH).await.unwrap();
+        let meta = Writer::new(PATH, true).await.unwrap();
         meta.tag(Tag::Version, "0.1").await.unwrap();
         meta.tag(Tag::Author, "azmy").await.unwrap();
         meta.tag(Tag::Custom("custom"), "value").await.unwrap();
@@ -535,7 +555,7 @@ mod test {
     #[tokio::test]
     async fn test_get_routes() {
         const PATH: &str = "/tmp/route.fl";
-        let meta = Writer::new(PATH).await.unwrap();
+        let meta = Writer::new(PATH, true).await.unwrap();
 
         meta.route(0, 128, "zdb://hub1.grid.tf").await.unwrap();
         meta.route(129, 255, "zdb://hub2.grid.tf").await.unwrap();
@@ -560,7 +580,7 @@ mod test {
     #[tokio::test]
     async fn test_walk() {
         const PATH: &str = "/tmp/walk.fl";
-        let meta = Writer::new(PATH).await.unwrap();
+        let meta = Writer::new(PATH, true).await.unwrap();
 
         let parent = meta
             .inode(Inode {
