@@ -34,7 +34,15 @@ impl DirStore {
 #[async_trait::async_trait]
 impl Store for DirStore {
     async fn get(&self, key: &[u8]) -> Result<Vec<u8>> {
-        let path = self.root.join(hex::encode(key));
+        let file_name = hex::encode(key);
+        let dir_path = self.root.join(&file_name[0..2]);
+
+        let path = match fs::try_exists(dir_path.clone()).await {
+            Ok(true) => dir_path.join(file_name),
+            Ok(false) => self.root.join(file_name),
+            Err(e) => return Err(Error::IO(e)),
+        };
+
         let data = match fs::read(&path).await {
             Ok(data) => data,
             Err(err) if err.kind() == ErrorKind::NotFound => {
@@ -49,9 +57,13 @@ impl Store for DirStore {
     }
 
     async fn set(&self, key: &[u8], blob: &[u8]) -> Result<()> {
-        let path = self.root.join(hex::encode(key));
+        let file_name = hex::encode(key);
+        let dir_path = self.root.join(&file_name[0..2]);
 
-        fs::write(path, blob).await?;
+        fs::create_dir_all(dir_path.clone()).await?;
+
+        let file_path = dir_path.join(file_name);
+        fs::write(file_path, blob).await?;
         Ok(())
     }
 
