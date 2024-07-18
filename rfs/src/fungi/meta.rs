@@ -268,6 +268,14 @@ impl Reader {
         Ok(results)
     }
 
+    pub async fn all_blocks(&self) -> Result<Vec<Block>> {
+        let results: Vec<Block> = sqlx::query_as("select id, key from block;")
+            .fetch_all(&self.pool)
+            .await?;
+
+        Ok(results)
+    }
+
     pub async fn tag(&self, tag: Tag<'_>) -> Result<Option<String>> {
         let value: Option<(String,)> = sqlx::query_as("select value from tag where key = ?;")
             .bind(tag.key())

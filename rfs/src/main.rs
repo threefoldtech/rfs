@@ -32,6 +32,8 @@ enum Commands {
     Pack(PackOptions),
     /// unpack (downloads) content of an FL the provided location
     Unpack(UnpackOptions),
+    /// clone copies the data from the stores of an FL to another stores
+    Clone(CloneOptions),
 }
 
 #[derive(Args, Debug)]
@@ -94,6 +96,22 @@ struct UnpackOptions {
     target: String,
 }
 
+#[derive(Args, Debug)]
+struct CloneOptions {
+    /// path to metadata file (flist)
+    #[clap(short, long)]
+    meta: String,
+
+    /// store url in the format [xx-xx=]<url>. the range xx-xx is optional and used for
+    /// sharding. the URL is per store type, please check docs for more information
+    #[clap(short, long, action=ArgAction::Append)]
+    store: Vec<String>,
+
+    /// directory used as cache for downloaded file chunks
+    #[clap(short, long, default_value_t = String::from("/tmp/cache"))]
+    cache: String,
+}
+
 fn main() -> Result<()> {
     let opts = Options::parse();
 
@@ -115,6 +133,7 @@ fn main() -> Result<()> {
         Commands::Mount(opts) => mount(opts),
         Commands::Pack(opts) => pack(opts),
         Commands::Unpack(opts) => unpack(opts),
+        Commands::Clone(opts) => clone(opts),
     }
 }
 
@@ -239,4 +258,22 @@ async fn get_router(meta: &fungi::Reader) -> Result<Router<Stores>> {
     }
 
     Ok(router)
+}
+
+fn clone(opts: CloneOptions) -> Result<()> {
+    let rt = tokio::runtime::Runtime::new()?;
+
+    rt.block_on(async move {
+        let store = store::parse_router(opts.store.as_slice()).await?;
+        let meta = fungi::Reader::new(opts.meta)
+            .await
+            .context("failed to initialize metadata database")?;
+
+        let router = get_router(&meta).await?;
+
+        let cache = cache::Cache::new(opts.cache, router);
+        rfs::clone(meta, store, cache).await?;
+
+        Ok(())
+    })
 }
