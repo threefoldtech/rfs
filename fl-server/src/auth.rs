@@ -10,10 +10,9 @@ use axum_macros::debug_handler;
 use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, TokenData, Validation};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use crate::config;
-
-// TODO: enhance responses
 
 #[derive(Serialize, Deserialize)]
 pub struct Claims {
@@ -22,13 +21,22 @@ pub struct Claims {
     pub username: String, // Username associated with the token
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct SignInData {
     pub username: String,
     pub password: String,
 }
 
-// TODO: validate json bodies
+#[utoipa::path(
+    post,
+    path = "/v1/api/signin",
+    request_body = SignInData,
+    responses(
+        (status = 200, description = "User signed in successfully", body = String),
+        (status = 500, description = "Internal server error"),
+        (status = 401, description = "Unauthorized user"),
+    )
+)]
 #[debug_handler]
 pub async fn sign_in_handler(
     Extension(cfg): Extension<config::Config>,
@@ -56,6 +64,7 @@ pub async fn sign_in_handler(
             message: "Internal server error".to_string(),
             status_code: StatusCode::INTERNAL_SERVER_ERROR,
         })?;
+
     Ok(Json(token))
 }
 
@@ -98,7 +107,9 @@ pub fn decode_jwt(jwt_token: String, jwt_secret: String) -> Result<TokenData<Cla
     result
 }
 
+#[derive(ToSchema)]
 pub struct AuthError {
+    // TODO:
     message: String,
     status_code: StatusCode,
 }

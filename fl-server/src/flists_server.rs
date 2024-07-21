@@ -1,10 +1,7 @@
 use askama::Template;
-use axum::{
-    response::{Html, Response},
-    Extension, Json,
-};
+use axum::response::{Html, Response};
 use serde::Serialize;
-use std::{collections::HashMap, path::PathBuf};
+use std::path::PathBuf;
 use tokio::io;
 use tower::util::ServiceExt;
 use tower_http::services::ServeDir;
@@ -18,75 +15,6 @@ use axum::{
 use axum_macros::debug_handler;
 use percent_encoding::percent_decode;
 
-use crate::config;
-
-#[utoipa::path(
-	get,
-	path = "/v1/api/fl",
-	responses(
-        (status = 200, description = "listing flists", body = Vec<FileInfo>),
-        (status = 40x, description = "listing flists error", body = ResponseError)
-	),
-	params(
-		("path" = String, Path, description = "flist path")
-	)
-)]
-#[debug_handler]
-pub async fn list_flists_handler(Extension(cfg): Extension<config::Config>) -> impl IntoResponse {
-    let mut flists: HashMap<String, Vec<FileInfo>> = HashMap::new();
-
-    let rs = visit_dir_one_level(std::path::Path::new(&cfg.flist_dir)).await;
-    match rs {
-        Ok(files) => {
-            for file in files {
-                if !file.is_file {
-                    let flists_per_username =
-                        visit_dir_one_level(std::path::Path::new(&file.path_uri)).await;
-                    match flists_per_username {
-                        Ok(files) => flists.insert(file.name, files),
-                        Err(e) => {
-                            log::error!("failed to list flists per username with error: {}", e);
-                            return (
-                                StatusCode::INTERNAL_SERVER_ERROR,
-                                Json(serde_json::json!({
-                                    "msg": "Internal server error",
-                                })),
-                            );
-                        }
-                    };
-                };
-            }
-        }
-        Err(e) => {
-            log::error!("failed to list flists directory with error: {}", e);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({
-                    "msg": "Internal server error",
-                })),
-            );
-        }
-    }
-
-    (
-        StatusCode::OK,
-        Json(serde_json::json!({
-            "flists": flists,
-        })),
-    )
-}
-
-#[utoipa::path(
-	get,
-	path = "/{path}",
-	responses(
-        (status = 200, description = "listing flists", body = Vec<FileInfo>),
-        (status = 40x, description = "listing flists error", body = ResponseError)
-	),
-	params(
-		("path" = String, Path, description = "flist path")
-	)
-)]
 #[debug_handler]
 pub async fn serve_flists(req: Request<Body>) -> impl IntoResponse {
     let path = req.uri().path().to_string();
@@ -149,7 +77,7 @@ pub async fn serve_flists(req: Request<Body>) -> impl IntoResponse {
     };
 }
 
-async fn visit_dir_one_level(path: &std::path::Path) -> io::Result<Vec<FileInfo>> {
+pub async fn visit_dir_one_level(path: &std::path::Path) -> io::Result<Vec<FileInfo>> {
     let mut dir = tokio::fs::read_dir(path).await?;
     let mut files: Vec<FileInfo> = Vec::new();
 
@@ -215,12 +143,12 @@ struct DirLister {
     files: Vec<FileInfo>,
 }
 
-#[derive(Serialize)]
-struct FileInfo {
-    name: String,
-    path_uri: String,
-    is_file: bool,
-    last_modified: i64,
+#[derive(Serialize, ToSchema)]
+pub struct FileInfo {
+    pub name: String,
+    pub path_uri: String,
+    pub is_file: bool,
+    pub last_modified: i64,
 }
 
 #[derive(Template)]
@@ -270,7 +198,6 @@ impl IntoResponse for ErrorTemplate {
     }
 }
 
-#[derive(ToSchema)]
 enum ResponseError {
     BadRequest(String),
     FileNotFound(String),

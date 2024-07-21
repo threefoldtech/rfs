@@ -13,6 +13,10 @@ use axum::{
     BoxError, Router,
 };
 use clap::{ArgAction, Parser};
+use hyper::{
+    header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE},
+    Method,
+};
 use std::{
     borrow::Cow,
     collections::HashMap,
@@ -51,7 +55,9 @@ fn main() -> Result<()> {
 
 async fn app() -> Result<()> {
     let opts = Options::parse();
-    let config = config::parse_config(&opts.config_path).context("failed to parse config file")?;
+    let config = config::parse_config(&opts.config_path)
+        .await
+        .context("failed to parse config file")?;
 
     // Set up application state for use with with_state().
     let jobs_state = Mutex::new(HashMap::new());
@@ -69,12 +75,11 @@ async fn app() -> Result<()> {
         .with_module_level("sqlx", log::Level::Error.to_level_filter())
         .init()?;
 
-    let cors = CorsLayer::new();
-    // TODO:
-    // .allow_origin("http://localhost:3000".parse::<HeaderValue>().unwrap())
-    // .allow_methods([Method::GET, Method::POST])
-    // .allow_credentials(true)
-    // .allow_headers([AUTHORIZATION, ACCEPT, CONTENT_TYPE]);
+    let cors = CorsLayer::new()
+        // .allow_origin("http://localhost:3000".parse::<HeaderValue>().unwrap())
+        .allow_methods([Method::GET, Method::POST])
+        .allow_credentials(true)
+        .allow_headers([AUTHORIZATION, ACCEPT, CONTENT_TYPE]);
 
     let v1_routes = Router::new()
         .route("/v1/api", get(handlers::health_check_handler))
@@ -93,7 +98,7 @@ async fn app() -> Result<()> {
                 auth::authorize,
             )),
         )
-        .route("/v1/api/fl", get(flists_server::list_flists_handler))
+        .route("/v1/api/fl", get(handlers::list_flists_handler))
         .route("/*path", get(flists_server::serve_flists));
 
     // TODO: add pagination
