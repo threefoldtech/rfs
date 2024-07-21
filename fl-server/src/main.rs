@@ -1,5 +1,6 @@
 mod auth;
 mod config;
+mod flists_server;
 mod handlers;
 
 use anyhow::{Context, Result};
@@ -71,37 +72,29 @@ async fn app() -> Result<()> {
     // .allow_credentials(true)
     // .allow_headers([AUTHORIZATION, ACCEPT, CONTENT_TYPE]);
 
-    // TODO: add pagination
-    let app = Router::new()
+    let v1_routes = Router::new()
+        .route("/v1/api", get(handlers::health_check_handler))
+        .route("/v1/api/signin", post(auth::sign_in_handler))
         .route(
-            &format!("/{}/api", config.version),
-            get(handlers::health_check_handler),
-        )
-        .route(
-            &format!("/{}/api/signin", config.version),
-            post(auth::sign_in_handler),
-        )
-        .route(
-            &format!("/{}/api/fl", config.version),
+            "/v1/api/fl",
             post(handlers::create_flist_handler).layer(middleware::from_fn_with_state(
                 config.clone(),
                 auth::authorize,
             )),
         )
         .route(
-            &format!("/{}/api/fl/:job_id", config.version),
+            "/v1/api/fl/:job_id",
             get(handlers::get_flist_state_handler).layer(middleware::from_fn_with_state(
                 config.clone(),
                 auth::authorize,
             )),
         )
-        .route(
-            &format!("/{}/*path", config.flist_dir),
-            get(handlers::get_flists_handler).layer(middleware::from_fn_with_state(
-                config.clone(),
-                auth::authorize,
-            )),
-        )
+        .route("/v1/api/fl", get(flists_server::list_flists_handler))
+        .route("/v1/*path", get(flists_server::get_flists_handler));
+
+    // TODO: add pagination
+    let app = Router::new()
+        .merge(v1_routes)
         .layer(
             ServiceBuilder::new()
                 // Handle errors from middleware

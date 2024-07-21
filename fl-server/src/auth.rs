@@ -13,6 +13,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::config;
 
+// TODO: enhance responses
+
 #[derive(Serialize, Deserialize)]
 pub struct Claims {
     pub exp: usize,       // Expiry time of the token
@@ -50,7 +52,7 @@ pub async fn sign_in_handler(
     }
 
     let token =
-        encode_jwt(user.username, cfg.jwt_secret, cfg.jwt_expire).map_err(|_| AuthError {
+        encode_jwt(user.username, cfg.jwt_secret, cfg.jwt_expire_hours).map_err(|_| AuthError {
             message: "Internal server error".to_string(),
             status_code: StatusCode::INTERNAL_SERVER_ERROR,
         })?;

@@ -7,7 +7,6 @@ use crate::{auth, handlers};
 #[derive(Debug, Clone, Serialize, Eq, Hash, PartialEq)]
 pub struct JobID(pub String);
 
-// add configs
 #[derive(Debug)]
 pub struct AppState {
     pub jobs_state: Mutex<HashMap<JobID, handlers::FlistState>>,
@@ -16,13 +15,12 @@ pub struct AppState {
 #[derive(Debug, Default, Clone, Deserialize)]
 pub struct Config {
     pub host: String,
-    pub port: i16,
+    pub port: usize,
     pub store_url: Vec<String>,
     pub flist_dir: String,
-    pub version: String,
 
     pub jwt_secret: String,
-    pub jwt_expire: i64,
+    pub jwt_expire_hours: i64,
 
     pub users: Vec<auth::User>,
 }
