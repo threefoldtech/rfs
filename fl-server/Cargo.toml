@@ -28,8 +28,8 @@ toml = "0.4.2"
 clap = { version = "4.5.8", features = ["derive"] }
 
 serde = { version = "1.0.159" , features = ["derive"] }
-axum = { git = "https://github.com/tokio-rs/axum.git", branch = "main"}
-axum-macros = { git = "https://github.com/tokio-rs/axum.git", branch = "main"}
+axum = "0.7"
+axum-macros = "0.4.1"
 tower = { version = "0.4", features = ["util", "timeout", "load-shed", "limit"] }
 tower-http = { version = "0.5.2", features = ["fs", "cors", "add-extension", "auth", "compression-full", "trace", "limit"] }
 tokio-async-drop = "0.1.0"
@@ -38,7 +38,11 @@ mime = "0.3.17"
 percent-encoding = "2.3.1"
 tracing = "0.1.40"
 askama = "0.12.1"
-hyper = { version = "1.4.0", features = ["server", "http1", "http2"] }
+hyper = { version = "1.4.0", features = ["full"] }
 time = { version = "0.3.36", features = ["formatting"] }
 chrono = "0.4.38"
 jsonwebtoken = "9.3.0"
+
+utoipa = { version = "4", features = ["axum_extras"] }
+utoipa-swagger-ui = { version = "7", features = ["axum"] }
+utoipa-redoc = { version = "4", features = ["axum"] }

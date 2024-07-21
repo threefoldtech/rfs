@@ -8,6 +8,7 @@ use std::{collections::HashMap, path::PathBuf};
 use tokio::io;
 use tower::util::ServiceExt;
 use tower_http::services::ServeDir;
+use utoipa::ToSchema;
 
 use axum::{
     body::Body,
@@ -19,6 +20,17 @@ use percent_encoding::percent_decode;
 
 use crate::config;
 
+#[utoipa::path(
+	get,
+	path = "/v1/api/fl",
+	responses(
+        (status = 200, description = "listing flists", body = Vec<FileInfo>),
+        (status = 40x, description = "listing flists error", body = ResponseError)
+	),
+	params(
+		("path" = String, Path, description = "flist path")
+	)
+)]
 #[debug_handler]
 pub async fn list_flists_handler(Extension(cfg): Extension<config::Config>) -> impl IntoResponse {
     let mut flists: HashMap<String, Vec<FileInfo>> = HashMap::new();
@@ -64,8 +76,19 @@ pub async fn list_flists_handler(Extension(cfg): Extension<config::Config>) -> i
     )
 }
 
+#[utoipa::path(
+	get,
+	path = "/{path}",
+	responses(
+        (status = 200, description = "listing flists", body = Vec<FileInfo>),
+        (status = 40x, description = "listing flists error", body = ResponseError)
+	),
+	params(
+		("path" = String, Path, description = "flist path")
+	)
+)]
 #[debug_handler]
-pub async fn get_flists_handler(req: Request<Body>) -> impl IntoResponse {
+pub async fn serve_flists(req: Request<Body>) -> impl IntoResponse {
     let path = req.uri().path().to_string();
 
     return match ServeDir::new("").oneshot(req).await {
@@ -247,6 +270,7 @@ impl IntoResponse for ErrorTemplate {
     }
 }
 
+#[derive(ToSchema)]
 enum ResponseError {
     BadRequest(String),
     FileNotFound(String),

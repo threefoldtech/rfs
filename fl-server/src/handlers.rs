@@ -11,12 +11,26 @@ use bollard::auth::DockerCredentials;
 use serde::{Deserialize, Serialize};
 
 use rfs::fungi::Writer;
+use utoipa::{OpenApi, ToSchema};
 use uuid::Uuid;
 
 use crate::config::{self, JobID};
+use crate::flists_server::__path_list_flists_handler;
+use crate::flists_server::__path_serve_flists;
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(OpenApi)]
+#[openapi(
+    paths(health_check_handler, create_flist_handler, get_flist_state_handler, list_flists_handler, serve_flists),
+    components(schemas(FlistInputs, JobID)),
+    tags(
+        (name = "fl-server", description = "Flist conversion API")
+    )
+)]
+pub struct FlistApi;
+
+#[derive(Debug, Deserialize, Serialize, Clone, ToSchema)]
 pub struct FlistInputs {
+    #[schema(example = "redis")]
     pub image_name: String,
     pub username: Option<String>,
     pub password: Option<String>,
@@ -29,24 +43,39 @@ pub struct FlistInputs {
 
 #[derive(Debug, Clone, Serialize)]
 pub enum FlistState {
-    Accepted, // add msgs to them
+    Accepted, // TODO: add msgs to them
     Started,
-    Created, // add flist name, you can list your flists here
+    Created, // TODO: add flist name, you can list your flists here
     Failed,
     NotExists,
 }
 
+#[utoipa::path(
+    get,
+    path = "/v1/api",
+    responses(
+        (status = 200, description = "flist health check")
+    )
+)]
 pub async fn health_check_handler() -> impl IntoResponse {
     let json_response = serde_json::json!({
-        "status": "success",
         "message": "flist health check"
     });
 
     (StatusCode::OK, Json(json_response))
 }
 
+#[utoipa::path(
+    post,
+    path = "/v1/api/fl",
+    request_body = FlistInputs,
+    responses(
+        (status = 201, description = "Flist conversion started", body = [JobID])
+    )
+)]
 #[debug_handler]
 pub async fn create_flist_handler(
+    // TODO: already exists
     State(state): State<Arc<config::AppState>>,
     Extension(config): Extension<config::Config>,
     Extension(username): Extension<String>,
@@ -140,6 +169,17 @@ pub async fn create_flist_handler(
     Ok(job_id.0)
 }
 
+#[utoipa::path(
+    get,
+    path = "/v1/api/fl/{job_id}",
+    responses(
+        (status = 200, description = "flist state"),
+        (status = 404, description = "flist not found")
+    ),
+    params(
+        ("job_id" = String, Path, description = "flist job id")
+    )
+)]
 #[debug_handler]
 pub async fn get_flist_state_handler(
     Path(flist_job_id): Path<String>,
@@ -171,3 +211,4 @@ pub async fn get_flist_state_handler(
         })),
     )
 }
+// TODO: edit responses and error

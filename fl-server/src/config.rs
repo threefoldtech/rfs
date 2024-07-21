@@ -1,10 +1,11 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fs, sync::Mutex};
+use utoipa::ToSchema;
 
 use crate::{auth, handlers};
 
-#[derive(Debug, Clone, Serialize, Eq, Hash, PartialEq)]
+#[derive(Debug, Clone, Serialize, Eq, Hash, PartialEq, ToSchema)]
 pub struct JobID(pub String);
 
 #[derive(Debug)]

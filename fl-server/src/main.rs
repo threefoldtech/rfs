@@ -24,6 +24,10 @@ use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 use tower_http::{add_extension::AddExtensionLayer, cors::CorsLayer};
 
+use utoipa::OpenApi;
+use utoipa_redoc::{Redoc, Servable};
+use utoipa_swagger_ui::SwaggerUi;
+
 #[derive(Parser, Debug)]
 #[clap(name ="fl-server", author, version = env!("GIT_VERSION"), about, long_about = None)]
 struct Options {
@@ -90,10 +94,15 @@ async fn app() -> Result<()> {
             )),
         )
         .route("/v1/api/fl", get(flists_server::list_flists_handler))
-        .route("/v1/*path", get(flists_server::get_flists_handler));
+        .route("/*path", get(flists_server::serve_flists));
 
     // TODO: add pagination
     let app = Router::new()
+        .merge(
+            SwaggerUi::new("/swagger-ui")
+                .url("/api-docs/openapi.json", handlers::FlistApi::openapi()),
+        )
+        .merge(Redoc::with_url("/redoc", handlers::FlistApi::openapi()))
         .merge(v1_routes)
         .layer(
             ServiceBuilder::new()
