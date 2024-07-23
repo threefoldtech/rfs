@@ -37,7 +37,7 @@ impl Store for DirStore {
         let file_name = hex::encode(key);
         let dir_path = self.root.join(&file_name[0..2]);
 
-        let path = match fs::try_exists(dir_path.clone()).await {
+        let path = match fs::try_exists(&dir_path).await {
             Ok(true) => dir_path.join(file_name),
             Ok(false) => self.root.join(file_name),
             Err(e) => return Err(Error::IO(e)),
@@ -60,7 +60,7 @@ impl Store for DirStore {
         let file_name = hex::encode(key);
         let dir_path = self.root.join(&file_name[0..2]);
 
-        fs::create_dir_all(dir_path.clone()).await?;
+        fs::create_dir_all(&dir_path).await?;
 
         let file_path = dir_path.join(file_name);
         fs::write(file_path, blob).await?;
