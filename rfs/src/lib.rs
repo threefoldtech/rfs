@@ -9,8 +9,7 @@ mod pack;
 pub use pack::pack;
 mod unpack;
 pub use unpack::unpack;
-mod config;
-pub use config::config;
+pub mod config;
 
 const PARALLEL_UPLOAD: usize = 10; // number of files we can upload in parallel
 

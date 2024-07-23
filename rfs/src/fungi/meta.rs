@@ -426,6 +426,22 @@ impl Writer {
             .await?;
         Ok(())
     }
+    pub async fn delete_tag(&self, tag: Tag<'_>) -> Result<()> {
+        sqlx::query("delete from tag where key = ?;")
+            .bind(tag.key())
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn delete_route<U: AsRef<str>>(&self, url: U) -> Result<()> {
+        sqlx::query("delete from route where url = ?;")
+            .bind(url.as_ref())
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
     pub async fn delete_tags(&self) -> Result<()> {
         sqlx::query("delete from tag;").execute(&self.pool).await?;
         Ok(())

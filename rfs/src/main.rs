@@ -8,9 +8,9 @@ use std::io::Read;
 use anyhow::{Context, Result};
 use clap::{ArgAction, Args, Parser, Subcommand};
 
-use rfs::cache;
 use rfs::fungi;
 use rfs::store::{self, Router, Stores};
+use rfs::{cache, config};
 
 mod fs;
 /// mount flists
@@ -103,18 +103,65 @@ struct ConfigOptions {
     #[clap(short, long)]
     meta: String,
 
+    #[command(subcommand)]
+    command: ConfigCommands,
+}
+
+#[derive(Subcommand, Debug)]
+enum ConfigCommands {
+    #[command(subcommand)]
+    Tag(TagOperation),
+    #[command(subcommand)]
+    Store(StoreOperation),
+}
+
+#[derive(Subcommand, Debug)]
+enum TagOperation {
+    List,
+    Add(TagAddOptions),
+    Delete(TagDeleteOptions),
+}
+
+#[derive(Args, Debug)]
+struct TagAddOptions {
     /// pair of key-values separated with '='
     #[clap(short, long, value_parser = parse_key_val::<String, String>, number_of_values = 1)]
     tag: Vec<(String, String)>,
+}
 
+#[derive(Args, Debug)]
+struct TagDeleteOptions {
+    /// key to remove
+    #[clap(short, long, action=ArgAction::Append)]
+    key: Vec<String>,
+    /// remove all tags
+    #[clap(short, long, default_value_t = false)]
+    all: bool,
+}
+
+#[derive(Subcommand, Debug)]
+enum StoreOperation {
+    List,
+    Add(StoreAddOptions),
+    Delete(StoreDeleteOptions),
+}
+
+#[derive(Args, Debug)]
+struct StoreAddOptions {
     /// store url in the format [xx-xx=]<url>. the range xx-xx is optional and used for
     /// sharding. the URL is per store type, please check docs for more information
     #[clap(short, long, action=ArgAction::Append)]
     store: Vec<String>,
+}
 
-    /// replace the current metadata with the provided ones
-    #[clap(long, default_value_t = true, action=ArgAction::Set)]
-    replace: bool,
+#[derive(Args, Debug)]
+struct StoreDeleteOptions {
+    /// store to remove
+    #[clap(short, long, action=ArgAction::Append)]
+    store: Vec<String>,
+    /// remove all stores
+    #[clap(short, long, default_value_t = false)]
+    all: bool,
 }
 
 /// Parse a single key-value pair
@@ -291,9 +338,22 @@ fn config(opts: ConfigOptions) -> Result<()> {
             .await
             .context("failed to initialize metadata database")?;
 
-        let store = store::parse_router(opts.store.as_slice()).await?;
-
-        rfs::config(writer, reader, store, opts.tag, opts.store, opts.replace).await?;
+        match opts.command {
+            ConfigCommands::Tag(opts) => match opts {
+                TagOperation::List => config::tag_list(reader).await?,
+                TagOperation::Add(opts) => config::tag_add(writer, opts.tag).await?,
+                TagOperation::Delete(opts) => {
+                    config::tag_delete(writer, opts.key, opts.all).await?
+                }
+            },
+            ConfigCommands::Store(opts) => match opts {
+                StoreOperation::List => config::store_list(reader).await?,
+                StoreOperation::Add(opts) => config::store_add(writer, opts.store).await?,
+                StoreOperation::Delete(opts) => {
+                    config::store_delete(writer, opts.store, opts.all).await?
+                }
+            },
+        }
 
         Ok(())
     })

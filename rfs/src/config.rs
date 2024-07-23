@@ -1,27 +1,53 @@
 use crate::{
     fungi::{meta::Tag, Reader, Result, Writer},
-    store::Store,
+    store::{self, Store},
 };
 
-/// configure FL with the provided tags/stores and print the result tags/stores
-pub async fn config<S: Store>(
-    writer: Writer,
-    reader: Reader,
-    store: S,
-    tags: Vec<(String, String)>,
-    stores: Vec<String>,
-    replace: bool,
-) -> Result<()> {
-    if !tags.is_empty() && replace {
-        writer.delete_tags().await?;
+pub async fn tag_list(reader: Reader) -> Result<()> {
+    let tags = reader.tags().await?;
+    if !tags.is_empty() {
+        println!("tags:");
     }
-    if !stores.is_empty() && replace {
-        writer.delete_routes().await?;
+    for (key, value) in tags {
+        println!("\t{}={}", key, value);
     }
+    Ok(())
+}
+
+pub async fn tag_add(writer: Writer, tags: Vec<(String, String)>) -> Result<()> {
     for (key, value) in tags {
         writer.tag(Tag::Custom(key.as_str()), value).await?;
     }
+    Ok(())
+}
 
+pub async fn tag_delete(writer: Writer, keys: Vec<String>, all: bool) -> Result<()> {
+    if all {
+        writer.delete_tags().await?;
+        return Ok(());
+    }
+    for key in keys {
+        writer.delete_tag(Tag::Custom(key.as_str())).await?;
+    }
+    Ok(())
+}
+
+pub async fn store_list(reader: Reader) -> Result<()> {
+    let routes = reader.routes().await?;
+    if !routes.is_empty() {
+        println!("routes:")
+    }
+    for route in routes {
+        println!(
+            "\trange:[{}-{}] store:{}",
+            route.start, route.end, route.url
+        );
+    }
+    Ok(())
+}
+
+pub async fn store_add(writer: Writer, stores: Vec<String>) -> Result<()> {
+    let store = store::parse_router(stores.as_slice()).await?;
     for route in store.routes() {
         writer
             .route(
@@ -31,22 +57,16 @@ pub async fn config<S: Store>(
             )
             .await?;
     }
+    Ok(())
+}
 
-    let tags = reader.tags().await?;
-    if !tags.is_empty() {
-        println!("tags:");
+pub async fn store_delete(writer: Writer, stores: Vec<String>, all: bool) -> Result<()> {
+    if all {
+        writer.delete_routes().await?;
+        return Ok(());
     }
-    for (key, value) in tags {
-        println!("\t{}={}", key, value);
+    for store in stores {
+        writer.delete_route(store).await?;
     }
-
-    let routes = reader.routes().await?;
-    if !routes.is_empty() {
-        println!("routes:")
-    }
-    for route in routes {
-        println!("\trange:[{}-{}] store:{}", route.start, route.end, route.url);
-    }
-
     Ok(())
 }
