@@ -5,7 +5,11 @@ use axum::{
     Extension, Json,
 };
 use axum_macros::debug_handler;
-use std::{collections::HashMap, fs, sync::Arc};
+use std::{
+    collections::HashMap,
+    fs,
+    sync::{mpsc, Arc},
+};
 use tokio::io;
 
 use bollard::auth::DockerCredentials;
@@ -48,9 +52,16 @@ pub struct FlistInputs {
 pub enum FlistState {
     Accepted(String),
     Started(String),
+    InProgress(FlistStateInfo),
     Created(String),
     Failed(String),
     NotExists(String),
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct FlistStateInfo {
+    msg: String,
+    progress: usize,
 }
 
 #[utoipa::path(
@@ -197,7 +208,45 @@ pub async fn create_flist_handler(
             FlistState::Started(format!("flist '{}' is started", fl_name)),
         );
 
-        let res = docker2fl::convert(meta, store, &docker_image, credentials).await;
+        let container_name = Uuid::new_v4().to_string();
+        let docker_tmp_dir = tempdir::TempDir::new(&container_name).unwrap();
+        let docker_tmp_dir_path = docker_tmp_dir.path().to_owned();
+
+        let (tx, rx) = mpsc::channel();
+        let mut docker_to_fl = docker2fl::DockerImageToFlist::new(
+            meta,
+            docker_image,
+            credentials,
+            docker_tmp_dir_path.clone(),
+        );
+
+        let res = docker_to_fl.prepare().await;
+        // remove the file created with the writer if fl creation failed
+        if res.is_err() {
+            let _ = tokio::fs::remove_file(&fl_path).await;
+            state.jobs_state.lock().unwrap().insert(
+                job.id.clone(),
+                FlistState::Failed(format!("flist preparing '{}' has failed", fl_name)),
+            );
+            return;
+        }
+
+        let files_count = docker_to_fl.files_count();
+        tokio::spawn(async move {
+            for _ in 0..files_count {
+                let step = rx.recv().unwrap() as usize;
+                // state.jobs_state.lock().unwrap().insert(
+                //     job.id.clone(),
+                //     FlistState::InProgress(FlistStateInfo {
+                //         msg: "flist is in progress".to_string(),
+                //         progress: step / files_count * 100,
+                //     }),
+                // ); //TODO:
+                log::info!("val '{}'", step / files_count * 100);
+            }
+        });
+
+        let res = docker_to_fl.pack(store, Some(tx)).await;
 
         // remove the file created with the writer if fl creation failed
         if res.is_err() {
@@ -206,6 +255,7 @@ pub async fn create_flist_handler(
                 job.id.clone(),
                 FlistState::Failed(format!("flist '{}' has failed", fl_name)),
             );
+            return;
         }
 
         state.jobs_state.lock().unwrap().insert(

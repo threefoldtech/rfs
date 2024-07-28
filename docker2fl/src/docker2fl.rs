@@ -4,6 +4,8 @@ use bollard::container::{
 };
 use bollard::image::{CreateImageOptions, RemoveImageOptions};
 use bollard::Docker;
+use std::sync::mpsc::Sender;
+use walkdir::WalkDir;
 
 use anyhow::{Context, Result};
 use futures_util::stream::StreamExt;
@@ -11,14 +13,12 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::default::Default;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use tokio_async_drop::tokio_async_drop;
 
 use rfs::fungi::Writer;
 use rfs::store::Store;
-
-use uuid::Uuid;
 
 struct DockerInfo {
     image_name: String,
@@ -43,46 +43,90 @@ impl Drop for DockerInfo {
     }
 }
 
-pub async fn convert<S: Store>(
+#[derive(Clone)]
+pub struct DockerImageToFlist {
     meta: Writer,
-    store: S,
-    image_name: &str,
+    image_name: String,
     credentials: Option<DockerCredentials>,
-) -> Result<()> {
-    #[cfg(unix)]
-    let docker = Docker::connect_with_socket_defaults().context("failed to create docker")?;
+    docker_tmp_dir_path: PathBuf,
+    files_count: usize,
+}
 
-    let container_name = Uuid::new_v4().to_string();
+impl DockerImageToFlist {
+    pub fn new(
+        meta: Writer,
+        image_name: String,
+        credentials: Option<DockerCredentials>,
+        docker_tmp_dir_path: PathBuf,
+    ) -> Self {
+        DockerImageToFlist {
+            meta,
+            image_name,
+            credentials,
+            docker_tmp_dir_path,
+            files_count: 0,
+        }
+    }
 
-    let docker_tmp_dir = tempdir::TempDir::new(&container_name)?;
-    let docker_tmp_dir_path = docker_tmp_dir.path();
+    pub fn files_count(&self) -> usize {
+        self.files_count
+    }
 
-    let docker_info = DockerInfo {
-        image_name: image_name.to_owned(),
-        container_name,
-        docker,
-    };
+    pub async fn prepare(&mut self) -> Result<()> {
+        #[cfg(unix)]
+        let docker = Docker::connect_with_socket_defaults().context("failed to create docker")?;
 
-    extract_image(
-        &docker_info.docker,
-        &docker_info.image_name,
-        &docker_info.container_name,
-        docker_tmp_dir_path,
-        credentials,
-    )
-    .await
-    .context("failed to extract docker image to a directory")?;
-    log::info!(
-        "docker image '{}' is extracted successfully",
-        docker_info.image_name
-    );
+        let container_file = Path::file_stem(self.docker_tmp_dir_path.as_path()).unwrap();
+        let container_name = container_file.to_str().unwrap().to_owned();
 
-    rfs::pack(meta, store, docker_tmp_dir_path, true)
+        let docker_info = DockerInfo {
+            image_name: self.image_name.to_owned(),
+            container_name,
+            docker,
+        };
+
+        extract_image(
+            &docker_info.docker,
+            &docker_info.image_name,
+            &docker_info.container_name,
+            &self.docker_tmp_dir_path,
+            self.credentials.clone(),
+        )
+        .await
+        .context("failed to extract docker image to a directory")?;
+        log::info!(
+            "docker image '{}' is extracted successfully",
+            docker_info.image_name
+        );
+
+        self.files_count = WalkDir::new(self.docker_tmp_dir_path.as_path())
+            .into_iter()
+            .count();
+
+        Ok(())
+    }
+
+    pub async fn pack<S: Store>(&mut self, store: S, sender: Option<Sender<i32>>) -> Result<()> {
+        rfs::pack(
+            self.meta.clone(),
+            store,
+            &self.docker_tmp_dir_path,
+            true,
+            sender,
+        )
         .await
         .context("failed to pack flist")?;
 
-    log::info!("flist has been created successfully");
-    Ok(())
+        Ok(())
+    }
+
+    pub async fn convert<S: Store>(&mut self, store: S, sender: Option<Sender<i32>>) -> Result<()> {
+        self.prepare().await?;
+        self.pack(store, sender).await?;
+
+        log::info!("flist has been created successfully");
+        Ok(())
+    }
 }
 
 async fn extract_image(

@@ -8,6 +8,7 @@ use std::ffi::OsString;
 use std::fs::Metadata;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::Sender;
 use std::sync::Arc;
 use workers::WorkerPool;
 
@@ -26,6 +27,7 @@ pub async fn pack<P: Into<PathBuf>, S: Store>(
     store: S,
     root: P,
     strip_password: bool,
+    sender: Option<Sender<i32>>,
 ) -> Result<()> {
     use tokio::fs;
 
@@ -70,12 +72,13 @@ pub async fn pack<P: Into<PathBuf>, S: Store>(
         &writer,
         &mut pool,
         Item(0, root, OsString::from("/"), meta),
+        sender.clone(),
     )
     .await?;
 
     while !list.is_empty() {
         let dir = list.pop_back().unwrap();
-        pack_one(&mut list, &writer, &mut pool, dir).await?;
+        pack_one(&mut list, &writer, &mut pool, dir, sender.clone()).await?;
     }
 
     pool.close().await;
@@ -102,6 +105,7 @@ async fn pack_one<S: Store>(
     writer: &Writer,
     pool: &mut WorkerPool<Uploader<S>>,
     Item(parent, path, name, meta): Item,
+    sender: Option<Sender<i32>>,
 ) -> Result<()> {
     use std::os::unix::fs::MetadataExt;
     use tokio::fs;
@@ -174,6 +178,14 @@ async fn pack_one<S: Store>(
         worker
             .send((child_ino, child_path))
             .context("failed to schedule file upload")?;
+
+        if sender.is_some() {
+            sender
+                .clone()
+                .unwrap()
+                .send(1)
+                .context("failed to send progress")?;
+        }
     }
     Ok(())
 }

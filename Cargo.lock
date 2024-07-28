@@ -951,6 +951,7 @@ dependencies = [
  "tokio-async-drop",
  "toml",
  "uuid",
+ "walkdir",
 ]
 
 [[package]]
@@ -1061,6 +1062,7 @@ dependencies = [
  "utoipa-redoc",
  "utoipa-swagger-ui",
  "uuid",
+ "walkdir",
 ]
 
 [[package]]
