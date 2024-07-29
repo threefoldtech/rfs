@@ -1,7 +1,8 @@
 mod auth;
 mod config;
-mod flists_server;
 mod handlers;
+mod response;
+mod serve_flists;
 
 use anyhow::{Context, Result};
 use axum::{
@@ -29,7 +30,6 @@ use tower_http::trace::TraceLayer;
 use tower_http::{add_extension::AddExtensionLayer, cors::CorsLayer};
 
 use utoipa::OpenApi;
-use utoipa_redoc::{Redoc, Servable};
 use utoipa_swagger_ui::SwaggerUi;
 
 #[derive(Parser, Debug)]
@@ -55,14 +55,6 @@ fn main() -> Result<()> {
 
 async fn app() -> Result<()> {
     let opts = Options::parse();
-    let config = config::parse_config(&opts.config_path)
-        .await
-        .context("failed to parse config file")?;
-
-    // Set up application state for use with with_state().
-    let jobs_state = Mutex::new(HashMap::new());
-    let app_state = Arc::new(config::AppState { jobs_state });
-
     simple_logger::SimpleLogger::new()
         .with_utc_timestamps()
         .with_level({
@@ -75,8 +67,15 @@ async fn app() -> Result<()> {
         .with_module_level("sqlx", log::Level::Error.to_level_filter())
         .init()?;
 
+    let config = config::parse_config(&opts.config_path)
+        .await
+        .context("failed to parse config file")?;
+
+    let app_state = Arc::new(config::AppState {
+        jobs_state: Mutex::new(HashMap::new()),
+    });
+
     let cors = CorsLayer::new()
-        // .allow_origin("http://localhost:3000".parse::<HeaderValue>().unwrap())
         .allow_methods([Method::GET, Method::POST])
         .allow_credentials(true)
         .allow_headers([AUTHORIZATION, ACCEPT, CONTENT_TYPE]);
@@ -99,19 +98,16 @@ async fn app() -> Result<()> {
             )),
         )
         .route("/v1/api/fl", get(handlers::list_flists_handler))
-        .route("/*path", get(flists_server::serve_flists));
+        .route("/*path", get(serve_flists::serve_flists));
 
-    // TODO: add pagination
     let app = Router::new()
         .merge(
             SwaggerUi::new("/swagger-ui")
                 .url("/api-docs/openapi.json", handlers::FlistApi::openapi()),
         )
-        .merge(Redoc::with_url("/redoc", handlers::FlistApi::openapi()))
         .merge(v1_routes)
         .layer(
             ServiceBuilder::new()
-                // Handle errors from middleware
                 .layer(HandleErrorLayer::new(handle_error))
                 .load_shed()
                 .concurrency_limit(1024)
@@ -155,9 +151,6 @@ async fn shutdown_signal() {
             .recv()
             .await;
     };
-
-    #[cfg(not(unix))]
-    let terminate = std::future::pending::<()>();
 
     tokio::select! {
         _ = ctrl_c => {},

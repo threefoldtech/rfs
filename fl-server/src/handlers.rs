@@ -1,6 +1,5 @@
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
     response::IntoResponse,
     Extension, Json,
 };
@@ -11,10 +10,11 @@ use tokio::io;
 use bollard::auth::DockerCredentials;
 use serde::{Deserialize, Serialize};
 
-use crate::auth::{SignInData, __path_sign_in_handler};
+use crate::auth::{SignInBody, SignInResponse, __path_sign_in_handler};
 use crate::{
-    config::{self, AppState, Job},
-    flists_server::{visit_dir_one_level, FileInfo},
+    config::{self, Job},
+    response::{ResponseError, ResponseResult},
+    serve_flists::{visit_dir_one_level, FileInfo},
 };
 use rfs::fungi::Writer;
 use utoipa::{OpenApi, ToSchema};
@@ -23,7 +23,7 @@ use uuid::Uuid;
 #[derive(OpenApi)]
 #[openapi(
     paths(health_check_handler, create_flist_handler, get_flist_state_handler, list_flists_handler, sign_in_handler),
-    components(schemas(FlistInputs, Job, ResponseError, FileInfo, AppState, SignInData)),
+    components(schemas(FlistBody, Job, ResponseError, ResponseResult, FileInfo, SignInBody, FlistState, SignInResponse)),
     tags(
         (name = "fl-server", description = "Flist conversion API")
     )
@@ -31,7 +31,7 @@ use uuid::Uuid;
 pub struct FlistApi;
 
 #[derive(Debug, Deserialize, Serialize, Clone, ToSchema)]
-pub struct FlistInputs {
+pub struct FlistBody {
     #[schema(example = "redis")]
     pub image_name: String,
 
@@ -44,39 +44,35 @@ pub struct FlistInputs {
     pub registry_token: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, PartialEq, ToSchema)]
 pub enum FlistState {
     Accepted(String),
     Started(String),
     Created(String),
-    Failed(String),
-    NotExists(String),
+    Failed,
 }
 
 #[utoipa::path(
     get,
     path = "/v1/api",
     responses(
-        (status = 200, description = "flist health check")
+        (status = 200, description = "flist server is working", body = String)
     )
 )]
-pub async fn health_check_handler() -> impl IntoResponse {
-    let json_response = serde_json::json!({
-        "msg": "flist health check"
-    });
-
-    (StatusCode::OK, Json(json_response))
+pub async fn health_check_handler() -> ResponseResult {
+    ResponseResult::Health
 }
 
 #[utoipa::path(
     post,
     path = "/v1/api/fl",
-    request_body = FlistInputs,
+    request_body = FlistBody,
     responses(
         (status = 201, description = "Flist conversion started", body = Job),
-        (status = 500, description = "Internal server error", body = ResponseError),
         (status = 401, description = "Unauthorized user"),
         (status = 403, description = "Forbidden"),
+        (status = 409, description = "Conflict"),
+        (status = 500, description = "Internal server error"),
     )
 )]
 #[debug_handler]
@@ -84,7 +80,7 @@ pub async fn create_flist_handler(
     State(state): State<Arc<config::AppState>>,
     Extension(cfg): Extension<config::Config>,
     Extension(username): Extension<String>,
-    Json(body): Json<FlistInputs>,
+    Json(body): Json<FlistBody>,
 ) -> impl IntoResponse {
     let credentials = Some(DockerCredentials {
         username: body.username,
@@ -107,23 +103,12 @@ pub async fn create_flist_handler(
     match flist_exists(std::path::Path::new(&username_dir), &fl_name).await {
         Ok(exists) => {
             if exists {
-                return (
-                    StatusCode::CONFLICT,
-                    Json(ResponseError::Conflict("flist already exists".to_string())),
-                )
-                    .into_response();
+                return Err(ResponseError::Conflict("flist already exists".to_string()));
             }
         }
         Err(e) => {
             log::error!("failed to check flist existence with error {:?}", e);
-
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ResponseError::InternalServerError(
-                    "internal server error".to_string(),
-                )),
-            )
-                .into_response();
+            return Err(ResponseError::InternalServerError);
         }
     }
 
@@ -134,14 +119,7 @@ pub async fn create_flist_handler(
             &username_dir,
             created.err()
         );
-
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ResponseError::InternalServerError(
-                "internal server error".to_string(),
-            )),
-        )
-            .into_response();
+        return Err(ResponseError::InternalServerError);
     }
 
     let fl_path: String = format!("{}/{}", username_dir, fl_name);
@@ -154,14 +132,7 @@ pub async fn create_flist_handler(
                 fl_path,
                 err
             );
-
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ResponseError::InternalServerError(
-                    "internal server error".to_string(),
-                )),
-            )
-                .into_response();
+            return Err(ResponseError::InternalServerError);
         }
     };
 
@@ -169,14 +140,7 @@ pub async fn create_flist_handler(
         Ok(s) => s,
         Err(err) => {
             log::error!("failed to parse router for store with error {}", err);
-
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ResponseError::InternalServerError(
-                    "internal server error".to_string(),
-                )),
-            )
-                .into_response();
+            return Err(ResponseError::InternalServerError);
         }
     };
 
@@ -201,11 +165,14 @@ pub async fn create_flist_handler(
 
         // remove the file created with the writer if fl creation failed
         if res.is_err() {
+            log::error!("failed creation failed with error {:?}", res.err());
             let _ = tokio::fs::remove_file(&fl_path).await;
-            state.jobs_state.lock().unwrap().insert(
-                job.id.clone(),
-                FlistState::Failed(format!("flist '{}' has failed", fl_name)),
-            );
+            state
+                .jobs_state
+                .lock()
+                .unwrap()
+                .insert(job.id.clone(), FlistState::Failed);
+            return;
         }
 
         state.jobs_state.lock().unwrap().insert(
@@ -217,16 +184,17 @@ pub async fn create_flist_handler(
         );
     });
 
-    (StatusCode::CREATED, Json(serde_json::json!(current_job))).into_response()
+    Ok(ResponseResult::FlistCreated(current_job))
 }
 
 #[utoipa::path(
     get,
     path = "/v1/api/fl/{job_id}",
     responses(
-        (status = 200, description = "flist state", body = AppState),
+        (status = 200, description = "Flist state", body = FlistState),
+        (status = 404, description = "Flist not found"),
+        (status = 500, description = "Internal server error"),
         (status = 401, description = "Unauthorized user"),
-        (status = 404, description = "flist not found", body = AppState),
         (status = 403, description = "Forbidden"),
     ),
     params(
@@ -244,22 +212,39 @@ pub async fn get_flist_state_handler(
         .unwrap()
         .contains_key(&flist_job_id.clone())
     {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(FlistState::NotExists("flist doesn't exist".to_string())),
-        )
-            .into_response();
+        return Err(ResponseError::NotFound("flist doesn't exist".to_string()));
     }
 
-    // if flist creation failed or done clean it from the state
-    // TODO: clean if done or error
-    (
-        StatusCode::OK,
-        Json(serde_json::json!({
-            "flist_state": &state.jobs_state.lock().unwrap().get(&flist_job_id.clone())
-        })),
-    )
-        .into_response()
+    let res_state = state
+        .jobs_state
+        .lock()
+        .unwrap()
+        .get(&flist_job_id.clone())
+        .unwrap()
+        .to_owned();
+
+    match res_state {
+        FlistState::Accepted(_) => Ok(ResponseResult::FlistState(res_state)),
+        FlistState::Started(_) => Ok(ResponseResult::FlistState(res_state)),
+        FlistState::Created(_) => {
+            state
+                .jobs_state
+                .lock()
+                .unwrap()
+                .remove(&flist_job_id.clone());
+
+            Ok(ResponseResult::FlistState(res_state))
+        }
+        FlistState::Failed => {
+            state
+                .jobs_state
+                .lock()
+                .unwrap()
+                .remove(&flist_job_id.clone());
+
+            return Err(ResponseError::InternalServerError);
+        }
+    }
 }
 
 #[utoipa::path(
@@ -267,9 +252,9 @@ pub async fn get_flist_state_handler(
 	path = "/v1/api/fl",
 	responses(
         (status = 200, description = "Listing flists", body = HashMap<String, Vec<FileInfo>>),
-        (status = 500, description = "Internal server error", body = ResponseError),
         (status = 401, description = "Unauthorized user"),
         (status = 403, description = "Forbidden"),
+        (status = 500, description = "Internal server error"),
 	)
 )]
 #[debug_handler]
@@ -287,13 +272,7 @@ pub async fn list_flists_handler(Extension(cfg): Extension<config::Config>) -> i
                         Ok(files) => flists.insert(file.name, files),
                         Err(e) => {
                             log::error!("failed to list flists per username with error: {}", e);
-                            return (
-                                StatusCode::INTERNAL_SERVER_ERROR,
-                                Json(ResponseError::InternalServerError(
-                                    "internal server error".to_string(),
-                                )),
-                            )
-                                .into_response();
+                            return Err(ResponseError::InternalServerError);
                         }
                     };
                 };
@@ -301,17 +280,11 @@ pub async fn list_flists_handler(Extension(cfg): Extension<config::Config>) -> i
         }
         Err(e) => {
             log::error!("failed to list flists directory with error: {}", e);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ResponseError::InternalServerError(
-                    "internal server error".to_string(),
-                )),
-            )
-                .into_response();
+            return Err(ResponseError::InternalServerError);
         }
     }
 
-    (StatusCode::OK, Json(serde_json::json!(flists))).into_response()
+    Ok(ResponseResult::Flists(flists))
 }
 
 pub async fn flist_exists(dir_path: &std::path::Path, flist_name: &String) -> io::Result<bool> {
@@ -326,18 +299,4 @@ pub async fn flist_exists(dir_path: &std::path::Path, flist_name: &String) -> io
     }
 
     Ok(false)
-}
-
-#[derive(Serialize, Deserialize, ToSchema)]
-enum ResponseError {
-    #[schema(example = "internal server error")]
-    InternalServerError(String),
-    #[schema(example = "flist already exists")]
-    Conflict(String),
-    #[schema(example = "flist path not found")]
-    NotFound(String),
-    #[schema(example = "token is missing")]
-    Unauthorized(String),
-    #[schema(example = "user bad request")]
-    BadRequest(String),
 }
