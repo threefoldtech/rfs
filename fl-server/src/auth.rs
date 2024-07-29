@@ -1,9 +1,8 @@
 use axum::{
-    body::Body,
     extract::{Json, Request, State},
     http::{self, StatusCode},
     middleware::Next,
-    response::{IntoResponse, Response},
+    response::IntoResponse,
     Extension,
 };
 use axum_macros::debug_handler;
@@ -12,7 +11,16 @@ use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, TokenData, 
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::config;
+use crate::{
+    config,
+    response::{ResponseError, ResponseResult},
+};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct User {
+    pub username: String,
+    pub password: String,
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct Claims {
@@ -22,17 +30,22 @@ pub struct Claims {
 }
 
 #[derive(Deserialize, ToSchema)]
-pub struct SignInData {
+pub struct SignInBody {
     pub username: String,
     pub password: String,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct SignInResponse {
+    pub access_token: String,
 }
 
 #[utoipa::path(
     post,
     path = "/v1/api/signin",
-    request_body = SignInData,
+    request_body = SignInBody,
     responses(
-        (status = 200, description = "User signed in successfully", body = String),
+        (status = 200, description = "User signed in successfully", body = SignInResponse),
         (status = 500, description = "Internal server error"),
         (status = 401, description = "Unauthorized user"),
     )
@@ -40,38 +53,29 @@ pub struct SignInData {
 #[debug_handler]
 pub async fn sign_in_handler(
     Extension(cfg): Extension<config::Config>,
-    Json(user_data): Json<SignInData>,
-) -> Result<Json<String>, AuthError> {
+    Json(user_data): Json<SignInBody>,
+) -> impl IntoResponse {
     let user = match get_user_by_username(cfg.users, &user_data.username) {
         Some(user) => user,
         None => {
-            return Err(AuthError {
-                message: "User is not authorized".to_string(),
-                status_code: StatusCode::UNAUTHORIZED,
-            })
+            return Err(ResponseError::Unauthorized(
+                "User is not authorized".to_string(),
+            ));
         }
     };
 
-    if &user_data.password != &user.password {
-        return Err(AuthError {
-            message: "Wrong username or password".to_string(),
-            status_code: StatusCode::UNAUTHORIZED,
-        });
+    if user_data.password != user.password {
+        return Err(ResponseError::Unauthorized(
+            "Wrong username or password".to_string(),
+        ));
     }
 
-    let token =
-        encode_jwt(user.username, cfg.jwt_secret, cfg.jwt_expire_hours).map_err(|_| AuthError {
-            message: "Internal server error".to_string(),
-            status_code: StatusCode::INTERNAL_SERVER_ERROR,
-        })?;
+    let token = encode_jwt(user.username, cfg.jwt_secret, cfg.jwt_expire_hours)
+        .map_err(|_| ResponseError::InternalServerError)?;
 
-    Ok(Json(token))
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct User {
-    pub username: String,
-    pub password: String,
+    Ok(ResponseResult::SignedIn(SignInResponse {
+        access_token: token,
+    }))
 }
 
 fn get_user_by_username(users: Vec<User>, username: &str) -> Option<User> {
@@ -107,35 +111,19 @@ pub fn decode_jwt(jwt_token: String, jwt_secret: String) -> Result<TokenData<Cla
     result
 }
 
-#[derive(ToSchema)]
-pub struct AuthError {
-    // TODO:
-    message: String,
-    status_code: StatusCode,
-}
-
-impl IntoResponse for AuthError {
-    fn into_response(self) -> Response<Body> {
-        let t = self;
-        (t.status_code, t.message).into_response()
-    }
-}
-
 pub async fn authorize(
     State(cfg): State<config::Config>,
     mut req: Request,
     next: Next,
-) -> Result<Response<Body>, AuthError> {
+) -> impl IntoResponse {
     let auth_header = match req.headers_mut().get(http::header::AUTHORIZATION) {
-        Some(header) => header.to_str().map_err(|_| AuthError {
-            message: "Empty header is not allowed".to_string(),
-            status_code: StatusCode::FORBIDDEN,
-        })?,
+        Some(header) => header
+            .to_str()
+            .map_err(|_| ResponseError::Forbidden("Empty header is not allowed".to_string()))?,
         None => {
-            return Err(AuthError {
-                message: "No JWT token is added to the header".to_string(),
-                status_code: StatusCode::FORBIDDEN,
-            })
+            return Err(ResponseError::Forbidden(
+                "No JWT token is added to the header".to_string(),
+            ))
         }
     };
 
@@ -144,20 +132,18 @@ pub async fn authorize(
     let token_data = match decode_jwt(token.unwrap().to_string(), cfg.jwt_secret) {
         Ok(data) => data,
         Err(_) => {
-            return Err(AuthError {
-                message: "Unable to decode JWT token".to_string(),
-                status_code: StatusCode::UNAUTHORIZED,
-            })
+            return Err(ResponseError::Forbidden(
+                "Unable to decode JWT token".to_string(),
+            ))
         }
     };
 
     let current_user = match get_user_by_username(cfg.users, &token_data.claims.username) {
         Some(user) => user,
         None => {
-            return Err(AuthError {
-                message: "You are not an authorized user".to_string(),
-                status_code: StatusCode::UNAUTHORIZED,
-            })
+            return Err(ResponseError::Unauthorized(
+                "You are not an authorized user".to_string(),
+            ));
         }
     };
 
