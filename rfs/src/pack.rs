@@ -139,6 +139,14 @@ async fn pack_one<S: Store>(
         let meta = child.metadata().await?;
         let child_path = path.join(&name);
 
+        if sender.is_some() {
+            sender
+                .clone()
+                .unwrap()
+                .send(1)
+                .context("failed to send progress")?;
+        }
+
         // if this child a directory we add to the tail of the list
         if meta.is_dir() {
             list.push_back(Item(current, child_path.clone(), name, meta));
@@ -178,14 +186,6 @@ async fn pack_one<S: Store>(
         worker
             .send((child_ino, child_path))
             .context("failed to schedule file upload")?;
-
-        if sender.is_some() {
-            sender
-                .clone()
-                .unwrap()
-                .send(1)
-                .context("failed to send progress")?;
-        }
     }
     Ok(())
 }

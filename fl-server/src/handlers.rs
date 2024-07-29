@@ -61,7 +61,7 @@ pub enum FlistState {
 #[derive(Debug, Clone, Serialize)]
 pub struct FlistStateInfo {
     msg: String,
-    progress: usize,
+    progress: f32,
 }
 
 #[utoipa::path(
@@ -221,9 +221,7 @@ pub async fn create_flist_handler(
         );
 
         let res = docker_to_fl.prepare().await;
-        // remove the file created with the writer if fl creation failed
         if res.is_err() {
-            let _ = tokio::fs::remove_file(&fl_path).await;
             state.jobs_state.lock().unwrap().insert(
                 job.id.clone(),
                 FlistState::Failed(format!("flist preparing '{}' has failed", fl_name)),
@@ -232,17 +230,21 @@ pub async fn create_flist_handler(
         }
 
         let files_count = docker_to_fl.files_count();
+        let st = state.clone();
+        let job_id = job.id.clone();
         tokio::spawn(async move {
-            for _ in 0..files_count {
-                let step = rx.recv().unwrap() as usize;
-                // state.jobs_state.lock().unwrap().insert(
-                //     job.id.clone(),
-                //     FlistState::InProgress(FlistStateInfo {
-                //         msg: "flist is in progress".to_string(),
-                //         progress: step / files_count * 100,
-                //     }),
-                // ); //TODO:
-                log::info!("val '{}'", step / files_count * 100);
+            let mut progress: f32 = 0.0;
+
+            for _ in 0..files_count - 1 {
+                let step = rx.recv().unwrap() as f32;
+                progress += step;
+                st.jobs_state.lock().unwrap().insert(
+                    job_id.clone(),
+                    FlistState::InProgress(FlistStateInfo {
+                        msg: "flist is in progress".to_string(),
+                        progress: progress / files_count as f32 * 100.0,
+                    }),
+                );
             }
         });
 

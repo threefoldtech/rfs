@@ -117,6 +117,7 @@ impl DockerImageToFlist {
         .await
         .context("failed to pack flist")?;
 
+        log::info!("flist has been created successfully");
         Ok(())
     }
 
@@ -124,7 +125,6 @@ impl DockerImageToFlist {
         self.prepare().await?;
         self.pack(store, sender).await?;
 
-        log::info!("flist has been created successfully");
         Ok(())
     }
 }
