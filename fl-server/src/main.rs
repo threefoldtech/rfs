@@ -26,8 +26,8 @@ use std::{
 };
 use tokio::{runtime::Builder, signal};
 use tower::ServiceBuilder;
-use tower_http::trace::TraceLayer;
 use tower_http::{add_extension::AddExtensionLayer, cors::CorsLayer};
+use tower_http::{cors::Any, trace::TraceLayer};
 
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
@@ -76,8 +76,8 @@ async fn app() -> Result<()> {
     });
 
     let cors = CorsLayer::new()
+        .allow_origin(Any)
         .allow_methods([Method::GET, Method::POST])
-        .allow_credentials(true)
         .allow_headers([AUTHORIZATION, ACCEPT, CONTENT_TYPE]);
 
     let v1_routes = Router::new()
