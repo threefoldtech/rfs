@@ -70,10 +70,10 @@ import { ref } from "vue";
 import image from "./../assets/Image.png";
 import logo from "./../assets/logo.png";
 import { useRouter } from "vue-router";
-import { user } from "../types/User.ts";
+import { User } from "../types/User.ts";
 import axios from "axios";
 
-const user = ref<user>({ username: "", password: "" });
+const user = ref<User>({ username: "", password: "" });
 const router = useRouter();
 const api = axios.create({
   baseURL: "http://localhost:4000",
@@ -81,10 +81,11 @@ const api = axios.create({
     "Content-Type": "application/json",
   },
 });
-const visible = ref<bool>(false);
+const visible = ref<boolean>(false);
 
 const login = async () => {
   try {
+    console.log(user)
     const response = await api.post("/v1/api/signin", user);
     const token = response.data.access_token;
     sessionStorage.setItem("token", token);

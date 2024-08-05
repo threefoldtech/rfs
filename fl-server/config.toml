@@ -1,0 +1,15 @@
+host='localhost'
+port=4000
+store_url=['dir:///tmp/store0']
+flist_dir='flists'
+
+jwt_secret='secret'
+jwt_expire_hours=5
+
+[[users]] # list of authorized user in the server
+username = "user1"
+password = "password1"
+
+[[users]]
+username = "user2"
+password = "password2"
