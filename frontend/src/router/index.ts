@@ -2,6 +2,7 @@ import { createRouter, createWebHistory, RouteRecordRaw } from "vue-router";
 import Login from "../components/Login.vue";
 import CreateFlist from "../components/CreateFlist.vue";
 import ViewFlists from "../components/ViewFlists.vue";
+import FollowUp from "../components/FollowUp.vue";
 
 const routes: Array<RouteRecordRaw> = [
   {
@@ -13,6 +14,11 @@ const routes: Array<RouteRecordRaw> = [
     path: "/flists",
     name: "Flists",
     component: ViewFlists,
+  },
+  {
+    path: "/follow",
+    name: "Follow",
+    component: FollowUp,
   },
   {
     path: "/create",
@@ -27,13 +33,13 @@ const router = createRouter({
   routes,
 });
 
-router.beforeEach((to, _, next) => {
-  const token: string | null = sessionStorage.getItem("token");
-  if (to.meta.requiresAuth && token === null) {
-    next({ name: "Login" });
-  } else {
-    next();
-  }
-});
+// router.beforeEach((to, _, next) => {
+//   const token: string | null = sessionStorage.getItem("token");
+//   if (to.meta.requiresAuth && token === null) {
+//     next({ name: "Login" });
+//   } else {
+//     next();
+//   }
+// });
 
 export default router;

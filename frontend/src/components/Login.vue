@@ -19,34 +19,36 @@
               <v-img :src="logo" class="mb-10" height="10%" width="15%"></v-img>
               <h2 class="mb-5">Sign in</h2>
 
-              <div
+              <label
+                for="username"
                 class="text-subtitle-1 text-medium-emphasis d-flex align-center justify-space-between"
               >
                 Username
-              </div>
+              </label>
               <v-text-field
                 class="pr-5 rounded"
-                :label="username"
                 v-model="user.username"
                 variant="outlined"
                 density="compact"
+                id="username"
                 required
               >
               </v-text-field>
-              <div
+              <label
+                for="password"
                 class="text-subtitle-1 text-medium-emphasis d-flex align-center justify-space-between"
               >
                 Password
-              </div>
+              </label>
               <v-text-field
                 class="mb-5 pr-5 rounded"
-                :label="password"
                 v-model="user.password"
                 :append-inner-icon="visible ? 'mdi-eye-off' : 'mdi-eye'"
                 :type="visible ? 'text' : 'password'"
                 variant="outlined"
                 @click:append-inner="visible = !visible"
                 density="compact"
+                id="password"
                 required
               >
               </v-text-field>
@@ -85,10 +87,10 @@ const visible = ref<boolean>(false);
 
 const login = async () => {
   try {
-    const response = await api.post("/v1/api/signin", user);
+    const response = await api.post("/v1/api/signin", user.value);
     const token = response.data.access_token;
     sessionStorage.setItem("token", token);
-    router.push("/flists")
+    router.push("/flists");
   } catch (error) {
     console.error("Failed to login", error);
   }
