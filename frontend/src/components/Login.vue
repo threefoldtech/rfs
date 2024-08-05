@@ -85,10 +85,10 @@ const visible = ref<boolean>(false);
 
 const login = async () => {
   try {
-    console.log(user)
     const response = await api.post("/v1/api/signin", user);
     const token = response.data.access_token;
     sessionStorage.setItem("token", token);
+    router.push("/flists")
   } catch (error) {
     console.error("Failed to login", error);
   }

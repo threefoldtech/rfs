@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import Login from "./components/Login.vue";
+
 </script>
 
 <template>
-  <Login />
+  <router-view />
 </template>
-
 <style scoped>
 .logo {
   height: 6em;
