@@ -9,8 +9,26 @@
     "
   >
     <v-row>
-      <v-col :cols="4">
-        <v-img :src="image" cover height="100%"> </v-img>
+      <v-col :cols="4" class="position-relative">
+        <v-img :src="image" cover height="100%" style="z-index: 900"> </v-img>
+        <v-container
+          class="position-absolute top-0 d-flex flex-column justify-center ga-0"
+          style="z-index: 1000; height: 70%"
+        >
+          <v-img
+            :src="whiteLogo"
+            height="10%"
+            width="15%"
+            class="mb-5 flex-grow-0"
+          ></v-img>
+          <p class="mt-0" style="width: 90%">
+            Is the main tool to create, mount and extract FungiStore lists
+            (Fungilist)fl for short. An fl is a simple format to keep
+            information about an entire filesystem in a compact form. It does
+            not hold the data itself but enough information to retrieve this
+            data back from a store.
+          </p>
+        </v-container>
       </v-col>
       <v-col :cols="8" class="d-flex align-center">
         <v-container class="d-flex flex-column align-center justify-center">
@@ -69,11 +87,14 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
-import image from "./../assets/Image.png";
+import image from "./../assets/side.png";
 import logo from "./../assets/logo.png";
+import whiteLogo from "../assets/logo_white.png";
 import { useRouter } from "vue-router";
 import { User } from "../types/User.ts";
 import axios from "axios";
+import { toast } from "vue3-toastify";
+import "vue3-toastify/dist/index.css";
 
 const user = ref<User>({ username: "", password: "" });
 const router = useRouter();
@@ -91,8 +112,9 @@ const login = async () => {
     const token = response.data.access_token;
     sessionStorage.setItem("token", token);
     router.push("/flists");
-  } catch (error) {
+  } catch (error: any) {
     console.error("Failed to login", error);
+    toast.error(error.response?.data || "error occured");
   }
 };
 </script>

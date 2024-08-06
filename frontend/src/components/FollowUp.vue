@@ -24,3 +24,18 @@ import Navbar from "./Navbar.vue";
 import Footer from "./Footer.vue";
 const pending = ref<boolean>(true);
 </script>
+
+<style lang="css" scoped>
+.v-progress-circular--indeterminate .v-progress-circular__circle {
+  animation: progress-circular-rotate 4s linear infinite !important;
+}
+
+@keyframes progress-circular-rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+</style>

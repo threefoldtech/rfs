@@ -12,15 +12,16 @@
           <v-col :cols="4">
             <label
               for="image-name"
-              class="text-subtitle-1 text-medium-emphasis d-flex align-center justify-space-between"
+              class="text-subtitle-1 text-medium-emphasis d-flex align-center"
             >
-              Image Name
+              Image Name<span style="color: red">*</span>
             </label>
             <v-text-field
               class="pr-5 rounded"
               id="image-name"
               v-model="flist.image_name"
               variant="solo-filled"
+              density="compact"
               required
             >
             </v-text-field>
@@ -35,6 +36,7 @@
               id="email"
               v-model="flist.email"
               variant="solo-filled"
+              density="compact"
             >
             </v-text-field>
             <label
@@ -48,6 +50,7 @@
               id="auth"
               v-model="flist.auth"
               variant="solo-filled"
+              density="compact"
             >
             </v-text-field>
             <label
@@ -61,6 +64,7 @@
               id="registery-token"
               v-model="flist.registry_token"
               variant="solo-filled"
+              density="compact"
             >
             </v-text-field>
 
@@ -84,6 +88,7 @@
               id="username"
               v-model="flist.username"
               variant="solo-filled"
+              density="compact"
             >
             </v-text-field>
 
@@ -101,6 +106,7 @@
               :append-inner-icon="visible ? 'mdi-eye-off' : 'mdi-eye'"
               :type="visible ? 'text' : 'password'"
               @click:append-inner="visible = !visible"
+              density="compact"
             >
             </v-text-field>
             <label
@@ -114,6 +120,21 @@
               id="server-address"
               v-model="flist.server_address"
               variant="solo-filled"
+              density="compact"
+            >
+            </v-text-field>
+            <label
+              for="identity-token"
+              class="text-subtitle-1 text-medium-emphasis d-flex align-center justify-space-between"
+            >
+              Identity Token
+            </label>
+            <v-text-field
+              class="pr-5 rounded"
+              id="identity-token"
+              v-model="flist.identity_token"
+              variant="solo-filled"
+              density="compact"
             >
             </v-text-field>
           </v-col>
@@ -131,10 +152,13 @@ import { useRouter } from "vue-router";
 import { Flist } from "../types/Flist";
 import axios from "axios";
 import Footer from "./Footer.vue";
+import { toast } from "vue3-toastify";
+import "vue3-toastify/dist/index.css";
 
 const flist = ref<Flist>({
   auth: "",
   email: "",
+  identity_token: "",
   image_name: "",
   password: "",
   registry_token: "",
@@ -146,6 +170,7 @@ const api = axios.create({
   baseURL: "http://localhost:4000",
   headers: {
     "Content-Type": "application/json",
+    Authorization: "Bearer " + sessionStorage.getItem("token"),
   },
 });
 const visible = ref<boolean>(false);
@@ -153,10 +178,9 @@ const create = async () => {
   try {
     await api.post("/v1/api/fl", flist.value);
     router.push("Follow");
-  } catch (error) {
+  } catch (error: any) {
     console.error("Failed to create flist", error);
+    toast.error(error.response?.data || "error occured");
   }
 };
 </script>
-
-<style scoped></style>
