@@ -13,6 +13,7 @@ pub struct Job {
 #[derive(Debug, ToSchema)]
 pub struct AppState {
     pub jobs_state: Mutex<HashMap<String, handlers::FlistState>>,
+    pub flists_progress: Mutex<HashMap<String, f32>>,
 }
 
 #[derive(Debug, Default, Clone, Deserialize)]

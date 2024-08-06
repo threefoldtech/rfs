@@ -1,7 +1,10 @@
 use askama::Template;
-use axum::response::{Html, Response};
+use axum::{
+    extract::State,
+    response::{Html, Response},
+};
 use serde::Serialize;
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 use tokio::io;
 use tower::util::ServiceExt;
 use tower_http::services::ServeDir;
@@ -15,8 +18,13 @@ use axum::{
 use axum_macros::debug_handler;
 use percent_encoding::percent_decode;
 
+use crate::config;
+
 #[debug_handler]
-pub async fn serve_flists(req: Request<Body>) -> impl IntoResponse {
+pub async fn serve_flists(
+    State(state): State<Arc<config::AppState>>,
+    req: Request<Body>,
+) -> impl IntoResponse {
     let path = req.uri().path().to_string();
 
     return match ServeDir::new("").oneshot(req).await {
@@ -45,7 +53,7 @@ pub async fn serve_flists(req: Request<Body>) -> impl IntoResponse {
 
                     match cur_path.is_dir() {
                         true => {
-                            let rs = visit_dir_one_level(&full_path).await;
+                            let rs = visit_dir_one_level(&full_path, &state).await;
                             match rs {
                                 Ok(files) => Ok(DirListTemplate {
                                     lister: DirLister { files },
@@ -77,17 +85,39 @@ pub async fn serve_flists(req: Request<Body>) -> impl IntoResponse {
     };
 }
 
-pub async fn visit_dir_one_level(path: &std::path::Path) -> io::Result<Vec<FileInfo>> {
+pub async fn visit_dir_one_level(
+    path: &std::path::Path,
+    state: &Arc<config::AppState>,
+) -> io::Result<Vec<FileInfo>> {
     let mut dir = tokio::fs::read_dir(path).await?;
     let mut files: Vec<FileInfo> = Vec::new();
 
     while let Some(child) = dir.next_entry().await? {
-        let the_uri_path = child.path().to_string_lossy().to_string();
+        let path_uri = child.path().to_string_lossy().to_string();
+        let is_file = child.file_type().await?.is_file();
+        let name = child.file_name().to_string_lossy().to_string();
+
+        let mut progress = 0.0;
+        if is_file {
+            match state.flists_progress.lock().unwrap().get(&format!(
+                "{}/{}",
+                path.to_string_lossy().to_string(),
+                name
+            )) {
+                Some(p) => progress = p.to_owned(),
+                None => progress = 100.0,
+            }
+
+            let ext = child.path().extension().unwrap().to_string_lossy().to_string();
+            if ext != "fl" {
+                continue;
+            }
+        }
 
         files.push(FileInfo {
-            name: child.file_name().to_string_lossy().to_string(),
-            path_uri: the_uri_path,
-            is_file: child.file_type().await?.is_file(),
+            name,
+            path_uri,
+            is_file,
             last_modified: child
                 .metadata()
                 .await?
@@ -95,6 +125,7 @@ pub async fn visit_dir_one_level(path: &std::path::Path) -> io::Result<Vec<FileI
                 .duration_since(std::time::SystemTime::UNIX_EPOCH)
                 .unwrap()
                 .as_secs() as i64,
+            progress,
         });
     }
 
@@ -149,6 +180,7 @@ pub struct FileInfo {
     pub path_uri: String,
     pub is_file: bool,
     pub last_modified: i64,
+    pub progress: f32,
 }
 
 #[derive(Template)]

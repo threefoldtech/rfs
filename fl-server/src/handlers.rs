@@ -165,6 +165,11 @@ pub async fn create_flist_handler(
         job.id.clone(),
         FlistState::Accepted(format!("flist '{}' is accepted", fl_name)),
     );
+    state
+        .flists_progress
+        .lock()
+        .unwrap()
+        .insert(fl_path.clone(), 0.0);
 
     tokio::spawn(async move {
         state.jobs_state.lock().unwrap().insert(
@@ -186,6 +191,7 @@ pub async fn create_flist_handler(
 
         let res = docker_to_fl.prepare().await;
         if res.is_err() {
+            let _ = tokio::fs::remove_file(&fl_path).await;
             state
                 .jobs_state
                 .lock()
@@ -197,19 +203,25 @@ pub async fn create_flist_handler(
         let files_count = docker_to_fl.files_count();
         let st = state.clone();
         let job_id = job.id.clone();
+        let cloned_fl_path = fl_path.clone();
         tokio::spawn(async move {
             let mut progress: f32 = 0.0;
 
             for _ in 0..files_count - 1 {
                 let step = rx.recv().unwrap() as f32;
                 progress += step;
+                let progress_percentage = progress / files_count as f32 * 100.0;
                 st.jobs_state.lock().unwrap().insert(
                     job_id.clone(),
                     FlistState::InProgress(FlistStateInfo {
                         msg: "flist is in progress".to_string(),
-                        progress: progress / files_count as f32 * 100.0,
+                        progress: progress_percentage,
                     }),
                 );
+                st.flists_progress
+                    .lock()
+                    .unwrap()
+                    .insert(cloned_fl_path.clone(), progress_percentage);
             }
         });
 
@@ -230,10 +242,11 @@ pub async fn create_flist_handler(
         state.jobs_state.lock().unwrap().insert(
             job.id.clone(),
             FlistState::Created(format!(
-                "flist {}:{}/{}/{}/{} is created successfully",
-                cfg.host, cfg.port, cfg.flist_dir, username, fl_name
+                "flist {}:{}/{} is created successfully",
+                cfg.host, cfg.port, fl_path
             )),
         );
+        state.flists_progress.lock().unwrap().insert(fl_path, 100.0);
     });
 
     Ok(ResponseResult::FlistCreated(current_job))
@@ -311,16 +324,19 @@ pub async fn get_flist_state_handler(
 	)
 )]
 #[debug_handler]
-pub async fn list_flists_handler(Extension(cfg): Extension<config::Config>) -> impl IntoResponse {
+pub async fn list_flists_handler(
+    Extension(cfg): Extension<config::Config>,
+    State(state): State<Arc<config::AppState>>,
+) -> impl IntoResponse {
     let mut flists: HashMap<String, Vec<FileInfo>> = HashMap::new();
 
-    let rs = visit_dir_one_level(std::path::Path::new(&cfg.flist_dir)).await;
+    let rs = visit_dir_one_level(std::path::Path::new(&cfg.flist_dir), &state).await;
     match rs {
         Ok(files) => {
             for file in files {
                 if !file.is_file {
                     let flists_per_username =
-                        visit_dir_one_level(std::path::Path::new(&file.path_uri)).await;
+                        visit_dir_one_level(std::path::Path::new(&file.path_uri), &state).await;
                     match flists_per_username {
                         Ok(files) => flists.insert(file.name, files),
                         Err(e) => {
