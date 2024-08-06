@@ -1,8 +1,9 @@
 import { createRouter, createWebHistory, RouteRecordRaw } from "vue-router";
 import Login from "../components/Login.vue";
 import CreateFlist from "../components/CreateFlist.vue";
-import ViewFlists from "../components/ViewFlists.vue";
+import Home from "../components/Home.vue";
 import FollowUp from "../components/FollowUp.vue";
+import UserFlist from "../components/UserFlist.vue";
 
 const routes: Array<RouteRecordRaw> = [
   {
@@ -13,7 +14,8 @@ const routes: Array<RouteRecordRaw> = [
   {
     path: "/flists",
     name: "Flists",
-    component: ViewFlists,
+    component: UserFlist,
+    meta: { requireAuth: true },
   },
   {
     path: "/follow",
@@ -25,6 +27,11 @@ const routes: Array<RouteRecordRaw> = [
     name: "Create",
     component: CreateFlist,
     meta: { requiresAuth: true },
+  },
+  {
+    path: "",
+    name: "Home",
+    component: Home,
   },
 ];
 

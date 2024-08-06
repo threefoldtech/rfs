@@ -181,6 +181,10 @@ const create = async () => {
   } catch (error: any) {
     console.error("Failed to create flist", error);
     toast.error(error.response?.data || "error occured");
+    const errors:Number[] = [401, 403]
+    if (errors.includes(error.response?.status)) {
+      sessionStorage.removeItem("token");
+    }
   }
 };
 </script>
