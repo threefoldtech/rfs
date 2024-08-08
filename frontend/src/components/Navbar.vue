@@ -1,6 +1,6 @@
 <template>
   <v-app-bar class="bg-purple-darken-1">
-    <v-app-bar-nav-icon to="Home" class="ml-8">
+    <v-app-bar-nav-icon to="/" class="ml-8">
       <v-img :src="whiteLogo" contain height="50px" width="50px"></v-img>
     </v-app-bar-nav-icon>
     <v-spacer> </v-spacer>

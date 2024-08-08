@@ -29,7 +29,7 @@ const routes: Array<RouteRecordRaw> = [
     meta: { requiresAuth: true },
   },
   {
-    path: "",
+    path: "/",
     name: "Home",
     component: Home,
   },
