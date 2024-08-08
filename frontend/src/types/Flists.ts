@@ -1,11 +1,11 @@
 export interface FlistBody {
-  isFile: Boolean;
-  lastModified: bigint;
+  is_file: Boolean;
+  last_modified: bigint;
   name: string;
-  pathUri: string;
+  path_uri: string;
   progress: number;
 }
 
 export interface FlistsResponseInterface {
-  flists: Map<string, FlistBody[]>;
+  [key: string]: FlistBody[];
 }

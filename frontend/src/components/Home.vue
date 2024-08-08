@@ -33,10 +33,10 @@
           </v-list-item>
           <v-divider v-if="!rail"</v-divider>
           <v-list-item
-            v-for="[key, _] in flists.flists"
-            title="key"
-            :key="key"
-            @click="username = key"
+            v-for="userName in userNameList"
+            title="userName"
+            :key="userName"
+            @click="username = userName"
           ></v-list-item>
         </v-list>
       </v-navigation-drawer>
@@ -89,35 +89,45 @@ const drawer = ref<boolean>(true);
 
 const tableHeader = [
   { title: "Name", key: "name" },
-  { title: "Last Modified", key: "  lastModified" },
-  { title: "Download Link", key: "pathUri", sortable: false },
+  { title: "Last Modified", key: "last_modified" },
+  { title: "Download Link", key: "path_uri", sortable: false },
 ];
-const flists = ref<FlistsResponseInterface>({
-  flists: new Map<string, FlistBody[]>(),
-});
+var flists = ref<FlistsResponseInterface>({})
 const username = ref("");
+const userNameList = ref<string[]>([])
 let filteredFlist = ref<FlistBody[]>([]);
 const filteredFlistFn = () => {
   filteredFlist.value = [];
+  const map = flists.value;
   if (username.value.length === 0) {
-    flists.value.flists.forEach((flistMap, _) => {
-      for (let flist of flistMap) {
+    for(var flistMap in map){
+      for (let flist of map[flistMap]) {
         if (flist.progress === 100) {
           filteredFlist.value.push(flist);
         }
       }
-    });
+    }
   } else {
-    flists.value.flists.get(username.value)?.forEach((flist) => {
+      for (let flist of map[username.value]) {
       if (flist.progress === 100) {
         filteredFlist.value.push(flist);
       }
-    });
+    }
   }
 };
+const getUserNames = () =>{
+  filteredFlist.value = [];
+  userNameList.value = [];
+  const map = flists.value;
+  for(var flistMap in map){
+    userNameList.value.push(flistMap)
+  }
+}
 onMounted(async () => {
   try {
-    flists.value = await api.get("/v1/api/fl");
+    flists.value = (await api.get<FlistsResponseInterface>("/v1/api/fl")).data;
+    getUserNames();
+    console.log(userNameList.value)
     filteredFlistFn();
   } catch (error) {
     console.error("Failed to fetch flists", error);
