@@ -6,11 +6,19 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  check_fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt
+      - uses: clechasseur/rs-fmt-check@v2
+
   test:
     runs-on: ubuntu-latest
-
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Get Dependencies
         run: |
           sudo apt-get update
