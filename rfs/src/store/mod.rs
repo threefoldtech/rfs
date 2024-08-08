@@ -16,21 +16,25 @@ pub async fn make<U: AsRef<str>>(u: U) -> Result<Stores> {
     let parsed = url::Url::parse(u.as_ref())?;
 
     match parsed.scheme() {
-        dir::SCHEME => return Ok(Stores::Dir(
-            dir::DirStore::make(&u)
-                .await
-                .expect("failed to make dir store"),
-        )),
-        "s3" | "s3s" | "s3s+tls" => return Ok(Stores::S3(
-            s3store::S3Store::make(&u)
-                .await
-                .expect(format!("failed to make {} store", parsed.scheme()).as_str()),
-        )),
-        "zdb" => return Ok(Stores::ZDB(
-            zdb::ZdbStore::make(&u)
-                .await
-                .expect("failed to make zdb store"),
-        )),
+        dir::SCHEME => {
+            return Ok(Stores::Dir(
+                dir::DirStore::make(&u)
+                    .await
+                    .expect("failed to make dir store"),
+            ))
+        }
+        "s3" | "s3s" | "s3s+tls" => {
+            return Ok(Stores::S3(s3store::S3Store::make(&u).await.expect(
+                format!("failed to make {} store", parsed.scheme()).as_str(),
+            )))
+        }
+        "zdb" => {
+            return Ok(Stores::ZDB(
+                zdb::ZdbStore::make(&u)
+                    .await
+                    .expect("failed to make zdb store"),
+            ))
+        }
         _ => return Err(Error::UnknownStore(parsed.scheme().into())),
     }
 }
