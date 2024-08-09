@@ -177,7 +177,7 @@ const visible = ref<boolean>(false);
 const create = async () => {
   try {
     await api.post("/v1/api/fl", flist.value);  
-    router.push("Follow");
+    router.push("/flists");
   } catch (error: any) {
     console.error("Failed to create flist", error);
     toast.error(error.response?.data || "error occured");

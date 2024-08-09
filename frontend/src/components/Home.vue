@@ -19,10 +19,10 @@
         style="top: 10%; left: 0; height: fit-content"
         v-model="drawer"
         :rail="rail"
-        @click="rail = !rail"
       >
         <v-list>
-          <v-list-item title="Users" nav>
+          <v-list-item nav >
+            <v-list-item-title class="text-h6"> Users</v-list-item-title>
             <template v-slot:append>
               <v-btn variant="text" @click.stop="rail = !rail">
                 <v-icon>{{
@@ -34,10 +34,12 @@
           <v-divider v-if="!rail"</v-divider>
           <v-list-item
             v-for="userName in userNameList"
-            title="userName"
             :key="userName"
             @click="username = userName"
-          ></v-list-item>
+          ><v-list-item-title>
+            {{ userName }}
+          </v-list-item-title>
+          </v-list-item>
         </v-list>
       </v-navigation-drawer>
       <v-container
@@ -47,6 +49,9 @@
       >
         <!-- table containe flists -->
         <v-data-table :items="filteredFlist" :headers="tableHeader" hover>
+          <template #item.last_modified="{value}">
+            {{ new Date(value*1000).toString() }}
+          </template>
         </v-data-table>
         <!-- <v-table class="elevation-1">
               <thead>

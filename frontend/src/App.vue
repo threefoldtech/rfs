@@ -1,5 +1,15 @@
 <script setup lang="ts">
+import { provide, ref } from "vue";
+import { LoggedInUser } from "./types/User";
 
+const loggedInUser = ref<string>("");
+const updateLoggedInUser = (user: string) => {
+  loggedInUser.value = user;
+};
+provide<LoggedInUser>("loggedInUser", {
+  loggedInUser,
+  updateLoggedInUser,
+});
 </script>
 
 <template>
