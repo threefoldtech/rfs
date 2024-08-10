@@ -40,13 +40,13 @@ const router = createRouter({
   routes,
 });
 
-// router.beforeEach((to, _, next) => {
-//   const token: string | null = sessionStorage.getItem("token");
-//   if (to.meta.requiresAuth && token === null) {
-//     next({ name: "Login" });
-//   } else {
-//     next();
-//   }
-// });
+router.beforeEach((to, _, next) => {
+  const token: string | null = sessionStorage.getItem("token");
+  if (to.meta.requiresAuth && token === null) {
+    next({ name: "Login" });
+  } else {
+    next();
+  }
+});
 
 export default router;

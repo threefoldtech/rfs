@@ -132,7 +132,6 @@ onMounted(async () => {
   try {
     flists.value = (await api.get<FlistsResponseInterface>("/v1/api/fl")).data;
     getUserNames();
-    console.log(userNameList.value)
     filteredFlistFn();
   } catch (error) {
     console.error("Failed to fetch flists", error);

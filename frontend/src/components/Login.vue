@@ -86,18 +86,17 @@
 </template>
 
 <script setup lang="ts">
-import { inject, ref } from "vue";
+import { ref } from "vue";
 import image from "./../assets/side.png";
 import logo from "./../assets/logo.png";
 import whiteLogo from "../assets/logo_white.png";
 import { useRouter } from "vue-router";
-import { LoggedInUser, User } from "../types/User.ts";
+import { User } from "../types/User.ts";
 import axios from "axios";
 import { toast } from "vue3-toastify";
 import "vue3-toastify/dist/index.css";
 
 const user = ref<User>({ username: "", password: "" });
-const loggedInUser = inject<LoggedInUser>("loggedInUser");
 
 const router = useRouter();
 const api = axios.create({
@@ -112,10 +111,13 @@ const login = async () => {
     const response = await api.post("/v1/api/signin", user.value);
     const token = response.data.access_token;
     sessionStorage.setItem("token", token);
-    if (loggedInUser) {
-      const { updateLoggedInUser } = loggedInUser;
-      updateLoggedInUser(user.value.username);
-    }
+    sessionStorage.setItem("username", user.value.username);
+    api.interceptors.request.use((config) => {
+      if (token) {
+        config.headers["Authorization"] = `Bearer ${token}`;
+      }
+      return config;
+    });
     router.push("/flists");
   } catch (error: any) {
     console.error("Failed to login", error);

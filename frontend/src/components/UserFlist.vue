@@ -29,10 +29,9 @@
 import Navbar from "./Navbar.vue";
 import Footer from "./Footer.vue";
 import { FlistsResponseInterface } from "../types/Flists.ts";
-import { computed, inject } from "vue";
+import { computed } from "vue";
 import { onMounted, ref } from "vue";
 import axios from "axios";
-import { LoggedInUser } from "../types/User.ts";
 
 const tableHeader = [
   { title: "Name", key: "name" },
@@ -41,7 +40,7 @@ const tableHeader = [
   { title: "Download Link", key: "path_uri", sortable: false },
   { title: "Progress", key: "progress" },
 ];
-const loggedInUser = inject<LoggedInUser>("loggedInUser");
+const loggedInUser = sessionStorage.getItem("username");
 var flists = ref<FlistsResponseInterface>({});
 const api = axios.create({
   baseURL: "http://localhost:4000",
@@ -49,18 +48,23 @@ const api = axios.create({
     "Content-Type": "application/json",
   },
 });
-
+let currentUserFlists = computed(() => {
+  return loggedInUser?.length
+    ? flists.value[loggedInUser]
+    : [];
+});
 onMounted(async () => {
   try {
     flists.value = (await api.get<FlistsResponseInterface>("/v1/api/fl")).data;
+      currentUserFlists = computed(() => {
+        return loggedInUser?.length
+          ? flists.value[loggedInUser]
+          : [];
+      });
   } catch (error) {
     console.error("Failed to fetch flists", error);
   }
 });
 
-const currentUserFlists = computed(() => {
-  return loggedInUser && loggedInUser.loggedInUser
-    ? flists.value[loggedInUser.loggedInUser.value]
-    : [];
-});
+
 </script>
