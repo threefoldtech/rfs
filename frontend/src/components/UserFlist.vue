@@ -8,6 +8,15 @@
         :headers="tableHeader"
         hover
       >
+        <template v-slot:item.path_uri="{ index, value }">
+          <template v-if="currentUserFlists[index].progress === 100">
+            <a :href="value" download> Download</a>
+          </template>
+          <template v-else>
+            <span>loading... </span>
+          </template>
+        </template>
+
         <template #item.last_modified="{ value }">
           {{ new Date(value * 1000).toString() }}
         </template>
@@ -49,22 +58,16 @@ const api = axios.create({
   },
 });
 let currentUserFlists = computed(() => {
-  return loggedInUser?.length
-    ? flists.value[loggedInUser]
-    : [];
+  return loggedInUser?.length ? flists.value[loggedInUser] : [];
 });
 onMounted(async () => {
   try {
     flists.value = (await api.get<FlistsResponseInterface>("/v1/api/fl")).data;
-      currentUserFlists = computed(() => {
-        return loggedInUser?.length
-          ? flists.value[loggedInUser]
-          : [];
-      });
+    currentUserFlists = computed(() => {
+      return loggedInUser?.length ? flists.value[loggedInUser] : [];
+    });
   } catch (error) {
     console.error("Failed to fetch flists", error);
   }
 });
-
-
 </script>

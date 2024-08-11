@@ -32,7 +32,7 @@
             </template>
           </v-list-item>
           <v-divider v-if="!rail"</v-divider>
-          <v-list-item
+          <v-list-item v-if="!rail"
             v-for="userName in userNameList"
             :key="userName"
             @click="username = userName"
@@ -51,6 +51,9 @@
         <v-data-table :items="filteredFlist" :headers="tableHeader" hover>
           <template #item.last_modified="{value}">
             {{ new Date(value*1000).toString() }}
+          </template>
+          <template #item.path_uri="{value}">
+            <a :href="value" download> Download</a>
           </template>
         </v-data-table>
         <!-- <v-table class="elevation-1">
