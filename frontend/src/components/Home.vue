@@ -36,19 +36,23 @@
             v-for="userName in userNameList"
             :key="userName"
             @click="username = userName"
-          ><v-list-item-title>
+          > <template v-slot:prepend>
+                <v-icon icon="mdi-account"></v-icon>
+            </template>
+          <v-list-item-title>
             {{ userName }}
           </v-list-item-title>
           </v-list-item>
         </v-list>
       </v-navigation-drawer>
       <v-container
-        class="elevation-2 d-flex w-75"
+        class=" d-flex flex-column w-75"
         fluid
         style="height: fit-content"
       >
+      <h2 class="mb-2" v-if="username.length != 0"><v-icon icon="mdi-account"></v-icon>{{ username }}</h2>
         <!-- table containe flists -->
-        <v-data-table :items="filteredFlist" :headers="tableHeader" hover>
+        <v-data-table :items="filteredFlist" :headers="tableHeader" hover class="elevation-2">
           <template #item.last_modified="{value}">
             {{ new Date(value*1000).toString() }}
           </template>
@@ -56,22 +60,6 @@
             <a :href="value" download> Download</a>
           </template>
         </v-data-table>
-        <!-- <v-table class="elevation-1">
-              <thead>
-                <tr>
-                  <th class="text-left">Name</th>
-                  <th class="text-left">Last Modified</th>
-                  <th class="text-left">Path URI</th>
-                </tr>
-              </thead>
-              <tbody >
-                <tr v-for="item in filteredFlist">
-                  <td>{{ item.name }}</td>
-                  <td>{{ item.lastModified }}</td>
-                  <td>{{ item.pathUri }}</td>
-                </tr>
-              </tbody>
-            </v-table> -->
       </v-container>
     </v-main>
     <Footer></Footer>

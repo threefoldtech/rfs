@@ -8,7 +8,9 @@
       <v-btn to="Login">Login</v-btn>
     </div>
     <div class="mr-5" v-else>
-      <v-btn to="Create">Create flist</v-btn>
+      <v-btn to="Create"
+        ><v-icon icon="mdi-plus-circle-outline" class="mr-2"></v-icon>Create flist</v-btn
+      >
       <v-btn to="Flists">View List</v-btn>
     </div>
   </v-app-bar>

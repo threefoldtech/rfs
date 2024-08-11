@@ -2,6 +2,11 @@
   <v-app>
     <Navbar />
     <v-main>
+      <div>
+        <h2 class="ml-5 mt-5">
+          <v-icon icon="mdi-account"></v-icon>{{ loggedInUser }}
+        </h2>
+      </div>
       <v-data-table
         v-if="loggedInUser"
         :items="currentUserFlists"
