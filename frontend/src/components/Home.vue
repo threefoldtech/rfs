@@ -37,7 +37,7 @@
             :key="userName"
             @click="username = userName"
           > <template v-slot:prepend>
-                <v-icon icon="mdi-account"></v-icon>
+                <v-icon icon="mdi-account" color="purple-darken-1"></v-icon>
             </template>
           <v-list-item-title>
             {{ userName }}
@@ -50,7 +50,7 @@
         fluid
         style="height: fit-content"
       >
-      <h2 class="mb-2" v-if="username.length != 0"><v-icon icon="mdi-account"></v-icon>{{ username }}</h2>
+      <h2 class="mb-2" v-if="username.length != 0"><v-icon icon="mdi-account" color="purple-darken-1"></v-icon>{{ username }}</h2>
         <!-- table containe flists -->
         <v-data-table :items="filteredFlist" :headers="tableHeader" hover class="elevation-2">
           <template #item.last_modified="{value}">

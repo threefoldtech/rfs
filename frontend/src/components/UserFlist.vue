@@ -4,7 +4,7 @@
     <v-main>
       <div>
         <h2 class="ml-5 mt-5">
-          <v-icon icon="mdi-account"></v-icon>{{ loggedInUser }}
+          <v-icon icon="mdi-account" color="purple-darken-1"></v-icon>{{ loggedInUser }}
         </h2>
       </div>
       <v-data-table
@@ -29,10 +29,10 @@
           <v-progress-linear
             :model-value="value"
             color="purple-darken-1"
-            class="w-75"
+            
           >
           </v-progress-linear>
-          <span> {{ value }}% </span>
+          <span> {{ Math.floor(value) }}% </span>
         </template>
       </v-data-table>
     </v-main>
