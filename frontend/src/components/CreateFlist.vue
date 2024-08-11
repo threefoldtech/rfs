@@ -176,8 +176,8 @@ const api = axios.create({
 const visible = ref<boolean>(false);
 const create = async () => {
   try {
-    await api.post("/v1/api/fl", flist.value);
-    router.push("/flists");
+    const response = await api.post("/v1/api/fl", flist.value);
+    router.push({ name: "FollowUp", params: { id: response.data.id } });
   } catch (error: any) {
     console.error("Failed to create flist", error);
     toast.error(error.response?.data || "error occured");

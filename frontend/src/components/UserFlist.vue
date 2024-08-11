@@ -4,7 +4,8 @@
     <v-main>
       <div>
         <h2 class="ml-5 mt-5">
-          <v-icon icon="mdi-account" color="purple-darken-1"></v-icon>{{ loggedInUser }}
+          <v-icon icon="mdi-account" color="purple-darken-1"></v-icon
+          >{{ loggedInUser }}
         </h2>
       </div>
       <v-data-table
@@ -25,14 +26,16 @@
         <template #item.last_modified="{ value }">
           {{ new Date(value * 1000).toString() }}
         </template>
-        <template #item.progress="{ value }">
-          <v-progress-linear
-            :model-value="value"
-            color="purple-darken-1"
-            
-          >
-          </v-progress-linear>
-          <span> {{ Math.floor(value) }}% </span>
+
+        <template v-slot:item.progress="{ value }">
+          <template v-if="value != 100">
+            <v-progress-linear :model-value="value" color="purple-darken-1">
+            </v-progress-linear>
+            <span> {{ Math.floor(value) }}% </span>
+          </template>
+          <template v-else>
+            <v-chip color="green">finished</v-chip>
+          </template>
         </template>
       </v-data-table>
     </v-main>

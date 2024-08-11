@@ -3,6 +3,7 @@ import Login from "../components/Login.vue";
 import CreateFlist from "../components/CreateFlist.vue";
 import Home from "../components/Home.vue";
 import UserFlist from "../components/UserFlist.vue";
+import FollowUp from "../components/FollowUp.vue";
 
 const routes: Array<RouteRecordRaw> = [
   {
@@ -14,6 +15,12 @@ const routes: Array<RouteRecordRaw> = [
     path: "/flists",
     name: "Flists",
     component: UserFlist,
+    meta: { requireAuth: true },
+  },
+  {
+    path: "/follow_up/:id",
+    name: "FollowUp",
+    component: FollowUp,
     meta: { requireAuth: true },
   },
   {
