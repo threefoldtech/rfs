@@ -19,7 +19,7 @@
         <v-alert
           title="Error Creating Flist"
           type="error"
-          v-if="errMsg.len != 0"
+          v-if="errMsg.length != 0"
           >{{ errMsg }}</v-alert
         >
         <v-alert
@@ -54,7 +54,7 @@ const router = useRouter();
 var id = route.params.id;
 const errMsg = ref("");
 const stopPolling = ref<boolean>(false);
-let polling;
+let polling: NodeJS.Timeout;
 const pullLists = async () => {
   try {
     const response = await api.get("v1/api/fl/" + id);
