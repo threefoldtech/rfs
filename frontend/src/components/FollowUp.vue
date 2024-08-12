@@ -42,7 +42,7 @@ import axios from "axios";
 
 const pending = ref<boolean>(true);
 const api = axios.create({
-  baseURL: "http://localhost:4000",
+  baseURL: import.meta.env.VITE_API_URL,
   headers: {
     "Content-Type": "application/json",
     Authorization: "Bearer " + sessionStorage.getItem("token"),

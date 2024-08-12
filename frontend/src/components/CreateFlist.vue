@@ -113,7 +113,7 @@
               for="server-address"
               class="text-subtitle-1 text-medium-emphasis d-flex align-center justify-space-between"
             >
-              Server Address
+              Registery Address
             </label>
             <v-text-field
               class="pr-5 rounded"
@@ -167,7 +167,7 @@ const flist = ref<Flist>({
 });
 const router = useRouter();
 const api = axios.create({
-  baseURL: "http://localhost:4000",
+  baseURL: import.meta.env.VITE_API_URL,
   headers: {
     "Content-Type": "application/json",
     Authorization: "Bearer " + sessionStorage.getItem("token"),

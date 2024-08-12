@@ -17,47 +17,66 @@
         app
         class="position-absolute mx-height"
         style="top: 10%; left: 0; height: fit-content"
-        v-model="drawer"
-        :rail="rail"
       >
         <v-list>
-          <v-list-item nav >
+          <v-list-item nav>
             <v-list-item-title class="text-h6"> Users</v-list-item-title>
             <template v-slot:append>
-              <v-btn variant="text" @click.stop="rail = !rail">
+              <v-btn variant="text" @click.stop="collapsed = !collapsed">
                 <v-icon>{{
-                  !rail ? "mdi-chevron-left" : "mdi-chevron-right"
+                  !collapsed ? "mdi-chevron-up" : "mdi-chevron-down"
                 }}</v-icon></v-btn
               >
             </template>
           </v-list-item>
-          <v-divider v-if="!rail"</v-divider>
-          <v-list-item v-if="!rail"
+          <v-divider v-if="!collapsed"></v-divider>
+          <v-list-item
+            v-if="!collapsed"
             v-for="userName in userNameList"
             :key="userName"
             @click="username = userName"
-          > <template v-slot:prepend>
-                <v-icon icon="mdi-account" color="purple-darken-1"></v-icon>
+          >
+            <template v-slot:prepend>
+              <v-icon icon="mdi-account" color="purple-darken-1"></v-icon>
             </template>
-          <v-list-item-title>
-            {{ userName }}
-          </v-list-item-title>
+            <v-list-item-title>
+              {{ userName }}
+            </v-list-item-title>
           </v-list-item>
         </v-list>
       </v-navigation-drawer>
       <v-container
-        class=" d-flex flex-column w-75"
+        class="d-flex flex-column w-75"
         fluid
         style="height: fit-content"
       >
-      <h2 class="mb-2" v-if="username.length != 0"><v-icon icon="mdi-account" color="purple-darken-1"></v-icon>{{ username }}</h2>
+        <h2 class="mb-2" v-if="username.length != 0">
+          <v-icon icon="mdi-account" color="purple-darken-1"></v-icon
+          >{{ username }}
+        </h2>
         <!-- table containe flists -->
-        <v-data-table :items="filteredFlist" :headers="tableHeader" hover class="elevation-2">
-          <template #item.last_modified="{value}">
-            {{ new Date(value*1000).toString() }}
+        <v-data-table
+          :items="filteredFlist"
+          :headers="tableHeader"
+          hover
+          class="elevation-2"
+        >
+          <template #item.last_modified="{ value }">
+            {{ new Date(value * 1000).toString() }}
           </template>
-          <template #item.path_uri="{value}">
-            <a :href="value" download> Download</a>
+          <template #item.path_uri="{ value }">
+            <v-btn class="elevation-0">
+              <a :href="value" download>
+                <v-icon icon="mdi-download" color="grey"></v-icon
+              ></a>
+              <v-tooltip activator="parent" location="start"
+                >Download flist</v-tooltip
+              >
+            </v-btn>
+            <v-btn @click="copyLink(value)" class="elevation-0">
+              <v-icon icon="mdi-content-copy" color="grey"></v-icon>
+              <v-tooltip activator="parent">Copy Link</v-tooltip>
+            </v-btn>
           </template>
         </v-data-table>
       </v-container>
@@ -72,31 +91,38 @@ import axios from "axios";
 import Navbar from "./Navbar.vue";
 import Footer from "./Footer.vue";
 import image from "../assets/side.png";
+import { useClipboard } from "@vueuse/core";
 import { FlistsResponseInterface, FlistBody } from "../types/Flists.ts";
+import { toast } from "vue3-toastify";
 
 const api = axios.create({
-  baseURL: "http://localhost:4000",
+  baseURL: import.meta.env.VITE_API_URL,
   headers: {
     "Content-Type": "application/json",
   },
 });
-const rail = ref<boolean>(true);
-const drawer = ref<boolean>(true);
+const collapsed = ref<boolean>(true);
+
+const copyLink = (url: string) => {
+  copy(url);
+  toast.success("Link Copied to Clipboard");
+};
 
 const tableHeader = [
   { title: "Name", key: "name" },
   { title: "Last Modified", key: "last_modified" },
   { title: "Download Link", key: "path_uri", sortable: false },
 ];
-var flists = ref<FlistsResponseInterface>({})
+var flists = ref<FlistsResponseInterface>({});
 const username = ref("");
-const userNameList = ref<string[]>([])
+const userNameList = ref<string[]>([]);
 let filteredFlist = ref<FlistBody[]>([]);
+const { copy } = useClipboard();
 const filteredFlistFn = () => {
   filteredFlist.value = [];
   const map = flists.value;
   if (username.value.length === 0) {
-    for(var flistMap in map){
+    for (var flistMap in map) {
       for (let flist of map[flistMap]) {
         if (flist.progress === 100) {
           filteredFlist.value.push(flist);
@@ -104,21 +130,21 @@ const filteredFlistFn = () => {
       }
     }
   } else {
-      for (let flist of map[username.value]) {
+    for (let flist of map[username.value]) {
       if (flist.progress === 100) {
         filteredFlist.value.push(flist);
       }
     }
   }
 };
-const getUserNames = () =>{
+const getUserNames = () => {
   filteredFlist.value = [];
   userNameList.value = [];
   const map = flists.value;
-  for(var flistMap in map){
-    userNameList.value.push(flistMap)
+  for (var flistMap in map) {
+    userNameList.value.push(flistMap);
   }
-}
+};
 onMounted(async () => {
   try {
     flists.value = (await api.get<FlistsResponseInterface>("/v1/api/fl")).data;

@@ -16,7 +16,18 @@
       >
         <template v-slot:item.path_uri="{ index, value }">
           <template v-if="currentUserFlists[index].progress === 100">
-            <a :href="value" download> Download</a>
+            <v-btn class="elevation-0">
+              <a :href="value" download>
+                <v-icon icon="mdi-download" color="grey"></v-icon
+              ></a>
+              <v-tooltip activator="parent" location="start"
+                >Download flist</v-tooltip
+              >
+            </v-btn>
+            <v-btn @click="copyLink(value)" class="elevation-0">
+              <v-icon icon="mdi-content-copy" color="grey"></v-icon>
+              <v-tooltip activator="parent">Copy Link</v-tooltip>
+            </v-btn>
           </template>
           <template v-else>
             <span>loading... </span>
@@ -48,6 +59,8 @@ import Footer from "./Footer.vue";
 import { FlistsResponseInterface } from "../types/Flists.ts";
 import { computed } from "vue";
 import { onMounted, ref } from "vue";
+import { useClipboard } from "@vueuse/core";
+import { toast } from "vue3-toastify";
 import axios from "axios";
 
 const tableHeader = [
@@ -60,7 +73,7 @@ const tableHeader = [
 const loggedInUser = sessionStorage.getItem("username");
 var flists = ref<FlistsResponseInterface>({});
 const api = axios.create({
-  baseURL: "http://localhost:4000",
+  baseURL: import.meta.env.VITE_API_URL,
   headers: {
     "Content-Type": "application/json",
   },
@@ -68,6 +81,13 @@ const api = axios.create({
 let currentUserFlists = computed(() => {
   return loggedInUser?.length ? flists.value[loggedInUser] : [];
 });
+const { copy } = useClipboard();
+
+const copyLink = (url: string) => {
+  copy(url);
+  toast.success("Link Copied to Clipboard");
+};
+
 onMounted(async () => {
   try {
     flists.value = (await api.get<FlistsResponseInterface>("/v1/api/fl")).data;
