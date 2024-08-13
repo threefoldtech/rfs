@@ -66,14 +66,14 @@
           </template>
           <template #item.path_uri="{ value }">
             <v-btn class="elevation-0">
-              <a :href="value" download>
+              <a :href="baseURL + `/` + value" download>
                 <v-icon icon="mdi-download" color="grey"></v-icon
               ></a>
               <v-tooltip activator="parent" location="start"
                 >Download flist</v-tooltip
               >
             </v-btn>
-            <v-btn @click="copyLink(value)" class="elevation-0">
+            <v-btn @click="copyLink(baseURL + `/` + value)" class="elevation-0">
               <v-icon icon="mdi-content-copy" color="grey"></v-icon>
               <v-tooltip activator="parent">Copy Link</v-tooltip>
             </v-btn>
@@ -95,8 +95,10 @@ import { useClipboard } from "@vueuse/core";
 import { FlistsResponseInterface, FlistBody } from "../types/Flists.ts";
 import { toast } from "vue3-toastify";
 
+
+const baseURL = import.meta.env.VITE_API_URL;
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
+  baseURL: baseURL,
   headers: {
     "Content-Type": "application/json",
   },
