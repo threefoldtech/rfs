@@ -65,7 +65,6 @@ import axios from "axios";
 
 const tableHeader = [
   { title: "Name", key: "name" },
-  { title: "Is File", key: "is_file" },
   { title: "Last Modified", key: "last_modified" },
   { title: "Download Link", key: "path_uri", sortable: false },
   { title: "Progress", key: "progress" },

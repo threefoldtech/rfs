@@ -9,13 +9,14 @@
           </v-col>
         </v-row>
         <v-row justify="center">
-          <v-col :cols="4">
+          <v-col :cols="8">
             <label
               for="image-name"
               class="text-subtitle-1 text-medium-emphasis d-flex align-center"
             >
               Image Name<span style="color: red">*</span>
             </label>
+
             <v-text-field
               class="pr-5 rounded"
               id="image-name"
@@ -23,51 +24,143 @@
               variant="solo-filled"
               density="compact"
               required
+              placeholder="example: redis, keinos/sqlite3, alpine"
             >
             </v-text-field>
-            <label
-              for="email"
-              class="text-subtitle-1 text-medium-emphasis d-flex align-center justify-space-between"
-            >
-              Email
-            </label>
-            <v-text-field
-              class="pr-5 rounded"
-              id="email"
-              v-model="flist.email"
-              variant="solo-filled"
-              density="compact"
-            >
-            </v-text-field>
-            <label
-              for="auth"
-              class="text-subtitle-1 text-medium-emphasis d-flex align-center justify-space-between"
-            >
-              Auth
-            </label>
-            <v-text-field
-              class="pr-5 rounded"
-              id="auth"
-              v-model="flist.auth"
-              variant="solo-filled"
-              density="compact"
-            >
-            </v-text-field>
-            <label
-              for="registery-token"
-              class="text-subtitle-1 text-medium-emphasis d-flex align-center justify-space-between"
-            >
-              Registery Token
-            </label>
-            <v-text-field
-              class="pr-5 rounded mb-5"
-              id="registery-token"
-              v-model="flist.registry_token"
-              variant="solo-filled"
-              density="compact"
-            >
-            </v-text-field>
+            <v-radio-group v-model="registeryType">
+              <v-radio label="Private Registery" value="private"></v-radio>
+              <v-radio
+                label="Self Hosted Registery address"
+                value="registeryAddress"
+              ></v-radio>
+              <v-radio
+                label="Self Hosted Registery Token"
+                value="registeryToken"
+              ></v-radio>
+            </v-radio-group>
 
+            <div v-if="registeryType === `private`">
+              <v-radio-group class="p-0 m-0" v-model="privateType" inline>
+                <v-radio label="Username - Password" value="username"></v-radio>
+                <v-radio label="Email - Password" value="email"></v-radio>
+                <v-radio label="Identity Token" value="token"></v-radio>
+              </v-radio-group>
+              <v-container>
+                <v-row>
+                  <v-col>
+                    <div v-if="privateType === `email`">
+                      <label
+                        for="email"
+                        class="text-subtitle-1 text-medium-emphasis d-flex align-center justify-space-between"
+                      >
+                        Email
+                      </label>
+                      <v-text-field
+                        class="pr-5 rounded"
+                        id="email"
+                        v-model="flist.email"
+                        variant="solo-filled"
+                        density="compact"
+                        placeholder="johndoe@gmail.com"
+                        type="email"
+                      >
+                      </v-text-field>
+                    </div>
+                    <div v-if="privateType === `username`">
+                      <label
+                        for="username"
+                        class="text-subtitle-1 text-medium-emphasis d-flex align-center justify-space-between"
+                      >
+                        Username
+                      </label>
+                      <v-text-field
+                        class="pr-5 rounded"
+                        id="username"
+                        v-model="flist.username"
+                        variant="solo-filled"
+                        density="compact"
+                        placeholder="johndoe"
+                      >
+                      </v-text-field>
+                    </div>
+                  </v-col>
+                  <v-col>
+                    <div
+                      v-if="privateType.length != 0 && privateType !== `token`"
+                    >
+                      <label
+                        for="password"
+                        class="text-subtitle-1 text-medium-emphasis d-flex align-center justify-space-between"
+                      >
+                        Password
+                      </label>
+                      <v-text-field
+                        class="pr-5 rounded"
+                        id="password"
+                        v-model="flist.password"
+                        variant="solo-filled"
+                        :append-inner-icon="visible ? 'mdi-eye-off' : 'mdi-eye'"
+                        :type="visible ? 'text' : 'password'"
+                        @click:append-inner="visible = !visible"
+                        density="compact"
+                      >
+                      </v-text-field>
+                    </div>
+                  </v-col>
+                </v-row>
+              </v-container>
+
+              <div v-if="privateType === `token`">
+                <label
+                  for="identity-token"
+                  class="text-subtitle-1 text-medium-emphasis d-flex align-center justify-space-between"
+                  v-if="privateType === `token`"
+                >
+                  Identity Token
+                </label>
+                <v-text-field
+                  class="pr-5 rounded"
+                  id="identity-token"
+                  v-model="flist.identity_token"
+                  variant="solo-filled"
+                  density="compact"
+                >
+                </v-text-field>
+              </div>
+            </div>
+
+            <div v-if="registeryType === `registeryAddress`">
+              <label
+                for="server-address"
+                class="text-subtitle-1 text-medium-emphasis d-flex align-center justify-space-between"
+              >
+                Registery Address
+              </label>
+              <v-text-field
+                class="pr-5 rounded"
+                id="server-address"
+                v-model="flist.server_address"
+                variant="solo-filled"
+                density="compact"
+              >
+              </v-text-field>
+            </div>
+            <div v-if="registeryType === `registeryToken`">
+              <label
+                for="registery-token"
+                class="text-subtitle-1 text-medium-emphasis d-flex align-center justify-space-between"
+              >
+                Registery Token
+              </label>
+              <v-text-field
+                class="pr-5 rounded mb-5"
+                id="registery-token"
+                v-model="flist.registry_token"
+                variant="solo-filled"
+                density="compact"
+              >
+              </v-text-field>
+            </div>
             <v-btn
               class="pr-5 rounded-pill bg-purple-darken-1 mb-8"
               size="large"
@@ -75,68 +168,6 @@
               @click="create"
               >Create</v-btn
             >
-          </v-col>
-          <v-col :cols="4">
-            <label
-              for="username"
-              class="text-subtitle-1 text-medium-emphasis d-flex align-center justify-space-between"
-            >
-              Username
-            </label>
-            <v-text-field
-              class="pr-5 rounded"
-              id="username"
-              v-model="flist.username"
-              variant="solo-filled"
-              density="compact"
-            >
-            </v-text-field>
-
-            <label
-              for="password"
-              class="text-subtitle-1 text-medium-emphasis d-flex align-center justify-space-between"
-            >
-              Password
-            </label>
-            <v-text-field
-              class="pr-5 rounded"
-              id="password"
-              v-model="flist.password"
-              variant="solo-filled"
-              :append-inner-icon="visible ? 'mdi-eye-off' : 'mdi-eye'"
-              :type="visible ? 'text' : 'password'"
-              @click:append-inner="visible = !visible"
-              density="compact"
-            >
-            </v-text-field>
-            <label
-              for="server-address"
-              class="text-subtitle-1 text-medium-emphasis d-flex align-center justify-space-between"
-            >
-              Registery Address
-            </label>
-            <v-text-field
-              class="pr-5 rounded"
-              id="server-address"
-              v-model="flist.server_address"
-              variant="solo-filled"
-              density="compact"
-            >
-            </v-text-field>
-            <label
-              for="identity-token"
-              class="text-subtitle-1 text-medium-emphasis d-flex align-center justify-space-between"
-            >
-              Identity Token
-            </label>
-            <v-text-field
-              class="pr-5 rounded"
-              id="identity-token"
-              v-model="flist.identity_token"
-              variant="solo-filled"
-              density="compact"
-            >
-            </v-text-field>
           </v-col>
         </v-row>
       </v-container>
@@ -154,6 +185,9 @@ import axios from "axios";
 import Footer from "./Footer.vue";
 import { toast } from "vue3-toastify";
 import "vue3-toastify/dist/index.css";
+
+const registeryType = ref<string>("public");
+const privateType = ref<string>("");
 
 const flist = ref<Flist>({
   auth: "",
