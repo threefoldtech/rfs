@@ -27,25 +27,35 @@
               placeholder="example: redis, keinos/sqlite3, alpine"
             >
             </v-text-field>
-            <v-radio-group v-model="registeryType">
-              <v-radio label="Private Registery" value="private"></v-radio>
-              <v-radio
-                label="Self Hosted Registery address"
-                value="registeryAddress"
-              ></v-radio>
-              <v-radio
-                label="Self Hosted Registery Token"
-                value="registeryToken"
-              ></v-radio>
-            </v-radio-group>
+            <v-checkbox
+              value="true"
+              v-model="privateReg"
+              hide-details
+              density="compact"
+              ><template v-slot:label>
+                <span class="text-subtitle-2">Private Registery</span>
+              </template>
+            </v-checkbox>
 
-            <div v-if="registeryType === `private`">
+            <div v-if="privateReg">
               <v-radio-group class="p-0 m-0" v-model="privateType" inline>
-                <v-radio label="Username - Password" value="username"></v-radio>
-                <v-radio label="Email - Password" value="email"></v-radio>
-                <v-radio label="Identity Token" value="token"></v-radio>
+                <v-radio value="username">
+                  <template v-slot:label>
+                    <span class="text-subtitle-2">Username - Password</span>
+                  </template>
+                </v-radio>
+                <v-radio value="email">
+                  <template v-slot:label>
+                    <span class="text-subtitle-2">Email - Password</span>
+                  </template>
+                </v-radio>
+                <v-radio value="token">
+                  <template v-slot:label>
+                    <span class="text-subtitle-2">Identity Token</span>
+                  </template>
+                </v-radio>
               </v-radio-group>
-              <v-container>
+              <v-container class="pr-0 pl-0">
                 <v-row>
                   <v-col>
                     <div v-if="privateType === `email`">
@@ -66,7 +76,7 @@
                       >
                       </v-text-field>
                     </div>
-                    <div v-if="privateType === `username`">
+                    <div v-if="privateType !== `email`">
                       <label
                         for="username"
                         class="text-subtitle-1 text-medium-emphasis d-flex align-center justify-space-between"
@@ -79,7 +89,9 @@
                         v-model="flist.username"
                         variant="solo-filled"
                         density="compact"
-                        placeholder="johndoe"
+                        :placeholder="
+                          privateType === `token` ? `token` : `johndoe`
+                        "
                       >
                       </v-text-field>
                     </div>
@@ -106,30 +118,37 @@
                       >
                       </v-text-field>
                     </div>
+                    <div v-if="privateType === `token`">
+                      <label
+                        for="identity-token"
+                        class="text-subtitle-1 text-medium-emphasis d-flex align-center justify-space-between"
+                      >
+                        Identity Token
+                      </label>
+                      <v-text-field
+                        class="pr-5 rounded"
+                        id="identity-token"
+                        v-model="flist.identity_token"
+                        variant="solo-filled"
+                        density="compact"
+                      >
+                      </v-text-field>
+                    </div>
                   </v-col>
                 </v-row>
               </v-container>
-
-              <div v-if="privateType === `token`">
-                <label
-                  for="identity-token"
-                  class="text-subtitle-1 text-medium-emphasis d-flex align-center justify-space-between"
-                  v-if="privateType === `token`"
-                >
-                  Identity Token
-                </label>
-                <v-text-field
-                  class="pr-5 rounded"
-                  id="identity-token"
-                  v-model="flist.identity_token"
-                  variant="solo-filled"
-                  density="compact"
-                >
-                </v-text-field>
-              </div>
             </div>
 
-            <div v-if="registeryType === `registeryAddress`">
+            <v-checkbox
+              value="true"
+              v-model="registeryAddress"
+              hide-details
+              density="compact"
+              ><template v-slot:label>
+                <span class="text-subtitle-2">Self Hosted Registery</span>
+              </template>
+            </v-checkbox>
+            <div v-if="registeryAddress">
               <label
                 for="server-address"
                 class="text-subtitle-1 text-medium-emphasis d-flex align-center justify-space-between"
@@ -142,10 +161,20 @@
                 v-model="flist.server_address"
                 variant="solo-filled"
                 density="compact"
+                placeholder="localhost:5000/ubuntu"
               >
               </v-text-field>
             </div>
-            <div v-if="registeryType === `registeryToken`">
+            <v-checkbox
+              value="true"
+              v-model="registeryToken"
+              density="compact"
+              hide-details
+              ><template v-slot:label>
+                <span class="text-subtitle-2">Web Registery Token</span>
+              </template>
+            </v-checkbox>
+            <div v-if="registeryToken">
               <label
                 for="registery-token"
                 class="text-subtitle-1 text-medium-emphasis d-flex align-center justify-space-between"
@@ -161,6 +190,7 @@
               >
               </v-text-field>
             </div>
+
             <v-btn
               class="pr-5 rounded-pill bg-purple-darken-1 mb-8"
               size="large"
@@ -186,8 +216,10 @@ import Footer from "./Footer.vue";
 import { toast } from "vue3-toastify";
 import "vue3-toastify/dist/index.css";
 
-const registeryType = ref<string>("public");
-const privateType = ref<string>("");
+const privateReg = ref<boolean>(false);
+const registeryAddress = ref<boolean>(false);
+const registeryToken = ref<boolean>(false);
+const privateType = ref<string>("username");
 
 const flist = ref<Flist>({
   auth: "",
