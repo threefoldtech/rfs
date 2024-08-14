@@ -4,12 +4,12 @@
     <v-main class="d-flex flex-column justify-center" height="90%">
       <v-container fluid>
         <v-row justify="center">
-          <v-col :cols="8">
+          <v-col cols="8">
             <h2 class="mb-2">Create a Flist:</h2>
           </v-col>
         </v-row>
         <v-row justify="center">
-          <v-col :cols="8">
+          <v-col cols="8">
             <label
               for="image-name"
               class="text-subtitle-1 text-medium-emphasis d-flex align-center"
@@ -192,7 +192,7 @@
             </div>
 
             <v-btn
-              class="pr-5 rounded-pill bg-purple-darken-1 mb-8"
+              class="pr-5 rounded-pill background-green mb-8"
               size="large"
               width="50%"
               @click="create"
@@ -215,6 +215,7 @@ import axios from "axios";
 import Footer from "./Footer.vue";
 import { toast } from "vue3-toastify";
 import "vue3-toastify/dist/index.css";
+import "../../public/theme.css";
 
 const privateReg = ref<boolean>(false);
 const registeryAddress = ref<boolean>(false);

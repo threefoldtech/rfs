@@ -37,7 +37,7 @@
             @click="username = userName"
           >
             <template v-slot:prepend>
-              <v-icon icon="mdi-account" color="purple-darken-1"></v-icon>
+              <v-icon icon="mdi-account" color="#1aa18f"></v-icon>
             </template>
             <v-list-item-title>
               {{ userName }}
@@ -51,7 +51,7 @@
         style="height: fit-content"
       >
         <h2 class="mb-2" v-if="username.length != 0">
-          <v-icon icon="mdi-account" color="purple-darken-1"></v-icon
+          <v-icon icon="mdi-account" color="#1aa18f"></v-icon
           >{{ username }}
         </h2>
         <!-- table containe flists -->

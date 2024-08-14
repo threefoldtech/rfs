@@ -4,7 +4,7 @@
     <v-main>
       <div>
         <h2 class="ml-5 mt-5">
-          <v-icon icon="mdi-account" color="purple-darken-1"></v-icon
+          <v-icon icon="mdi-account" color="#1aa18f"></v-icon
           >{{ loggedInUser }}
         </h2>
       </div>

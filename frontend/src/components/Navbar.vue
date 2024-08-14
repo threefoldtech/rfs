@@ -1,5 +1,5 @@
 <template>
-  <v-app-bar class="bg-purple-darken-1">
+  <v-app-bar color="#1aa18f">
     <v-app-bar-nav-icon to="/" class="ml-8">
       <v-img :src="whiteLogo" contain height="50px" width="50px"></v-img>
     </v-app-bar-nav-icon>
@@ -9,7 +9,8 @@
     </div>
     <div class="mr-5" v-else>
       <v-btn to="/Create"
-        ><v-icon icon="mdi-plus-circle-outline" class="mr-2"></v-icon>Create flist</v-btn
+        ><v-icon icon="mdi-plus-circle-outline" class="mr-2"></v-icon>Create
+        flist</v-btn
       >
       <v-btn to="/Flists">My FLists</v-btn>
     </div>
@@ -18,5 +19,6 @@
 
 <script setup lang="ts">
 import whiteLogo from "../assets/logo_white.png";
+import "../../public/theme.css";
 const auth: string | null = sessionStorage.getItem("token");
 </script>

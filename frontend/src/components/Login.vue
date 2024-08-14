@@ -1,13 +1,5 @@
 <template>
-  <v-container
-    fluid
-    style="
-      padding: 0px;
-      max-height: 100vh;
-      overflow-y: hidden;
-      overflow-x: hidden;
-    "
-  >
+  <v-container fluid class="overflow-hidden pa-0">
     <v-row>
       <v-col :cols="4" class="position-relative">
         <v-img :src="image" cover height="100%" style="z-index: 900"> </v-img>
@@ -71,7 +63,7 @@
               >
               </v-text-field>
               <v-btn
-                class="pr-5 rounded-pill bg-purple-darken-1"
+                class="pr-5 rounded-pill background-green"
                 size="large"
                 width="50%"
                 @click="login"
@@ -95,6 +87,7 @@ import { User } from "../types/User.ts";
 import axios from "axios";
 import { toast } from "vue3-toastify";
 import "vue3-toastify/dist/index.css";
+import "../../public/theme.css";
 
 const user = ref<User>({ username: "", password: "" });
 

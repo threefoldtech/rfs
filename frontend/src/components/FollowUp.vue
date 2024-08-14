@@ -6,7 +6,7 @@
         <v-progress-circular
           :size="70"
           :width="7"
-          color="purple-darken-1"
+          color="#1aa18f"
           indeterminate
           class="mb-5"
         >
