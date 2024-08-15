@@ -209,13 +209,12 @@
 <script setup lang="ts">
 import Navbar from "./Navbar.vue";
 import { ref } from "vue";
-import { useRouter } from "vue-router";
 import { Flist } from "../types/Flist";
-import axios from "axios";
 import Footer from "./Footer.vue";
 import { toast } from "vue3-toastify";
 import "vue3-toastify/dist/index.css";
 import "../../public/theme.css";
+import { api } from "../client";
 
 const privateReg = ref<boolean>(false);
 const registeryAddress = ref<boolean>(false);
@@ -232,19 +231,12 @@ const flist = ref<Flist>({
   server_address: "",
   username: "",
 });
-const router = useRouter();
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
-  headers: {
-    "Content-Type": "application/json",
-    Authorization: "Bearer " + sessionStorage.getItem("token"),
-  },
-});
 const visible = ref<boolean>(false);
 const create = async () => {
   try {
     const response = await api.post("/v1/api/fl", flist.value);
-    router.push({ name: "FollowUp", params: { id: response.data.id } });
+    window.location.href = "/follow_up/" + response.data.id
+    //router.push({ name: "FollowUp", params: { id: response.data.id } });
   } catch (error: any) {
     console.error("Failed to create flist", error);
     toast.error(error.response?.data || "error occured");

@@ -2,3 +2,4 @@
 /tests/*.flist.d
 result
 .direnv/
+./fl-server/flists

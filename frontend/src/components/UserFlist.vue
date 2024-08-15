@@ -61,7 +61,7 @@ import { computed } from "vue";
 import { onMounted, ref } from "vue";
 import { useClipboard } from "@vueuse/core";
 import { toast } from "vue3-toastify";
-import axios from "axios";
+import { api } from "../client.ts";
 
 const tableHeader = [
   { title: "Name", key: "name" },
@@ -72,12 +72,6 @@ const tableHeader = [
 const loggedInUser = sessionStorage.getItem("username");
 var flists = ref<FlistsResponseInterface>({});
 const baseURL = import.meta.env.VITE_API_URL
-const api = axios.create({
-  baseURL: baseURL,
-  headers: {
-    "Content-Type": "application/json",
-  },
-});
 let currentUserFlists = computed(() => {
   return loggedInUser?.length ? flists.value[loggedInUser] : [];
 });

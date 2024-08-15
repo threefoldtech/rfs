@@ -86,7 +86,6 @@
 
 <script setup lang="ts">
 import { onMounted, ref, watch } from "vue";
-import axios from "axios";
 import Navbar from "./Navbar.vue";
 import Footer from "./Footer.vue";
 import image from "../assets/home.png";
@@ -94,14 +93,9 @@ import { useClipboard } from "@vueuse/core";
 import { FlistsResponseInterface, FlistBody } from "../types/Flists.ts";
 import { toast } from "vue3-toastify";
 import "vue3-toastify/dist/index.css";
+import { api } from "../client.ts";
 
 const baseURL = import.meta.env.VITE_API_URL;
-const api = axios.create({
-  baseURL: baseURL,
-  headers: {
-    "Content-Type": "application/json",
-  },
-});
 const collapsed = ref<boolean>(true);
 
 const copyLink = (url: string) => {
@@ -139,12 +133,12 @@ const filteredFlistFn = () => {
   }
 };
 const getUserNames = () => {
-  filteredFlist.value = [];
-  userNameList.value = [];
+  const list: string[] = [];
   const map = flists.value;
   for (var flistMap in map) {
-    userNameList.value.push(flistMap);
+    list.push(flistMap)
   }
+  userNameList.value=list
 };
 onMounted(async () => {
   try {

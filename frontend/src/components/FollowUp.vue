@@ -36,29 +36,21 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from "vue";
 import Navbar from "./Navbar.vue";
-import { useRoute, useRouter } from "vue-router";
 import Footer from "./Footer.vue";
-import axios from "axios";
 import { toast } from "vue3-toastify";
 import "vue3-toastify/dist/index.css";
+import { api } from "../client";
 
 const pending = ref<boolean>(true);
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
-  headers: {
-    "Content-Type": "application/json",
-    Authorization: "Bearer " + sessionStorage.getItem("token"),
-  },
-});
-const route = useRoute();
 let progress = ref<number>(0);
-const router = useRouter();
-var id = route.params.id;
 const errMsg = ref("");
 const stopPolling = ref<boolean>(false);
 let polling: NodeJS.Timeout;
+const uslPartition = window.location.href.split('/')
+const id = uslPartition[uslPartition.length - 1]
 const pullLists = async () => {
   try {
+    console.log(window.location.href.split('/'))
     const response = await api.get("v1/api/fl/" + id);
     if (response.data.flist_state.InProgress) {
       console.log("loading");
@@ -69,7 +61,7 @@ const pullLists = async () => {
       console.log("done");
       stopPolling.value = true;
       pending.value = false;
-      router.push("/flists");
+      window.location.href = "/flists" 
     }
   } catch (error: any) {
     console.error("failed to fetch flist status", error);

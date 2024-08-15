@@ -82,24 +82,17 @@ import { ref } from "vue";
 import image from "./../assets/side.png";
 import logo from "./../assets/logo.png";
 import whiteLogo from "../assets/logo_white.png";
-import { useRouter } from "vue-router";
 import { User } from "../types/User.ts";
-import axios from "axios";
+import { api } from "../client.ts";
 import { toast } from "vue3-toastify";
 import "vue3-toastify/dist/index.css";
 import "../../public/theme.css";
 
 const user = ref<User>({ username: "", password: "" });
 
-const router = useRouter();
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
-  headers: {
-    "Content-Type": "application/json",
-  },
-});
+
 const visible = ref<boolean>(false);
-const login = async () => {
+  const login = async () => {
   try {
     const response = await api.post("/v1/api/signin", user.value);
     const token = response.data.access_token;
@@ -111,7 +104,7 @@ const login = async () => {
       }
       return config;
     });
-    router.push("/flists");
+    window.location.href = "/flists"
   } catch (error: any) {
     console.error("Failed to login", error);
     toast.error(error.response?.data || "error occured");
