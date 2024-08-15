@@ -51,8 +51,7 @@
         style="height: fit-content"
       >
         <h2 class="mb-2" v-if="username.length != 0">
-          <v-icon icon="mdi-account" color="#1aa18f"></v-icon
-          >{{ username }}
+          <v-icon icon="mdi-account" color="#1aa18f"></v-icon>{{ username }}
         </h2>
         <!-- table containe flists -->
         <v-data-table
@@ -94,7 +93,7 @@ import image from "../assets/side.png";
 import { useClipboard } from "@vueuse/core";
 import { FlistsResponseInterface, FlistBody } from "../types/Flists.ts";
 import { toast } from "vue3-toastify";
-
+import "vue3-toastify/dist/index.css";
 
 const baseURL = import.meta.env.VITE_API_URL;
 const api = axios.create({
@@ -152,8 +151,9 @@ onMounted(async () => {
     flists.value = (await api.get<FlistsResponseInterface>("/v1/api/fl")).data;
     getUserNames();
     filteredFlistFn();
-  } catch (error) {
+  } catch (error: any) {
     console.error("Failed to fetch flists", error);
+    toast.error(error.response?.data);
   }
 });
 watch(username, () => {

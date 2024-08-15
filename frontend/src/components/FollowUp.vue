@@ -39,6 +39,8 @@ import Navbar from "./Navbar.vue";
 import { useRoute, useRouter } from "vue-router";
 import Footer from "./Footer.vue";
 import axios from "axios";
+import { toast } from "vue3-toastify";
+import "vue3-toastify/dist/index.css";
 
 const pending = ref<boolean>(true);
 const api = axios.create({
@@ -74,6 +76,7 @@ const pullLists = async () => {
     pending.value = false;
     errMsg.value = error.response?.data;
     stopPolling.value = true;
+    toast.error(error.response?.data)
   }
 };
 

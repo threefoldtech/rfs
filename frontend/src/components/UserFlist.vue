@@ -94,8 +94,9 @@ onMounted(async () => {
     currentUserFlists = computed(() => {
       return loggedInUser?.length ? flists.value[loggedInUser] : [];
     });
-  } catch (error) {
+  } catch (error:any) {
     console.error("Failed to fetch flists", error);
+    toast.error(error.response?.data)
   }
 });
 </script>
