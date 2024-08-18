@@ -87,6 +87,7 @@ pub async fn visit_dir_one_level(path: &std::path::Path) -> io::Result<Vec<FileI
         files.push(FileInfo {
             name: child.file_name().to_string_lossy().to_string(),
             path_uri: the_uri_path,
+            size: child.metadata().await?.len(),
             is_file: child.file_type().await?.is_file(),
             last_modified: child
                 .metadata()
@@ -148,6 +149,7 @@ pub struct FileInfo {
     pub name: String,
     pub path_uri: String,
     pub is_file: bool,
+    pub size: u64,
     pub last_modified: i64,
 }
 
