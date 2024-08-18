@@ -108,7 +108,12 @@ pub async fn visit_dir_one_level(
                 None => progress = 100.0,
             }
 
-            let ext = child.path().extension().unwrap().to_string_lossy().to_string();
+            let ext = child
+                .path()
+                .extension()
+                .unwrap()
+                .to_string_lossy()
+                .to_string();
             if ext != "fl" {
                 continue;
             }
@@ -118,6 +123,7 @@ pub async fn visit_dir_one_level(
             name,
             path_uri,
             is_file,
+            size: child.metadata().await?.len(),
             last_modified: child
                 .metadata()
                 .await?
@@ -179,6 +185,7 @@ pub struct FileInfo {
     pub name: String,
     pub path_uri: String,
     pub is_file: bool,
+    pub size: u64,
     pub last_modified: i64,
     pub progress: f32,
 }
