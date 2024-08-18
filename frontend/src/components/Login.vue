@@ -13,7 +13,7 @@
             width="15%"
             class="mb-5 flex-grow-0"
           ></v-img>
-          <p class="mt-0" style="width: 90%">
+          <p class="mt-0 text-white" style="width: 90%">
             Is the main tool to create, mount and extract FungiStore lists
             (Fungilist)fl for short. An fl is a simple format to keep
             information about an entire filesystem in a compact form. It does

@@ -1,5 +1,5 @@
 <template>
-  <v-app-bar color="#1aa18f">
+  <v-app-bar color="#1aa18f" height="125px">
     <v-app-bar-nav-icon to="/" class="ml-8">
       <v-img :src="whiteLogo" contain height="50px" width="50px"></v-img>
     </v-app-bar-nav-icon>

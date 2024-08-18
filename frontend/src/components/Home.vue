@@ -1,7 +1,7 @@
 <template>
   <v-app>
     <Navbar></Navbar>
-    <div class="w-100 position-relative" style="height: 10%">
+    <div class="w-100 position-relative" style="height: 30%">
       <v-img :src="image" cover style="z-index: 2"></v-img>
       <div
         class="position-absolute text-white"
@@ -16,7 +16,7 @@
         elevation="2"
         app
         class="position-absolute mx-height"
-        style="top: 10%; left: 0; height: fit-content"
+        style="top: 30%; left: 0; height: fit-content"
       >
         <v-list>
           <v-list-item nav>
@@ -89,7 +89,7 @@ import { onMounted, ref, watch } from "vue";
 import axios from "axios";
 import Navbar from "./Navbar.vue";
 import Footer from "./Footer.vue";
-import image from "../assets/side.png";
+import image from "../assets/home.png";
 import { useClipboard } from "@vueuse/core";
 import { FlistsResponseInterface, FlistBody } from "../types/Flists.ts";
 import { toast } from "vue3-toastify";
