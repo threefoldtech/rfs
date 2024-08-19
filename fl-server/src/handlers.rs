@@ -17,8 +17,8 @@ use serde::{Deserialize, Serialize};
 use crate::auth::{SignInBody, SignInResponse, __path_sign_in_handler};
 use crate::{
     config::{self, Job},
-    response::{ResponseError, ResponseResult},
-    serve_flists::{visit_dir_one_level, FileInfo},
+    response::{FileInfo, ResponseError, ResponseResult},
+    serve_flists::visit_dir_one_level,
 };
 use rfs::fungi::Writer;
 use utoipa::{OpenApi, ToSchema};

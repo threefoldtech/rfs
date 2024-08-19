@@ -1,14 +1,9 @@
-use askama::Template;
-use axum::{
-    extract::State,
-    response::{Html, Response},
-};
-use serde::Serialize;
+use axum::extract::State;
 use std::{path::PathBuf, sync::Arc};
 use tokio::io;
 use tower::util::ServiceExt;
 use tower_http::services::ServeDir;
-use utoipa::ToSchema;
+use walkdir::WalkDir;
 
 use axum::{
     body::Body,
@@ -17,8 +12,15 @@ use axum::{
 };
 use axum_macros::debug_handler;
 use percent_encoding::percent_decode;
+use rfs::{cache, fungi::Reader};
 
-use crate::config;
+use crate::{
+    config,
+    response::{
+        DirListTemplate, DirLister, ErrorTemplate, FileInfo, ResponseError, ResponseResult,
+        TemplateErr,
+    },
+};
 
 #[debug_handler]
 pub async fn serve_flists(
@@ -26,6 +28,13 @@ pub async fn serve_flists(
     req: Request<Body>,
 ) -> impl IntoResponse {
     let path = req.uri().path().to_string();
+
+    if path.ends_with(".md") {
+        match preview_flist(&path).await {
+            Ok(res) => return Ok(res),
+            Err(err) => return Err(err),
+        };
+    }
 
     return match ServeDir::new("").oneshot(req).await {
         Ok(res) => {
@@ -40,11 +49,11 @@ pub async fn serve_flists(
                     // validate
                     for seg in path.split('/') {
                         if seg.starts_with("..") || seg.contains('\\') {
-                            return Err(ErrorTemplate {
-                                err: ResponseError::BadRequest("invalid path".to_string()),
+                            return Err(ResponseError::TemplateError(ErrorTemplate {
+                                err: TemplateErr::BadRequest("invalid path".to_string()),
                                 cur_path: path.to_string(),
                                 message: "invalid path".to_owned(),
-                            });
+                            }));
                         }
                         full_path.push(seg);
                     }
@@ -55,33 +64,32 @@ pub async fn serve_flists(
                         true => {
                             let rs = visit_dir_one_level(&full_path, &state).await;
                             match rs {
-                                Ok(files) => Ok(DirListTemplate {
+                                Ok(files) => Ok(ResponseResult::DirTemplate(DirListTemplate {
                                     lister: DirLister { files },
                                     cur_path: path.to_string(),
-                                }
-                                .into_response()),
-                                Err(e) => Err(ErrorTemplate {
-                                    err: ResponseError::InternalError(e.to_string()),
+                                })),
+                                Err(e) => Err(ResponseError::TemplateError(ErrorTemplate {
+                                    err: TemplateErr::InternalServerError(e.to_string()),
                                     cur_path: path.to_string(),
                                     message: e.to_string(),
-                                }),
+                                })),
                             }
                         }
-                        false => Err(ErrorTemplate {
-                            err: ResponseError::FileNotFound("file not found".to_string()),
+                        false => Err(ResponseError::TemplateError(ErrorTemplate {
+                            err: TemplateErr::NotFound("file not found".to_string()),
                             cur_path: path.to_string(),
                             message: "file not found".to_owned(),
-                        }),
+                        })),
                     }
                 }
-                _ => Ok(res.map(axum::body::Body::new)),
+                _ => Ok(ResponseResult::Res(res)),
             }
         }
-        Err(err) => Err(ErrorTemplate {
-            err: ResponseError::InternalError(format!("Unhandled error: {}", err)),
+        Err(err) => Err(ResponseError::TemplateError(ErrorTemplate {
+            err: TemplateErr::InternalServerError(format!("Unhandled error: {}", err)),
             cur_path: path.to_string(),
             message: format!("Unhandled error: {}", err),
-        }),
+        })),
     };
 }
 
@@ -138,107 +146,59 @@ pub async fn visit_dir_one_level(
     Ok(files)
 }
 
-mod filters {
-    pub(crate) fn datetime(ts: &i64) -> ::askama::Result<String> {
-        if let Ok(format) =
-            time::format_description::parse("[year]-[month]-[day] [hour]:[minute]:[second] UTC")
-        {
-            return Ok(time::OffsetDateTime::from_unix_timestamp(*ts)
-                .unwrap()
-                .format(&format)
-                .unwrap());
-        }
-        Err(askama::Error::Fmt(std::fmt::Error))
+async fn preview_flist(path: &String) -> Result<ResponseResult, ResponseError> {
+    if !path.ends_with(".md") {
+        return Err(ResponseError::BadRequest(
+            "flist path is invalid".to_string(),
+        ));
     }
-}
 
-#[derive(Template)]
-#[template(path = "index.html")]
-struct DirListTemplate {
-    lister: DirLister,
-    cur_path: String,
-}
-
-impl IntoResponse for DirListTemplate {
-    fn into_response(self) -> Response<Body> {
-        let t = self;
-        match t.render() {
-            Ok(html) => Html(html).into_response(),
-            Err(err) => {
-                tracing::error!("template render failed, err={}", err);
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to render template. Error: {}", err),
-                )
-                    .into_response()
-            }
+    let mut fl_path: String = path.strip_suffix(".md").unwrap().to_string();
+    fl_path = fl_path.strip_prefix("/").unwrap().to_string();
+    let meta = match Reader::new(&fl_path).await {
+        Ok(reader) => reader,
+        Err(err) => {
+            log::error!(
+                "failed to initialize metadata database for flist `{}` with error {}",
+                fl_path,
+                err
+            );
+            return Err(ResponseError::InternalServerError);
         }
-    }
-}
+    };
 
-struct DirLister {
-    files: Vec<FileInfo>,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct FileInfo {
-    pub name: String,
-    pub path_uri: String,
-    pub is_file: bool,
-    pub size: u64,
-    pub last_modified: i64,
-    pub progress: f32,
-}
-
-#[derive(Template)]
-#[template(path = "error.html")]
-struct ErrorTemplate {
-    err: ResponseError,
-    cur_path: String,
-    message: String,
-}
-
-const FAIL_REASON_HEADER_NAME: &str = "fl-server-fail-reason";
-
-impl IntoResponse for ErrorTemplate {
-    fn into_response(self) -> Response<Body> {
-        let t = self;
-        match t.render() {
-            Ok(html) => {
-                let mut resp = Html(html).into_response();
-                match t.err {
-                    ResponseError::FileNotFound(reason) => {
-                        *resp.status_mut() = StatusCode::NOT_FOUND;
-                        resp.headers_mut()
-                            .insert(FAIL_REASON_HEADER_NAME, reason.parse().unwrap());
-                    }
-                    ResponseError::BadRequest(reason) => {
-                        *resp.status_mut() = StatusCode::BAD_REQUEST;
-                        resp.headers_mut()
-                            .insert(FAIL_REASON_HEADER_NAME, reason.parse().unwrap());
-                    }
-                    ResponseError::InternalError(reason) => {
-                        *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
-                        resp.headers_mut()
-                            .insert(FAIL_REASON_HEADER_NAME, reason.parse().unwrap());
-                    }
-                }
-                resp
-            }
-            Err(err) => {
-                tracing::error!("template render failed, err={}", err);
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to render template. Error: {}", err),
-                )
-                    .into_response()
-            }
+    let router = match rfs::store::get_router(&meta).await {
+        Ok(r) => r,
+        Err(err) => {
+            log::error!("failed to get router with error {}", err);
+            return Err(ResponseError::InternalServerError);
         }
-    }
-}
+    };
 
-enum ResponseError {
-    BadRequest(String),
-    FileNotFound(String),
-    InternalError(String),
+    let cache = cache::Cache::new(String::from("/tmp/cache"), router);
+    let tmp_target = tempdir::TempDir::new("target").unwrap();
+    let tmp_target_path = tmp_target.path().to_owned();
+
+    match rfs::unpack(&meta, &cache, &tmp_target_path, false).await {
+        Ok(_) => (),
+        Err(err) => {
+            log::error!("failed to unpack flist {} with error {}", fl_path, err);
+            return Err(ResponseError::InternalServerError);
+        }
+    };
+
+    let mut paths = Vec::new();
+    for file in WalkDir::new(tmp_target_path.clone())
+        .into_iter()
+        .filter_map(|file| file.ok())
+    {
+        let mut path = file.path().to_string_lossy().to_string();
+        path = path
+            .strip_prefix(&tmp_target_path.to_string_lossy().to_string())
+            .unwrap()
+            .to_string();
+        paths.push(path);
+    }
+
+    Ok(ResponseResult::PreviewFlist(paths))
 }
