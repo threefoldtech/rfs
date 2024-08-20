@@ -1,5 +1,5 @@
 <template>
-  <v-app-bar color="#1aa18f" >
+  <v-app-bar color="#1aa18f">
     <v-app-bar-nav-icon to="/" class="ml-8">
       <v-img :src="whiteLogo" contain height="50px" width="50px"></v-img>
     </v-app-bar-nav-icon>
@@ -12,7 +12,31 @@
         ><v-icon icon="mdi-plus-circle-outline" class="mr-2"></v-icon>Create
         flist</v-btn
       >
-      <v-btn to="/Flists">My FLists</v-btn>
+      <v-menu class="white">
+        <template v-slot:activator="{ props }">
+          <v-btn
+            class="align-self-center me-4"
+            height="100%"
+            rounded="50%"
+            variant="plain"
+            v-bind="props"
+            style="font-size: 20px"
+          >
+            <v-icon icon="mdi-menu-down" end></v-icon>
+          </v-btn>
+        </template>
+        <v-list>
+          <v-list-item>
+            <v-btn to="Flists">My FLists</v-btn>
+          </v-list-item>
+          <v-list-item>
+            <v-btn @click="logout"
+              ><v-icon icon="mdi-logout" style="font-size: 20px" />log
+              out</v-btn
+            >
+          </v-list-item>
+        </v-list>
+      </v-menu>
     </div>
   </v-app-bar>
 </template>
@@ -20,5 +44,17 @@
 <script setup lang="ts">
 import whiteLogo from "../assets/logo_white.png";
 import "../../public/theme.css";
+import { toast } from "vue3-toastify";
 const auth: string | null = sessionStorage.getItem("token");
+
+const logout = async () => {
+  try {
+    sessionStorage.removeItem("token")
+    sessionStorage.removeItem("username")
+    window.location.href = "/"
+  } catch (error: any) {
+    console.error("Failed to logout", error);
+    toast.error(error.response?.data || "error occured");
+  }
+};
 </script>

@@ -2,53 +2,74 @@
   <v-app>
     <Navbar />
     <v-main>
-      <div>
-        <h2 class="ml-5 mt-5">
-          <v-icon icon="mdi-account" color="#1aa18f"></v-icon
-          >{{ loggedInUser }}
-        </h2>
-      </div>
-      <v-data-table
-        v-if="loggedInUser"
-        :items="currentUserFlists"
-        :headers="tableHeader"
-        hover
-      >
-        <template v-slot:item.path_uri="{ index, value }">
-          <template v-if="currentUserFlists[index].progress === 100">
-            <v-btn class="elevation-0">
-              <a :href="baseURL + `/` + value" download>
-                <v-icon icon="mdi-download" color="grey"></v-icon
-              ></a>
-              <v-tooltip activator="parent" location="start"
-                >Download flist</v-tooltip
-              >
-            </v-btn>
-            <v-btn @click="copyLink(baseURL + `/` + value)" class="elevation-0">
-              <v-icon icon="mdi-content-copy" color="grey"></v-icon>
-              <v-tooltip activator="parent">Copy Link</v-tooltip>
-            </v-btn>
-          </template>
-          <template v-else>
-            <span>loading... </span>
-          </template>
-        </template>
+      <v-container>
+        <v-row>
+          <div class="user">
+            <h2 class="mt-5 mb-5 text-h4 text-grey-darken-2">
+              <v-icon icon="mdi-account" color="#1aa18f"></v-icon
+              >{{ loggedInUser }}
+            </h2>
+          </div>
+        </v-row>
+        <v-row>
+          <v-data-table
+            v-if="loggedInUser"
+            :items="currentUserFlists"
+            :headers="tableHeader"
+            hover
+            items-per-page="25"
+            class = "thick-border"
+          >
+            <template #item.size="{ value }">
+              {{ filesize(value, { standard: "jedec", precision: 3 }) }}
+            </template>
+            <template v-slot:item.path_uri="{ index, value }">
+              <template v-if="currentUserFlists[index].progress === 100">
+                <v-btn class="elevation-0">
+                  <a :href="baseURL + `/` + value" download>
+                    <v-icon icon="mdi-download" color="grey"></v-icon
+                  ></a>
+                  <v-tooltip activator="parent" location="start"
+                    >Download flist</v-tooltip
+                  >
+                </v-btn>
+                <v-btn
+                  @click="copyLink(baseURL + `/` + value)"
+                  class="elevation-0"
+                >
+                  <v-icon icon="mdi-content-copy" color="grey"></v-icon>
+                  <v-tooltip activator="parent">Copy Link</v-tooltip>
+                </v-btn>
+              </template>
+              <template v-else>
+                <span>loading... </span>
+              </template>
+            </template>
 
-        <template #item.last_modified="{ value }">
-          {{ new Date(value * 1000).toString() }}
-        </template>
+            <template #item.last_modified="{ value }">
+              {{ new Date(value * 1000).toString() }}
+            </template>
 
-        <template v-slot:item.progress="{ value }">
-          <template v-if="value != 100">
-            <v-progress-linear :model-value="value" color="purple-darken-1">
-            </v-progress-linear>
-            <span> {{ Math.floor(value) }}% </span>
-          </template>
-          <template v-else>
-            <v-chip color="green">finished</v-chip>
-          </template>
-        </template>
-      </v-data-table>
+            <template v-slot:item.progress="{ value }" class="w-25">
+              <template v-if="value != 100">
+                <v-progress-linear
+                  :model-value="value"
+                  color="#1aa18f"
+                  height="20"
+                  rounded="sm"
+                >
+                  <template v-slot:default="{ value }">
+                    <span class="text-white">{{ Math.floor(value) }}%</span>
+                  </template>
+                </v-progress-linear>
+              </template>
+              <template v-else>
+                <v-chip color="#1aa18f">finished</v-chip>
+              </template>
+            </template>
+          </v-data-table>
+        </v-row>
+      </v-container>
     </v-main>
     <Footer />
   </v-app>
@@ -62,16 +83,18 @@ import { onMounted, ref } from "vue";
 import { useClipboard } from "@vueuse/core";
 import { toast } from "vue3-toastify";
 import { api } from "../client.ts";
+import { filesize } from "filesize";
 
 const tableHeader = [
   { title: "Name", key: "name" },
+  { title: "Size", key: "size" },
   { title: "Last Modified", key: "last_modified" },
-  { title: "Download Link", key: "path_uri", sortable: false },
-  { title: "Progress", key: "progress" },
+  { title: "Download", key: "path_uri", sortable: false },
+  { title: "Progress", key: "progress", width: "20%" },
 ];
 const loggedInUser = sessionStorage.getItem("username");
 var flists = ref<FlistsResponseInterface>({});
-const baseURL = import.meta.env.VITE_API_URL
+const baseURL = import.meta.env.VITE_API_URL;
 let currentUserFlists = computed(() => {
   return loggedInUser?.length ? flists.value[loggedInUser] : [];
 });
@@ -88,9 +111,20 @@ onMounted(async () => {
     currentUserFlists = computed(() => {
       return loggedInUser?.length ? flists.value[loggedInUser] : [];
     });
-  } catch (error:any) {
+  } catch (error: any) {
     console.error("Failed to fetch flists", error);
-    toast.error(error.response?.data)
+    toast.error(error.response?.data);
   }
 });
 </script>
+
+<style>
+.user {
+  .v-icon--size-default {
+    font-size: 25px;
+  }
+}
+.thick-border .v-data-table__wrapper {
+  border: 3px solid #000; 
+}
+</style>

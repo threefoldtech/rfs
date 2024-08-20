@@ -3,12 +3,12 @@
     <Navbar></Navbar>
     <div class="w-100 position-relative" style="height: 30%">
       <v-img :src="image" cover style="z-index: 2"></v-img>
-      <div
+      <!-- <div
         class="position-absolute text-white"
         style="z-index: 4; top: 40%; left: 35%"
       >
         <h1>Create and Download Flist</h1>
-      </div>
+      </div> -->
     </div>
 
     <v-main class="d-flex justify-center mt-0" style="height: fit-content">
@@ -21,17 +21,9 @@
         <v-list>
           <v-list-item nav>
             <v-list-item-title class="text-h6"> Users</v-list-item-title>
-            <template v-slot:append>
-              <v-btn variant="text" @click.stop="collapsed = !collapsed">
-                <v-icon>{{
-                  !collapsed ? "mdi-chevron-up" : "mdi-chevron-down"
-                }}</v-icon></v-btn
-              >
-            </template>
           </v-list-item>
-          <v-divider v-if="!collapsed"></v-divider>
+          <v-divider></v-divider>
           <v-list-item
-            v-if="!collapsed"
             v-for="userName in userNameList"
             :key="userName"
             @click="username = userName"
@@ -59,9 +51,13 @@
           :headers="tableHeader"
           hover
           class="elevation-2"
+          items-per-page="25"  
         >
+        <template #item.size="{value}">
+          {{filesize(value, {standard: "jedec", precision: 3})}}
+        </template>
           <template #item.last_modified="{ value }">
-            {{ new Date(value * 1000).toString() }}
+            {{ new Date(value * 1000).toString().split("(")[0] }}
           </template>
           <template #item.path_uri="{ value }">
             <v-btn class="elevation-0">
@@ -94,9 +90,9 @@ import { FlistsResponseInterface, FlistBody } from "../types/Flists.ts";
 import { toast } from "vue3-toastify";
 import "vue3-toastify/dist/index.css";
 import { api } from "../client.ts";
+import {filesize} from "filesize";
 
 const baseURL = import.meta.env.VITE_API_URL;
-const collapsed = ref<boolean>(true);
 
 const copyLink = (url: string) => {
   copy(url);
@@ -105,8 +101,9 @@ const copyLink = (url: string) => {
 
 const tableHeader = [
   { title: "Name", key: "name" },
+  { title: "Size", key: "size" },
   { title: "Last Modified", key: "last_modified" },
-  { title: "Download Link", key: "path_uri", sortable: false },
+  { title: "Download", key: "path_uri", sortable: false },
 ];
 var flists = ref<FlistsResponseInterface>({});
 const username = ref("");
@@ -136,13 +133,14 @@ const getUserNames = () => {
   const list: string[] = [];
   const map = flists.value;
   for (var flistMap in map) {
-    list.push(flistMap)
+    list.push(flistMap);
   }
-  userNameList.value=list
+  userNameList.value = list;
 };
 onMounted(async () => {
   try {
     flists.value = (await api.get<FlistsResponseInterface>("/v1/api/fl")).data;
+    console.log(flists.value)
     getUserNames();
     filteredFlistFn();
   } catch (error: any) {
@@ -154,8 +152,12 @@ watch(username, () => {
   filteredFlistFn();
 });
 </script>
-<style lang="css" scoped>
+<style lang="css">
 .mx-height {
   max-height: 600px;
+}
+
+.v-data-table-footer__items-per-page {
+  display: none !important; 
 }
 </style>

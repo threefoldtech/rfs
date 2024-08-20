@@ -161,7 +161,7 @@
                 v-model="flist.server_address"
                 variant="solo-filled"
                 density="compact"
-                placeholder="localhost:5000/ubuntu"
+                placeholder="localhost:5000"
               >
               </v-text-field>
             </div>
@@ -192,7 +192,7 @@
             </div>
 
             <v-btn
-              class="pr-5 rounded-pill background-green mb-8"
+              class="pr-5 rounded-pill background-green mb-8 mt-5"
               size="large"
               width="50%"
               @click="create"

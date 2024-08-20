@@ -4,6 +4,7 @@ export interface FlistBody {
   name: string;
   path_uri: string;
   progress: number;
+  size: number;
 }
 
 export interface FlistsResponseInterface {
