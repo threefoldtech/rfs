@@ -28,12 +28,12 @@
             :key="userName"
             @click="username = userName"
           >
-            <template v-slot:prepend>
+            <template v-slot:prepend >
               <v-icon icon="mdi-account" color="#1aa18f"></v-icon>
-            </template>
-            <v-list-item-title>
-              {{ userName }}
-            </v-list-item-title>
+              <v-list-item-title>
+                {{ userName }}
+              </v-list-item-title>
+          </template>
           </v-list-item>
         </v-list>
       </v-navigation-drawer>
@@ -53,6 +53,10 @@
           class="elevation-2"
           items-per-page="25"  
         >
+        <template #item.name="{ value }">
+              <v-icon icon="mdi-text-box" class="mr-1"  color="grey"/>
+              <span class="file-name">{{ value }}</span>
+            </template>
         <template #item.size="{value}">
           {{filesize(value, {standard: "jedec", precision: 3})}}
         </template>

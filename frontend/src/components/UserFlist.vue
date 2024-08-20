@@ -2,24 +2,28 @@
   <v-app>
     <Navbar />
     <v-main>
-      <v-container>
-        <v-row>
+      <v-container class="pa-0">
+        <v-row no-gutters class="pa-0 ma-0">
           <div class="user">
-            <h2 class="mt-5 mb-5 text-h4 text-grey-darken-2">
+            <h2 class="mt-5 mb-5 text-h5 text-grey-darken-2">
               <v-icon icon="mdi-account" color="#1aa18f"></v-icon
               >{{ loggedInUser }}
             </h2>
           </div>
         </v-row>
-        <v-row>
-          <v-data-table
+        <v-row no-gutters class="pa-0 ma-0">
+          <v-data-table density="compact"
             v-if="loggedInUser"
             :items="currentUserFlists"
             :headers="tableHeader"
-            hover
+            dense
             items-per-page="25"
             class = "thick-border"
           >
+            <template #item.name="{ value }">
+              <v-icon icon="mdi-text-box" class="mr-1"  color="grey"/>
+              <span class="file-name">{{ value }}</span>
+            </template>
             <template #item.size="{ value }">
               {{ filesize(value, { standard: "jedec", precision: 3 }) }}
             </template>
@@ -37,7 +41,7 @@
                   @click="copyLink(baseURL + `/` + value)"
                   class="elevation-0"
                 >
-                  <v-icon icon="mdi-content-copy" color="grey"></v-icon>
+                  <v-icon icon="mdi-content-copy" color="grey" ></v-icon>
                   <v-tooltip activator="parent">Copy Link</v-tooltip>
                 </v-btn>
               </template>
@@ -47,7 +51,7 @@
             </template>
 
             <template #item.last_modified="{ value }">
-              {{ new Date(value * 1000).toString() }}
+              {{ new Date(value * 1000).toString().split("(")[0] }}
             </template>
 
             <template v-slot:item.progress="{ value }" class="w-25">
@@ -86,7 +90,7 @@ import { api } from "../client.ts";
 import { filesize } from "filesize";
 
 const tableHeader = [
-  { title: "Name", key: "name" },
+  { title: "File Name", key: "name" },
   { title: "Size", key: "size" },
   { title: "Last Modified", key: "last_modified" },
   { title: "Download", key: "path_uri", sortable: false },
@@ -127,4 +131,21 @@ onMounted(async () => {
 .thick-border .v-data-table__wrapper {
   border: 3px solid #000; 
 }
+.v-data-table-header th {
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: bold; /* Increased font weight */
+}
+
+.v-data-table td {
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: bold; /* Increased font weight */
+}
+
+
+.file-name {
+  font-weight: bold; /* Increased font weight for file names */
+}
+
 </style>
