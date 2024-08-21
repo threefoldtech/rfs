@@ -1,7 +1,7 @@
 <template>
   <v-app>
     <Navbar />
-    <v-main class="d-flex flex-column justify-center" height="90%">
+    <v-main class="d-flex flex-column justify-center mn-height" >
       <v-container fluid>
         <v-row justify="center">
           <v-col cols="8">
@@ -247,3 +247,9 @@ const create = async () => {
   }
 };
 </script>
+
+<style>
+.mn-height {
+  min-height: calc(100% - 6%);
+}
+</style>

@@ -1,7 +1,7 @@
 <template>
   <v-app>
     <Navbar></Navbar>
-    <div class="w-100 position-relative" style="height: 30%">
+    <div class="w-100 position-relative" >
       <v-img :src="image" cover style="z-index: 2"></v-img>
       <!-- <div
         class="position-absolute text-white"
@@ -163,5 +163,9 @@ watch(username, () => {
 
 .v-data-table-footer__items-per-page {
   display: none !important; 
+}
+
+.mn-height {
+  min-height: calc(100% - 7%);
 }
 </style>

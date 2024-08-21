@@ -1,7 +1,7 @@
 <template>
   <v-app>
     <Navbar />
-    <v-main>
+    <v-main class="mn-height">
       <v-container class="pa-0">
         <v-row no-gutters class="pa-0 ma-0">
           <div class="user">
@@ -12,16 +12,17 @@
           </div>
         </v-row>
         <v-row no-gutters class="pa-0 ma-0">
-          <v-data-table density="compact"
+          <v-data-table
+            density="compact"
             v-if="loggedInUser"
             :items="currentUserFlists"
             :headers="tableHeader"
             dense
             items-per-page="25"
-            class = "thick-border"
+            class="thick-border"
           >
             <template #item.name="{ value }">
-              <v-icon icon="mdi-text-box" class="mr-1"  color="grey"/>
+              <v-icon icon="mdi-text-box" class="mr-1" color="grey" />
               <span class="file-name">{{ value }}</span>
             </template>
             <template #item.size="{ value }">
@@ -41,7 +42,7 @@
                   @click="copyLink(baseURL + `/` + value)"
                   class="elevation-0"
                 >
-                  <v-icon icon="mdi-content-copy" color="grey" ></v-icon>
+                  <v-icon icon="mdi-content-copy" color="grey"></v-icon>
                   <v-tooltip activator="parent">Copy Link</v-tooltip>
                 </v-btn>
               </template>
@@ -129,7 +130,7 @@ onMounted(async () => {
   }
 }
 .thick-border .v-data-table__wrapper {
-  border: 3px solid #000; 
+  border: 3px solid #000;
 }
 
 .v-data-table td {
@@ -138,9 +139,10 @@ onMounted(async () => {
   font-weight: bold;
 }
 
-
 .file-name {
   font-weight: bold;
 }
-
+.mn-height {
+  min-height: calc(100% - 6%);
+}
 </style>
