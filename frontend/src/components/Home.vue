@@ -60,10 +60,12 @@
               <v-icon icon="mdi-text-box" class="mr-1"  color="grey"/>
               <span class="file-name">{{ value }}</span>
         </template>
-        <template #item.preview = "">
-          <v-btn @click="" class="elevation-0">
-                <v-icon icon="mdi-eye-outline" color="grey"></v-icon>
-          </v-btn>
+        <template v-slot:item.preview = "{index}" >
+          <a :href="`/` + filteredFlist[index].path_uri + `.md`">
+            <v-btn class="elevation-0">
+                  <v-icon icon="mdi-eye-outline" color="grey"></v-icon>
+            </v-btn>
+          </a>
         </template>
         <template #item.size="{value}">
           {{filesize(value, {standard: "jedec", precision: 3})}}
@@ -97,20 +99,14 @@ import { onMounted, ref, watch } from "vue";
 import Navbar from "./Navbar.vue";
 import Footer from "./Footer.vue";
 import image from "../assets/home.png";
-import { useClipboard } from "@vueuse/core";
 import { FlistsResponseInterface, FlistBody } from "../types/Flists.ts";
 import { toast } from "vue3-toastify";
 import "vue3-toastify/dist/index.css";
-import { api } from "../client.ts";
+import { api, copyLink } from "../client.ts";
 import {filesize} from "filesize";
-import { title } from "process";
 
 const baseURL = import.meta.env.VITE_API_URL;
 
-const copyLink = (url: string) => {
-  copy(url);
-  toast.success("Link Copied to Clipboard");
-};
 
 const tableHeader = [
   { title: "File Name", key: "name" },
@@ -123,7 +119,6 @@ var flists = ref<FlistsResponseInterface>({});
 const username = ref("");
 const userNameList = ref<string[]>([]);
 let filteredFlist = ref<FlistBody[]>([]);
-const { copy } = useClipboard();
 const filteredFlistFn = () => {
   filteredFlist.value = [];
   const map = flists.value;

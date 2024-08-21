@@ -4,6 +4,7 @@ import CreateFlist from "../components/CreateFlist.vue";
 import Home from "../components/Home.vue";
 import UserFlist from "../components/UserFlist.vue";
 import FollowUp from "../components/FollowUp.vue";
+import PreviewFlist from "../components/PreviewFlist.vue";
 
 const routes: Array<RouteRecordRaw> = [
   {
@@ -33,6 +34,11 @@ const routes: Array<RouteRecordRaw> = [
     path: "/",
     name: "Home",
     component: Home,
+  },
+  {
+    path: "/flists/:username/:id",
+    name: "PreviewFlist",
+    component: PreviewFlist,
   },
 ];
 

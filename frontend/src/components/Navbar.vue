@@ -28,7 +28,7 @@
         </template>
         <v-list>
           <v-list-item>
-            <v-btn to="Flists">My FLists</v-btn>
+            <v-btn><a href="/flists" class="text-black" style="text-decoration:none;">My FLists</a></v-btn>
           </v-list-item>
           <v-list-item>
             <v-btn @click="logout"

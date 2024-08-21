@@ -25,6 +25,13 @@
               <v-icon icon="mdi-text-box" class="mr-1" color="grey" />
               <span class="file-name">{{ value }}</span>
             </template>
+              <template v-slot:item.preview = "{index}" >
+          <a :href="`/` + currentUserFlists[index].path_uri + `.md`">
+            <v-btn class="elevation-0">
+                  <v-icon icon="mdi-eye-outline" color="grey"></v-icon>
+            </v-btn>
+          </a>
+        </template>
             <template #item.size="{ value }">
               {{ filesize(value, { standard: "jedec", precision: 3 }) }}
             </template>
@@ -85,13 +92,14 @@ import Footer from "./Footer.vue";
 import { FlistsResponseInterface } from "../types/Flists.ts";
 import { computed } from "vue";
 import { onMounted, ref } from "vue";
-import { useClipboard } from "@vueuse/core";
 import { toast } from "vue3-toastify";
-import { api } from "../client.ts";
+import { api, copyLink } from "../client.ts";
 import { filesize } from "filesize";
+
 
 const tableHeader = [
   { title: "File Name", key: "name" },
+  { title: "Preview", key:"preview"},
   { title: "Size", key: "size" },
   { title: "Last Modified", key: "last_modified" },
   { title: "Download", key: "path_uri", sortable: false },
@@ -103,12 +111,6 @@ const baseURL = import.meta.env.VITE_API_URL;
 let currentUserFlists = computed(() => {
   return loggedInUser?.length ? flists.value[loggedInUser] : [];
 });
-const { copy } = useClipboard();
-
-const copyLink = (url: string) => {
-  copy(url);
-  toast.success("Link Copied to Clipboard");
-};
 
 onMounted(async () => {
   try {
