@@ -22,7 +22,8 @@
             v-bind="props"
             style="font-size: 20px"
           >
-            <v-icon icon="mdi-menu-down" end></v-icon>
+            <v-icon icon="mdi-account"></v-icon>
+            <!-- <v-icon icon="mdi-menu-down" end></v-icon> -->
           </v-btn>
         </template>
         <v-list>

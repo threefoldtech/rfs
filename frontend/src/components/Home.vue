@@ -16,11 +16,11 @@
         elevation="2"
         app
         class="position-absolute mx-height"
-        style="top: 30%; left: 0; height: fit-content"
+        style="top: 30%; left: 0; height: 63%; width: fit-content;"
       >
         <v-list>
           <v-list-item nav>
-            <v-list-item-title class="text-h6"> Users</v-list-item-title>
+            <v-list-item-title class=" text-h6 " > Users</v-list-item-title>
           </v-list-item>
           <v-divider></v-divider>
           <v-list-item density="compact"
@@ -29,8 +29,10 @@
             @click="username = userName"
           >
             <template v-slot:prepend >
-              <v-icon icon="mdi-account" color="#1aa18f"></v-icon>
-              <v-list-item-title>
+              <v-icon icon="mdi-account" color="#1aa18f" style="font-size: 15px;"></v-icon>
+              <v-list-item-title style="padding: 2px 4px;
+  font-size: 12px;
+  font-weight: 300;">
                 {{ userName }}
               </v-list-item-title>
           </template>
@@ -50,13 +52,19 @@
           :items="filteredFlist"
           :headers="tableHeader"
           dense
+          
           class="thick-border "
           items-per-page="25"  
         >
         <template #item.name="{ value }">
               <v-icon icon="mdi-text-box" class="mr-1"  color="grey"/>
               <span class="file-name">{{ value }}</span>
-            </template>
+        </template>
+        <template #item.preview = "">
+          <v-btn @click="" class="elevation-0">
+                <v-icon icon="mdi-eye-outline" color="grey"></v-icon>
+          </v-btn>
+        </template>
         <template #item.size="{value}">
           {{filesize(value, {standard: "jedec", precision: 3})}}
         </template>
@@ -95,6 +103,7 @@ import { toast } from "vue3-toastify";
 import "vue3-toastify/dist/index.css";
 import { api } from "../client.ts";
 import {filesize} from "filesize";
+import { title } from "process";
 
 const baseURL = import.meta.env.VITE_API_URL;
 
@@ -104,7 +113,8 @@ const copyLink = (url: string) => {
 };
 
 const tableHeader = [
-  { title: "Name", key: "name" },
+  { title: "File Name", key: "name" },
+  { title: "Preview", key:"preview"},
   { title: "Size", key: "size" },
   { title: "Last Modified", key: "last_modified" },
   { title: "Download", key: "path_uri", sortable: false },
@@ -156,7 +166,7 @@ watch(username, () => {
   filteredFlistFn();
 });
 </script>
-<style lang="css">
+<style lang="css" scoped>
 .mx-height {
   max-height: 600px;
 }
@@ -166,6 +176,6 @@ watch(username, () => {
 }
 
 .mn-height {
-  min-height: calc(100% - 7%);
+  min-height: calc(100% - 37%);
 }
 </style>

@@ -63,7 +63,7 @@
               >
               </v-text-field>
               <v-btn
-                class="pr-5 rounded-pill background-green"
+                class="pr-5 rounded-pill background-green text-white"
                 size="large"
                 width="50%"
                 @click="login"

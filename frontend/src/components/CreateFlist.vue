@@ -192,7 +192,7 @@
             </div>
 
             <v-btn
-              class="pr-5 rounded-pill background-green mb-8 mt-5"
+              class="pr-5 rounded-pill background-green mb-8 mt-5 text-white"
               size="large"
               width="50%"
               @click="create"
@@ -250,6 +250,6 @@ const create = async () => {
 
 <style>
 .mn-height {
-  min-height: calc(100% - 6%);
+  min-height: calc(100% - 7%);
 }
 </style>

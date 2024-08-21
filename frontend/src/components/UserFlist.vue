@@ -132,17 +132,19 @@ onMounted(async () => {
 .thick-border .v-data-table__wrapper {
   border: 3px solid #000;
 }
-
-.v-data-table td {
+.v-data-table-footer__items-per-page { 
+  display: none !important;  
+}
+.v-data-table td{
   padding: 4px 8px;
   font-size: 12px;
-  font-weight: bold;
+  font-weight: 500;
 }
 
 .file-name {
-  font-weight: bold;
+  font-weight: 500;
 }
 .mn-height {
-  min-height: calc(100% - 6%);
+  min-height: calc(100% - 7%);
 }
 </style>
