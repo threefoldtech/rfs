@@ -131,21 +131,16 @@ onMounted(async () => {
 .thick-border .v-data-table__wrapper {
   border: 3px solid #000; 
 }
-.v-data-table-header th {
-  padding: 4px 8px;
-  font-size: 12px;
-  font-weight: bold; /* Increased font weight */
-}
 
 .v-data-table td {
   padding: 4px 8px;
   font-size: 12px;
-  font-weight: bold; /* Increased font weight */
+  font-weight: bold;
 }
 
 
 .file-name {
-  font-weight: bold; /* Increased font weight for file names */
+  font-weight: bold;
 }
 
 </style>

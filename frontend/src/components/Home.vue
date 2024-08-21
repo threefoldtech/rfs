@@ -12,7 +12,7 @@
     </div>
 
     <v-main class="d-flex justify-center mt-0" style="height: fit-content">
-      <v-navigation-drawer
+      <v-navigation-drawer 
         elevation="2"
         app
         class="position-absolute mx-height"
@@ -23,7 +23,7 @@
             <v-list-item-title class="text-h6"> Users</v-list-item-title>
           </v-list-item>
           <v-divider></v-divider>
-          <v-list-item
+          <v-list-item density="compact"
             v-for="userName in userNameList"
             :key="userName"
             @click="username = userName"
@@ -46,11 +46,11 @@
           <v-icon icon="mdi-account" color="#1aa18f"></v-icon>{{ username }}
         </h2>
         <!-- table containe flists -->
-        <v-data-table
+        <v-data-table density="compact"
           :items="filteredFlist"
           :headers="tableHeader"
-          hover
-          class="elevation-2"
+          dense
+          class="thick-border "
           items-per-page="25"  
         >
         <template #item.name="{ value }">
