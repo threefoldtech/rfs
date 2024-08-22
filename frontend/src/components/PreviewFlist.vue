@@ -23,13 +23,13 @@
         <v-row class="d-flex flex-column">
             <h3 class="text-subtitle-1 text-grey-darken-2">Source file</h3>
             <v-text-field rounded="20" variant="outlined" density="compact" readonly class="text-grey-darken-1 mr-0">
-              {{ url }}
+              {{ baseURL + url }}
               <template #append>
                 <v-btn
                     color="#1aa18f"
                     value="Copy"
                     class="Btn"
-                    @click="copyLink(url)">
+                    @click="copyLink(baseURL + url)">
                 Copy
                 </v-btn>
               </template>
@@ -38,13 +38,13 @@
         <v-row class="d-flex flex-column">
             <h3 class="text-subtitle-1 text-grey-darken-2">Archive Checksum (MD5)</h3>
             <v-text-field rounded="20" variant="outlined" density="compact" readonly class="text-grey-darken-1 mr-0">
-              flis
+              {{flistPreview.checksum}}
               <template #append>
                 <v-btn
                     color="#1aa18f"
                     value="Copy"
                     class="Btn"
-                    @click="copyLink(url)">
+                    @click="copyLink(flistPreview.checksum)">
                 Copy
                 </v-btn>
               </template>
@@ -80,17 +80,15 @@ import { toast } from "vue3-toastify";
 import "vue3-toastify/dist/index.css";
 import { api } from "../client.ts";
 import { copyLink } from "../client.ts";
-import { FlistPreview, FlistPreviewRequest  } from "../types/Flists.ts";
-import { json } from "node:stream/consumers";
+import { FlistPreview  } from "../types/Flists.ts";
 
 
 const flistPreview = ref<FlistPreview>({checksum:"", content:[], metadata:""});
 const urlPartition = window.location.href.split("/")
 const id = ref<string>(urlPartition[urlPartition.length - 1])
 const username = ref<string>(urlPartition[urlPartition.length - 2])
-//const baseURL = import.meta.env.VITE_API_URL;
+const baseURL = ref<string>(import.meta.env.VITE_API_URL + "/");
 const url ="flists" + "/" + username.value + "/" + id.value
-
 
 const showContent = ref<string>()
 const linkDecoration = ref<string>("text-as-anchor")
@@ -101,9 +99,8 @@ const contentShow = () => {
 
 onMounted(async () => {
   try {
-    const params={flist_path: url}
-    const req = await api.post("/v1/api/fl/preview", { data: params });
-    console.log(req)
+    flistPreview.value = (await api.get<FlistPreview>("/v1/api/fl/preview/" + url.replaceAll("/","%2F"))).data;
+    console.log(flistPreview.value)
     flistPreview.value.content = flistPreview.value.content.slice(1)
     showContent.value = "show content on click"
     //showContent.value = content.value.join("\n")

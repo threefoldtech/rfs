@@ -16,7 +16,3 @@ export interface FlistPreview{
   content: string[];
   metadata: string;
 }
-
-export interface FlistPreviewRequest{
-  flist_path: string
-}
