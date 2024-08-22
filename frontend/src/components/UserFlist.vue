@@ -26,7 +26,7 @@
               <span class="file-name">{{ value }}</span>
             </template>
               <template v-slot:item.preview = "{index}" >
-          <a :href="`/` + currentUserFlists[index].path_uri + `.md`">
+          <a :href="`/` + currentUserFlists[index].path_uri">
             <v-btn class="elevation-0">
                   <v-icon icon="mdi-eye-outline" color="grey"></v-icon>
             </v-btn>

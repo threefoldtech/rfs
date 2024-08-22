@@ -10,3 +10,13 @@ export interface FlistBody {
 export interface FlistsResponseInterface {
   [key: string]: FlistBody[];
 }
+
+export interface FlistPreview{
+  checksum: string;
+  content: string[];
+  metadata: string;
+}
+
+export interface FlistPreviewRequest{
+  flist_path: string
+}
