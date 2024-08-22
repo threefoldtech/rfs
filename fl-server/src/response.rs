@@ -10,7 +10,11 @@ use axum::{
 use serde::Serialize;
 use utoipa::ToSchema;
 
-use crate::{auth::SignInResponse, config::Job, handlers::FlistState};
+use crate::{
+    auth::SignInResponse,
+    config::Job,
+    handlers::{FlistState, PreviewResponse},
+};
 
 #[derive(Serialize, ToSchema)]
 pub enum ResponseError {
@@ -75,7 +79,7 @@ pub enum ResponseResult {
     FlistCreated(Job),
     FlistState(FlistState),
     Flists(HashMap<String, Vec<FileInfo>>),
-    PreviewFlist(Vec<String>),
+    PreviewFlist(PreviewResponse),
     SignedIn(SignInResponse),
     DirTemplate(DirListTemplate),
     Res(hyper::Response<tower_http::services::fs::ServeFileSystemResponseBody>),

@@ -1,3 +1,4 @@
+use anyhow::Error;
 use axum::{
     extract::{Path, State},
     response::IntoResponse,
@@ -10,24 +11,31 @@ use std::{
     sync::{mpsc, Arc},
 };
 use tokio::io;
+use walkdir::WalkDir;
 
 use bollard::auth::DockerCredentials;
 use serde::{Deserialize, Serialize};
 
-use crate::auth::{SignInBody, SignInResponse, __path_sign_in_handler};
+use crate::{
+    auth::{SignInBody, SignInResponse, __path_sign_in_handler, get_user_by_username, User},
+    response::{DirListTemplate, DirLister, ErrorTemplate, TemplateErr},
+};
 use crate::{
     config::{self, Job},
     response::{FileInfo, ResponseError, ResponseResult},
     serve_flists::visit_dir_one_level,
 };
-use rfs::fungi::Writer;
+use rfs::{
+    cache,
+    fungi::{Reader, Writer},
+};
 use utoipa::{OpenApi, ToSchema};
 use uuid::Uuid;
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(health_check_handler, create_flist_handler, get_flist_state_handler, list_flists_handler, sign_in_handler),
-    components(schemas(FlistBody, Job, ResponseError, ResponseResult, FileInfo, SignInBody, FlistState, SignInResponse, FlistStateInfo)),
+    paths(health_check_handler, create_flist_handler, get_flist_state_handler, preview_flist_handler, list_flists_handler, sign_in_handler),
+    components(schemas(DirListTemplate, DirLister, FlistBody, Job, ResponseError, ErrorTemplate, TemplateErr, ResponseResult, FileInfo, SignInBody, FlistState, SignInResponse, FlistStateInfo, PreviewResponse)),
     tags(
         (name = "fl-server", description = "Flist conversion API")
     )
@@ -46,6 +54,13 @@ pub struct FlistBody {
     pub server_address: Option<String>,
     pub identity_token: Option<String>,
     pub registry_token: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, ToSchema)]
+pub struct PreviewResponse {
+    pub content: Vec<String>,
+    pub metadata: String,
+    pub checksum: String,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, ToSchema)]
@@ -356,7 +371,57 @@ pub async fn list_flists_handler(
     Ok(ResponseResult::Flists(flists))
 }
 
-pub async fn flist_exists(dir_path: &std::path::Path, flist_name: &String) -> io::Result<bool> {
+#[utoipa::path(
+	get,
+	path = "/v1/api/fl/preview/{flist_path}",
+	responses(
+        (status = 200, description = "Flist preview result", body = PreviewResponse),
+        (status = 400, description = "Bad request"),
+        (status = 401, description = "Unauthorized user"),
+        (status = 403, description = "Forbidden"),
+        (status = 500, description = "Internal server error"),
+	),
+    params(
+        ("flist_path" = String, Path, description = "flist file path")
+    )
+)]
+#[debug_handler]
+pub async fn preview_flist_handler(
+    Extension(cfg): Extension<config::Config>,
+    Path(flist_path): Path<String>,
+) -> impl IntoResponse {
+    let fl_path = flist_path;
+
+    match validate_flist_path(cfg.users, &cfg.flist_dir, &fl_path).await {
+        Ok(_) => (),
+        Err(err) => return Err(ResponseError::BadRequest(err.to_string())),
+    };
+
+    let content = match unpack_flist(&fl_path).await {
+        Ok(paths) => paths,
+        Err(_) => return Err(ResponseError::InternalServerError),
+    };
+
+    let bytes = match std::fs::read(&fl_path) {
+        Ok(b) => b,
+        Err(err) => {
+            log::error!(
+                "failed to read flist '{}' into bytes with error {}",
+                fl_path,
+                err
+            );
+            return Err(ResponseError::InternalServerError);
+        }
+    };
+
+    Ok(ResponseResult::PreviewFlist(PreviewResponse {
+        content,
+        metadata: cfg.store_url.join("-"),
+        checksum: sha256::digest(&bytes),
+    }))
+}
+
+async fn flist_exists(dir_path: &std::path::Path, flist_name: &String) -> io::Result<bool> {
     let mut dir = tokio::fs::read_dir(dir_path).await?;
 
     while let Some(child) = dir.next_entry().await? {
@@ -368,4 +433,132 @@ pub async fn flist_exists(dir_path: &std::path::Path, flist_name: &String) -> io
     }
 
     Ok(false)
+}
+
+async fn validate_flist_path(
+    users: Vec<User>,
+    flist_dir: &String,
+    fl_path: &String,
+) -> Result<(), Error> {
+    // validate path starting with `/`
+    if fl_path.starts_with("/") {
+        return Err(anyhow::anyhow!(
+            "invalid flist path '{}', shouldn't start with '/'",
+            fl_path
+        ));
+    }
+
+    // path should include 3 parts [parent dir, username, flist file]
+    let parts: Vec<_> = fl_path.split("/").collect();
+    if parts.len() != 3 {
+        return Err(anyhow::anyhow!(
+            format!("invalid flist path '{}', should consist of 3 parts [parent directory, username and flist name", fl_path
+        )));
+    }
+
+    // validate parent dir
+    if parts[0] != flist_dir {
+        return Err(anyhow::anyhow!(
+            "invalid flist path '{}', parent directory should be '{}'",
+            fl_path,
+            flist_dir
+        ));
+    }
+
+    // validate username
+    match get_user_by_username(users, parts[1]) {
+        Some(_) => (),
+        None => {
+            return Err(anyhow::anyhow!(
+                "invalid flist path '{}', username '{}' doesn't exist",
+                fl_path,
+                parts[1]
+            ));
+        }
+    };
+
+    // validate flist extension
+    let fl_name = parts[2].to_string();
+    let ext = match std::path::Path::new(&fl_name).extension() {
+        Some(ex) => ex.to_string_lossy().to_string(),
+        None => "".to_string(),
+    };
+
+    if ext != "fl" {
+        return Err(anyhow::anyhow!(
+            "invalid flist path '{}', invalid flist extension '{}' should be 'fl'",
+            fl_path,
+            ext
+        ));
+    }
+
+    // validate flist existence
+    let username_dir = format!("{}/{}", parts[0], parts[1]);
+    match flist_exists(std::path::Path::new(&username_dir), &fl_name).await {
+        Ok(exists) => {
+            if !exists {
+                return Err(anyhow::anyhow!("flist '{}' doesn't exist", fl_path));
+            }
+        }
+        Err(e) => {
+            log::error!("failed to check flist existence with error {:?}", e);
+            return Err(anyhow::anyhow!("Internal server error"));
+        }
+    }
+
+    Ok(())
+}
+
+async fn unpack_flist(fl_path: &String) -> Result<Vec<std::string::String>, Error> {
+    let meta = match Reader::new(&fl_path).await {
+        Ok(reader) => reader,
+        Err(err) => {
+            log::error!(
+                "failed to initialize metadata database for flist `{}` with error {}",
+                fl_path,
+                err
+            );
+            return Err(anyhow::anyhow!("Internal server error"));
+        }
+    };
+
+    let router = match rfs::store::get_router(&meta).await {
+        Ok(r) => r,
+        Err(err) => {
+            log::error!("failed to get router with error {}", err);
+            return Err(anyhow::anyhow!("Internal server error"));
+        }
+    };
+
+    let cache = cache::Cache::new(String::from("/tmp/cache"), router);
+    let tmp_target = match tempdir::TempDir::new("target") {
+        Ok(dir) => dir,
+        Err(err) => {
+            log::error!("failed to create tmp dir with error {}", err);
+            return Err(anyhow::anyhow!("Internal server error"));
+        }
+    };
+    let tmp_target_path = tmp_target.path().to_owned();
+
+    match rfs::unpack(&meta, &cache, &tmp_target_path, false).await {
+        Ok(_) => (),
+        Err(err) => {
+            log::error!("failed to unpack flist {} with error {}", fl_path, err);
+            return Err(anyhow::anyhow!("Internal server error"));
+        }
+    };
+
+    let mut paths = Vec::new();
+    for file in WalkDir::new(tmp_target_path.clone())
+        .into_iter()
+        .filter_map(|file| file.ok())
+    {
+        let path = file.path().to_string_lossy().to_string();
+        match path.strip_prefix(&tmp_target_path.to_string_lossy().to_string()) {
+            Some(p) => paths.push(p.to_string()),
+            None => return Err(anyhow::anyhow!("Internal server error")),
+        };
+    }
+
+    Ok(paths)
 }

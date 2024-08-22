@@ -3,7 +3,6 @@ use std::{path::PathBuf, sync::Arc};
 use tokio::io;
 use tower::util::ServiceExt;
 use tower_http::services::ServeDir;
-use walkdir::WalkDir;
 
 use axum::{
     body::Body,
@@ -12,7 +11,6 @@ use axum::{
 };
 use axum_macros::debug_handler;
 use percent_encoding::percent_decode;
-use rfs::{cache, fungi::Reader};
 
 use crate::{
     config,
@@ -28,13 +26,6 @@ pub async fn serve_flists(
     req: Request<Body>,
 ) -> impl IntoResponse {
     let path = req.uri().path().to_string();
-
-    if path.ends_with(".md") {
-        match preview_flist(&path).await {
-            Ok(res) => return Ok(res),
-            Err(err) => return Err(err),
-        };
-    }
 
     return match ServeDir::new("").oneshot(req).await {
         Ok(res) => {
@@ -144,61 +135,4 @@ pub async fn visit_dir_one_level(
     }
 
     Ok(files)
-}
-
-async fn preview_flist(path: &String) -> Result<ResponseResult, ResponseError> {
-    if !path.ends_with(".md") {
-        return Err(ResponseError::BadRequest(
-            "flist path is invalid".to_string(),
-        ));
-    }
-
-    let mut fl_path: String = path.strip_suffix(".md").unwrap().to_string();
-    fl_path = fl_path.strip_prefix("/").unwrap().to_string();
-    let meta = match Reader::new(&fl_path).await {
-        Ok(reader) => reader,
-        Err(err) => {
-            log::error!(
-                "failed to initialize metadata database for flist `{}` with error {}",
-                fl_path,
-                err
-            );
-            return Err(ResponseError::InternalServerError);
-        }
-    };
-
-    let router = match rfs::store::get_router(&meta).await {
-        Ok(r) => r,
-        Err(err) => {
-            log::error!("failed to get router with error {}", err);
-            return Err(ResponseError::InternalServerError);
-        }
-    };
-
-    let cache = cache::Cache::new(String::from("/tmp/cache"), router);
-    let tmp_target = tempdir::TempDir::new("target").unwrap();
-    let tmp_target_path = tmp_target.path().to_owned();
-
-    match rfs::unpack(&meta, &cache, &tmp_target_path, false).await {
-        Ok(_) => (),
-        Err(err) => {
-            log::error!("failed to unpack flist {} with error {}", fl_path, err);
-            return Err(ResponseError::InternalServerError);
-        }
-    };
-
-    let mut paths = Vec::new();
-    for file in WalkDir::new(tmp_target_path.clone())
-        .into_iter()
-        .filter_map(|file| file.ok())
-    {
-        let mut path = file.path().to_string_lossy().to_string();
-        path = path
-            .strip_prefix(&tmp_target_path.to_string_lossy().to_string())
-            .unwrap()
-            .to_string();
-        paths.push(path);
-    }
-
-    Ok(ResponseResult::PreviewFlist(paths))
 }

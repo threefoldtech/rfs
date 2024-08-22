@@ -78,7 +78,7 @@ pub async fn sign_in_handler(
     }))
 }
 
-fn get_user_by_username(users: Vec<User>, username: &str) -> Option<User> {
+pub fn get_user_by_username(users: Vec<User>, username: &str) -> Option<User> {
     let user = users.iter().find(|u| u.username == username)?;
     Some(user.clone())
 }
