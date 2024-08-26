@@ -43,7 +43,7 @@
 
 <script setup lang="ts">
 import whiteLogo from "../assets/logo_white.png";
-import "../../public/theme.css";
+import "../../public/global.css";
 import { toast } from "vue3-toastify";
 const auth: string | null = sessionStorage.getItem("token");
 

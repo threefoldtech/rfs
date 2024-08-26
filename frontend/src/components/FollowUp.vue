@@ -12,8 +12,8 @@
         >
           <template v-slot:default> {{ progress }} % </template>
         </v-progress-circular>
-        <h2 class="mt-12 mb-5">Creating image . . .</h2>
-        <p>Please wait your image will be ready in few minutes.</p>
+        <h2 class="mt-12 mb-5">Creating image ...</h2>
+        <p>Please wait, your image will be ready in a few minutes.</p>
       </div>
       <div v-else>
         <v-alert
@@ -50,15 +50,12 @@ const uslPartition = window.location.href.split('/')
 const id = uslPartition[uslPartition.length - 1]
 const pullLists = async () => {
   try {
-    console.log(window.location.href.split('/'))
     const response = await api.get("v1/api/fl/" + id);
     if (response.data.flist_state.InProgress) {
-      console.log("loading");
       progress.value = Math.floor(
         response.data.flist_state.InProgress.progress
       );
     } else {
-      console.log("done");
       stopPolling.value = true;
       pending.value = false;
       window.location.href = "/flists" 

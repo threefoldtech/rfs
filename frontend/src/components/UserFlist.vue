@@ -89,12 +89,15 @@
 <script setup lang="ts">
 import Navbar from "./Navbar.vue";
 import Footer from "./Footer.vue";
-import { FlistsResponseInterface } from "../types/Flists.ts";
+import { FlistsResponseInterface } from "../types/Flist.ts";
 import { computed } from "vue";
 import { onMounted, ref } from "vue";
 import { toast } from "vue3-toastify";
-import { api, copyLink } from "../client.ts";
+import { api } from "../client.ts";
+import { copyLink } from "../helpers.ts";
 import { filesize } from "filesize";
+import "../../public/global.css";
+
 
 
 const tableHeader = [
@@ -125,28 +128,9 @@ onMounted(async () => {
 });
 </script>
 
-<style>
-.user {
-  .v-icon--size-default {
-    font-size: 25px;
-  }
-}
-.thick-border .v-data-table__wrapper {
-  border: 3px solid #000;
-}
-.v-data-table-footer__items-per-page { 
-  display: none !important;  
-}
-.v-data-table td{
-  padding: 4px 8px;
-  font-size: 12px;
-  font-weight: 500;
+<style scoped>
+.user .v-icon--size-default {
+  font-size: 25px;
 }
 
-.file-name {
-  font-weight: 500;
-}
-.mn-height {
-  min-height: calc(100% - 7%);
-}
 </style>

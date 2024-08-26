@@ -14,11 +14,7 @@
             class="mb-5 flex-grow-0"
           ></v-img>
           <p class="mt-0 text-white" style="width: 90%">
-            Is the main tool to create, mount and extract FungiStore lists
-            (Fungilist)fl for short. An fl is a simple format to keep
-            information about an entire filesystem in a compact form. It does
-            not hold the data itself but enough information to retrieve this
-            data back from a store.
+            FungiStore is the main tool to create, mount, and extract FungiStore lists (Fungilist or FL for short). An FL is a simple format used to store information about an entire filesystem in a compact form. It does not contain the data itself but provides enough information to retrieve this data from a store.
           </p>
         </v-container>
       </v-col>
@@ -86,7 +82,8 @@ import { User } from "../types/User.ts";
 import { api } from "../client.ts";
 import { toast } from "vue3-toastify";
 import "vue3-toastify/dist/index.css";
-import "../../public/theme.css";
+import "../../public/global.css";
+
 
 const user = ref<User>({ username: "", password: "" });
 

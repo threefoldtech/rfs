@@ -213,7 +213,7 @@ import { Flist } from "../types/Flist";
 import Footer from "./Footer.vue";
 import { toast } from "vue3-toastify";
 import "vue3-toastify/dist/index.css";
-import "../../public/theme.css";
+import "../../public/global.css";
 import { api } from "../client";
 
 const privateReg = ref<boolean>(false);
@@ -236,7 +236,6 @@ const create = async () => {
   try {
     const response = await api.post("/v1/api/fl", flist.value);
     window.location.href = "/follow_up/" + response.data.id
-    //router.push({ name: "FollowUp", params: { id: response.data.id } });
   } catch (error: any) {
     console.error("Failed to create flist", error);
     toast.error(error.response?.data || "error occured");
@@ -248,8 +247,3 @@ const create = async () => {
 };
 </script>
 
-<style>
-.mn-height {
-  min-height: calc(100% - 7%);
-}
-</style>

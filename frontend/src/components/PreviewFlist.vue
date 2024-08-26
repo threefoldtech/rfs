@@ -78,8 +78,8 @@ import image from "../assets/home.png";
 import { toast } from "vue3-toastify";
 import "vue3-toastify/dist/index.css";
 import { api } from "../client.ts";
-import { copyLink } from "../client.ts";
-import { FlistPreview  } from "../types/Flists.ts";
+import { copyLink } from "../helpers.ts";
+import { FlistPreview  } from "../types/Flist.ts";
 
 
 const flistPreview = ref<FlistPreview>({checksum:"", content:[], metadata:""});
@@ -98,12 +98,10 @@ const contentShow = () => {
 
 onMounted(async () => {
   try {
-    flistPreview.value = (await api.get<FlistPreview>("/v1/api/fl/preview/" + url.replaceAll("/","%2F"))).data;
-    console.log(flistPreview.value)
+    const encodedUrl = url.replaceAll("/", "%2F");
+    flistPreview.value = (await api.get<FlistPreview>("/v1/api/fl/preview/" + encodedUrl)).data;
     flistPreview.value.content = flistPreview.value.content.slice(1)
     showContent.value = "show content on click"
-    //showContent.value = content.value.join("\n")
-
   } catch (error: any) {
     console.error("Failed to fetch flists", error);
     toast.error(error.response?.data);

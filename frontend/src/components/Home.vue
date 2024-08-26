@@ -10,7 +10,7 @@
         elevation="2"
         app
         class="position-absolute mx-height"
-        style="top: 30%; left: 0; height: 63%; width: fit-content;"
+        style="top: 30%; left: 0; height: 62.5%; width: fit-content; min-width: 12.5%;"
       >
         <v-list>
           <v-list-item nav>
@@ -25,7 +25,7 @@
             <template v-slot:prepend >
               <v-icon icon="mdi-account" color="#1aa18f" style="font-size: 15px;"></v-icon>
               <v-list-item-title style="padding: 2px 4px;
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 300;">
                 {{ userName }}
               </v-list-item-title>
@@ -93,10 +93,11 @@ import { onMounted, ref, watch } from "vue";
 import Navbar from "./Navbar.vue";
 import Footer from "./Footer.vue";
 import image from "../assets/home.png";
-import { FlistsResponseInterface, FlistBody } from "../types/Flists.ts";
+import { FlistsResponseInterface, FlistBody } from "../types/Flist.ts";
 import { toast } from "vue3-toastify";
 import "vue3-toastify/dist/index.css";
-import { api, copyLink } from "../client.ts";
+import { api } from "../client.ts";
+import { copyLink } from "../helpers.ts";
 import {filesize} from "filesize";
 
 const baseURL = import.meta.env.VITE_API_URL;
@@ -143,7 +144,6 @@ const getUserNames = () => {
 onMounted(async () => {
   try {
     flists.value = (await api.get<FlistsResponseInterface>("/v1/api/fl")).data;
-    console.log(flists.value)
     getUserNames();
     filteredFlistFn();
   } catch (error: any) {
@@ -158,10 +158,6 @@ watch(username, () => {
 <style lang="css" scoped>
 .mx-height {
   max-height: 600px;
-}
-
-.v-data-table-footer__items-per-page {
-  display: none !important; 
 }
 
 .mn-height {

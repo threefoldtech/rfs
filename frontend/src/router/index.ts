@@ -1,10 +1,11 @@
 import { createRouter, createWebHistory, RouteRecordRaw } from "vue-router";
-import Login from "../components/Login.vue";
-import CreateFlist from "../components/CreateFlist.vue";
-import Home from "../components/Home.vue";
-import UserFlist from "../components/UserFlist.vue";
-import FollowUp from "../components/FollowUp.vue";
-import PreviewFlist from "../components/PreviewFlist.vue";
+const Login = () => import("../components/Login.vue")
+const CreateFlist = () => import("../components/CreateFlist.vue")
+const Home = () => import("../components/Home.vue")
+const UserFlist = () => import("../components/UserFlist.vue")
+const FollowUp = () => import("../components/FollowUp.vue")
+const PreviewFlist = () => import("../components/PreviewFlist.vue")
+
 
 const routes: Array<RouteRecordRaw> = [
   {
