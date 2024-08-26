@@ -7,7 +7,6 @@
         class="position-absolute w-100 text-white d-flex justify-content align-content "
         style="z-index: 4; top: 55%;left:40%;"
       >
-        <h1 class="text-h4">{{id}}</h1>
       </div>
     </div>
     <v-main class="mn-height">

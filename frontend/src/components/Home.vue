@@ -3,12 +3,6 @@
     <Navbar></Navbar>
     <div class="w-100 position-relative" >
       <v-img :src="image" cover style="z-index: 2"></v-img>
-      <!-- <div
-        class="position-absolute text-white"
-        style="z-index: 4; top: 40%; left: 35%"
-      >
-        <h1>Create and Download Flist</h1>
-      </div> -->
     </div>
 
     <v-main class="d-flex justify-center mt-0" style="height: fit-content">
