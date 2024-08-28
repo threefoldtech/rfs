@@ -51,16 +51,15 @@ const pullLists = async () => {
       );
     } else {
       stopPolling.value = true;
-      pending.value = false;
       window.location.href = "/flists" 
     }
   } catch (error: any) {
     console.error("failed to fetch flist status", error);
-    pending.value = false;
     errMsg.value = error.response?.data;
     stopPolling.value = true;
     toast.error(error.response?.data)
   }
+  pending.value = false;
 };
 
 watch(stopPolling, () => {

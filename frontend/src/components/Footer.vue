@@ -15,6 +15,7 @@
     </a>
   </v-footer>
 </template>
+
 <style>
 .v-footer {
   height: 7% !important;

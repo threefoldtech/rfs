@@ -5,10 +5,10 @@
     </v-app-bar-nav-icon>
     <v-spacer> </v-spacer>
     <div class="mr-5" v-if="auth === null || auth?.length === 0">
-      <v-btn to="Login">Login</v-btn>
+      <v-btn to="login">Login</v-btn>
     </div>
     <div class="mr-5" v-else>
-      <v-btn to="/Create"
+      <v-btn to="create"
         ><v-icon icon="mdi-plus-circle-outline" class="mr-2"></v-icon>Create
         flist</v-btn
       >
@@ -56,5 +56,4 @@ const logout = async () => {
     toast.error(error.response?.data || "error occured");
   }
 };
-
 </script>

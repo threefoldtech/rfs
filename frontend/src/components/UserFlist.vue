@@ -1,5 +1,5 @@
 <template>
-    <v-main class="mn-height">
+    <div class="mn-height">
       <v-container class="pa-0">
         <v-row no-gutters class="pa-0 ma-0">
           <div class="user">
@@ -80,7 +80,7 @@
           </v-data-table>
         </v-row>
       </v-container>
-    </v-main>
+    </div>
 </template>
 <script setup lang="ts">
 import { FlistsResponseInterface } from "../types/Flist.ts";

@@ -1,44 +1,43 @@
 import { createRouter, createWebHistory, RouteRecordRaw } from "vue-router";
-const Login = () => import("../components/Login.vue")
-const CreateFlist = () => import("../components/CreateFlist.vue")
-const Home = () => import("../components/Home.vue")
-const UserFlist = () => import("../components/UserFlist.vue")
-const FollowUp = () => import("../components/FollowUp.vue")
-const PreviewFlist = () => import("../components/PreviewFlist.vue")
-
+const Login = () => import("../components/Login.vue");
+const CreateFlist = () => import("../components/CreateFlist.vue");
+const Home = () => import("../components/Home.vue");
+const UserFlist = () => import("../components/UserFlist.vue");
+const FollowUp = () => import("../components/FollowUp.vue");
+const PreviewFlist = () => import("../components/PreviewFlist.vue");
 
 const routes: Array<RouteRecordRaw> = [
   {
     path: "/login",
-    name: "Login",
+    name: "login",
     component: Login,
   },
   {
     path: "/flists",
-    name: "Flists",
+    name: "flists",
     component: UserFlist,
     meta: { requireAuth: true },
   },
   {
     path: "/follow_up/:id",
-    name: "FollowUp",
+    name: "followUp",
     component: FollowUp,
     meta: { requireAuth: true },
   },
   {
     path: "/create",
-    name: "Create",
+    name: "create",
     component: CreateFlist,
     meta: { requiresAuth: true },
   },
   {
     path: "/",
-    name: "Home",
+    name: "home",
     component: Home,
   },
   {
     path: "/flists/:username/:id",
-    name: "PreviewFlist",
+    name: "previewflist",
     component: PreviewFlist,
   },
 ];

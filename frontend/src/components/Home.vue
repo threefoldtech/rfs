@@ -81,7 +81,7 @@
           </template>
         </v-data-table>
       </v-container>
-    </v-main>
+    </div>
 </template>
 
 <script setup lang="ts">

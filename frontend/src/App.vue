@@ -1,21 +1,23 @@
 
 <template>
   <v-app>
-    <Navbar v-if="path!=`login`"></Navbar>
-     <router-view />
-    <Footer v-if="path!=`login`"></Footer>
+    <Navbar v-if="path !== `login`"></Navbar>
+    <v-main class="mn-height" >
+      <router-view v-slot="{ Component, route }">
+        <div :key="route.path">
+          <component :is="Component" />
+        </div>
+      </router-view>
+    </v-main>
+    <Footer v-if="path !== `login`"></Footer>
   </v-app>
- 
 </template>
 
 <script setup lang="ts">
-
 import Footer from './components/Footer.vue';
 import Navbar from './components/Navbar.vue';
-import { useRouter } from "vue-router";
-
-const path: string | undefined = useRouter().currentRoute?.value.path
-console.log(path)
+import { useRoute } from 'vue-router';
+var path = useRoute().name?.toString()
 </script>
 <style scoped>
 .logo {
