@@ -42,15 +42,20 @@
 </template>
 
 <script setup lang="ts">
+import { ref, watch } from "vue";
 import whiteLogo from "../assets/logo_white.png";
 import { toast } from "vue3-toastify";
-const auth: string | null = sessionStorage.getItem("token");
+import router from "../router";
+
+const auth= ref<string|null>(sessionStorage.getItem("token"));
+
 
 const logout = async () => {
   try {
     sessionStorage.removeItem("token")
     sessionStorage.removeItem("username")
-    window.location.href = "/"
+    auth.value = sessionStorage.getItem("token");
+    router.push("/")
   } catch (error: any) {
     console.error("Failed to logout", error);
     toast.error(error.response?.data || "error occured");

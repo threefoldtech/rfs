@@ -1,5 +1,5 @@
 <template>
-   <div class="d-flex flex-column justify-center mn-height" >
+   <div class="d-flex flex-column justify-center mt-10" >
       <v-container fluid>
         <v-row justify="center">
           <v-col cols="8">
@@ -37,6 +37,7 @@
               </v-checkbox>
 
               <div v-if="privateReg">
+                <v-alert text="Select a sign-in method" type="info" density="compact" color = "#1aa18f" closable width="60em"></v-alert>
                 <v-radio-group class="p-0 m-0" v-model="privateType" inline>
                   <v-radio value="username">
                     <template v-slot:label>
@@ -51,6 +52,7 @@
                   <v-radio value="token">
                     <template v-slot:label>
                       <span class="text-subtitle-2">Identity Token</span>
+                      <v-tooltip activator="parent" location="bottom">Token generated from private registery</v-tooltip>
                     </template>
                   </v-radio>
                 </v-radio-group>
@@ -198,29 +200,26 @@
                 width="50%"
                 @click="create"
                 :disabled="pending"
-                >Create</v-btn
-              >
+                v-if = "!pending"
+                >
+              Create
+              </v-btn>
+                <v-progress-linear
+            :size="70"
+            color="#1aa18f"
+            indeterminate
+            class="mb-5 mt-5 w-25"
+            rounded=""
+            height="20"
+            v-else
+          >
+            <template v-slot:default> {{ progress }} % </template>
+          </v-progress-linear>
             </v-col>
           </v-row>
         </v-form>
       </v-container>
-      <div class="d-flex align-center justify-center mb-12 mt-12" height="80%" v-if="pending" >
-        <div v-if="pending" class="text-center">
-          <v-progress-linear
-            :size="70"
-            color="#1aa18f"
-            indeterminate
-            class="mb-5"
-            rounded=""
-            height="20"
-          >
-            <template v-slot:default> {{ progress }} % </template>
-          </v-progress-linear>
-          <h2 class="mt-12 mb-5">Creating an image ...</h2>
-          <p>Please wait, your image will be ready in a few minutes.</p>
         </div>
-      </div>
-    </div>
 </template>
 
 <script setup lang="ts">
@@ -230,10 +229,10 @@ import { Flist } from "../types/Flist";
 import { toast } from "vue3-toastify";
 import "vue3-toastify/dist/index.css";
 import { api } from "../client";
+import router from "../router";
 
 const pending = ref<boolean>(false);
 let progress = ref<number>(0);
-const errMsg = ref("");
 const stopPolling = ref<boolean>(false);
 let polling: NodeJS.Timeout;
 let id = ""
@@ -247,12 +246,11 @@ const pullLists = async () => {
     } else {
       stopPolling.value = true;
       pending.value = false;
-      window.location.href = "/flists" 
+      router.push({name: "flists"})
     }
   } catch (error: any) {
     console.error("failed to fetch flist status", error);
     pending.value = false;
-    errMsg.value = error.response?.data;
     stopPolling.value = true;
     toast.error(error.response?.data)
   }

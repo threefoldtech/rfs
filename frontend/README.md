@@ -14,7 +14,7 @@
 
 - [node js](https://nodejs.org/en/download/package-manager)
 - [rust](https://www.rust-lang.org/tools/install)
-- Cargo , to be configured to run in the shell
+- Cargo, to be configured to run in the shell
 - musl tool
 
   ```bash

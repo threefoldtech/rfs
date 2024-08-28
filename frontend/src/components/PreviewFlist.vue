@@ -1,5 +1,5 @@
 <template>
-    <div class="w-100 position-relative">
+    <div class="w-100 position-relative" style="top: -62.5px">
       <v-img :src="image" cover style="z-index: 2"></v-img>
       <div
         class="position-absolute w-100 text-white d-flex justify-content align-content "
@@ -7,7 +7,7 @@
       >
       </div>
     </div>
-    <v-main class="mn-height">
+    <div class="mn-height mb-10" v-if="!pending">
       <v-container class="m-0 pa-0">
         <v-row>
           <div>
@@ -62,7 +62,17 @@
             </v-textarea>
         </v-row>
       </v-container>
-    </v-main>
+    </div>
+    <div class="d-flex align-center justify-center mb-12 mt-12"  v-else>
+       <v-progress-circular
+          :size="70"
+          :width="7"
+          color="#1aa18f"
+          indeterminate
+          class="mb-5"
+        >
+        </v-progress-circular>
+    </div>
 </template>
 
 <script setup lang="ts">
@@ -75,7 +85,7 @@ import { api } from "../client.ts";
 import { copyLink } from "../helpers.ts";
 import { FlistPreview  } from "../types/Flist.ts";
 
-
+const pending = ref<boolean>(true)
 const flistPreview = ref<FlistPreview>({checksum:"", content:[], metadata:""});
 const urlPartition = window.location.href.split("/")
 const id = ref<string>(urlPartition[urlPartition.length - 1])
@@ -88,6 +98,7 @@ const linkDecoration = ref<string>("text-as-anchor")
 const contentShow = () => {
   showContent.value = flistPreview.value?.content.join("\n")
   linkDecoration.value = ""
+  
 }
 
 onMounted(async () => {
@@ -96,6 +107,7 @@ onMounted(async () => {
     flistPreview.value = (await api.get<FlistPreview>("/v1/api/fl/preview/" + encodedUrl)).data;
     flistPreview.value.content = flistPreview.value.content.slice(1)
     showContent.value = "show content on click"
+    pending.value = false
   } catch (error: any) {
     console.error("Failed to fetch flists", error);
     toast.error(error.response?.data);

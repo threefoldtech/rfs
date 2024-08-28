@@ -1,15 +1,15 @@
 
 <template>
   <v-app>
-    <Navbar v-if="path !== `login`"></Navbar>
-    <v-main class="mn-height" >
       <router-view v-slot="{ Component, route }">
+        <Navbar v-if="route.path != `/login`"></Navbar>
+        <v-main class="mn-height" style="--v-layout-left: 0px;" >
         <div :key="route.path">
           <component :is="Component" />
         </div>
+        </v-main>
+         <Footer v-if="route.path != `/login`"></Footer>
       </router-view>
-    </v-main>
-    <Footer v-if="path !== `login`"></Footer>
   </v-app>
 </template>
 
@@ -17,7 +17,9 @@
 import Footer from './components/Footer.vue';
 import Navbar from './components/Navbar.vue';
 import { useRoute } from 'vue-router';
-var path = useRoute().name?.toString()
+var path : string | undefined = useRoute().name?.toString()
+
+
 </script>
 <style scoped>
 .logo {

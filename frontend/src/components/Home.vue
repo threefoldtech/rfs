@@ -1,11 +1,10 @@
-<template>
-    <div class="w-100 position-relative" >
+<template >
+    <div class="w-100 position-relative" style="top: -62.5px" >
       <v-img :src="image" cover style="z-index: 2"></v-img>
     </div>
 
-    <v-main class="d-flex justify-center mt-0" style="height: fit-content">
-      <v-navigation-drawer 
-        elevation="2"
+    <div class="d-flex justify-center mt-0">
+      <v-navigation-drawer
         app
         class="position-absolute mx-height"
         style="top: 30%; left: 0; height: 62.5%; width: fit-content; min-width: 12.5%;"
@@ -32,9 +31,9 @@
         </v-list>
       </v-navigation-drawer>
       <v-container
-        class="d-flex flex-column w-75"
+        class="d-flex flex-column w-75 "
         fluid
-        style="height: fit-content"
+        style="height: fit-content; position: relative; left: 6%;"
       >
         <h2 class="mb-2" v-if="username.length != 0">
           <v-icon icon="mdi-account" color="#1aa18f"></v-icon>{{ username }}

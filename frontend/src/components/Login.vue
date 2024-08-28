@@ -83,6 +83,7 @@ import { User } from "../types/User.ts";
 import { api } from "../client.ts";
 import { toast } from "vue3-toastify";
 import "vue3-toastify/dist/index.css";
+import router from "../router/index.ts";
 
 
 
@@ -97,13 +98,14 @@ const visible = ref<boolean>(false);
     const token = response.data.access_token;
     sessionStorage.setItem("token", token);
     sessionStorage.setItem("username", user.value.username);
+    //emit event for auth
     api.interceptors.request.use((config) => {
       if (token) {
         config.headers["Authorization"] = `Bearer ${token}`;
       }
       return config;
     });
-    window.location.href = "/flists"
+    router.push("/flists")
   } catch (error: any) {
     console.error("Failed to login", error);
     toast.error(error.response?.data || "error occured");

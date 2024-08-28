@@ -1,5 +1,5 @@
 <template>
-    <div class="mn-height">
+    <div>
       <v-container class="pa-0">
         <v-row no-gutters class="pa-0 ma-0">
           <div class="user">
