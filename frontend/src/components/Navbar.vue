@@ -43,7 +43,6 @@
 
 <script setup lang="ts">
 import whiteLogo from "../assets/logo_white.png";
-import "../../public/global.css";
 import { toast } from "vue3-toastify";
 const auth: string | null = sessionStorage.getItem("token");
 
@@ -57,4 +56,5 @@ const logout = async () => {
     toast.error(error.response?.data || "error occured");
   }
 };
+
 </script>

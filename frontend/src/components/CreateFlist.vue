@@ -1,6 +1,4 @@
 <template>
-  <v-app>
-    <Navbar />
     <v-main class="d-flex flex-column justify-center mn-height" >
       <v-container fluid>
         <v-row justify="center">
@@ -84,7 +82,7 @@
                         Username
                       </label>
                       <v-text-field
-                        class="pr-5 rounded"
+                        class="pr-5 text-medium-emphasis"
                         id="username"
                         v-model="flist.username"
                         variant="solo-filled"
@@ -92,6 +90,8 @@
                         :placeholder="
                           privateType === `token` ? `token` : `johndoe`
                         "
+                        :value="privateType === `token`?`token`:``"
+                        :readonly="privateType === `token`"
                       >
                       </v-text-field>
                     </div>
@@ -202,18 +202,14 @@
         </v-row>
       </v-container>
     </v-main>
-    <Footer></Footer>
-  </v-app>
 </template>
 
 <script setup lang="ts">
-import Navbar from "./Navbar.vue";
 import { ref } from "vue";
 import { Flist } from "../types/Flist";
-import Footer from "./Footer.vue";
+
 import { toast } from "vue3-toastify";
 import "vue3-toastify/dist/index.css";
-import "../../public/global.css";
 import { api } from "../client";
 
 const privateReg = ref<boolean>(false);

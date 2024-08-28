@@ -1,6 +1,4 @@
 <template>
-  <v-app>
-    <Navbar></Navbar>
     <v-main class="d-flex align-center justify-center mb-12 mt-12" height="80%">
       <div v-if="pending" class="text-center">
         <v-progress-circular
@@ -29,14 +27,10 @@
         ></v-alert>
       </div>
     </v-main>
-    <Footer></Footer>
-  </v-app>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, watch } from "vue";
-import Navbar from "./Navbar.vue";
-import Footer from "./Footer.vue";
 import { toast } from "vue3-toastify";
 import "vue3-toastify/dist/index.css";
 import { api } from "../client";

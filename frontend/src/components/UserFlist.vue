@@ -1,6 +1,4 @@
 <template>
-  <v-app>
-    <Navbar />
     <v-main class="mn-height">
       <v-container class="pa-0">
         <v-row no-gutters class="pa-0 ma-0">
@@ -83,12 +81,8 @@
         </v-row>
       </v-container>
     </v-main>
-    <Footer />
-  </v-app>
 </template>
 <script setup lang="ts">
-import Navbar from "./Navbar.vue";
-import Footer from "./Footer.vue";
 import { FlistsResponseInterface } from "../types/Flist.ts";
 import { computed } from "vue";
 import { onMounted, ref } from "vue";
@@ -96,7 +90,7 @@ import { toast } from "vue3-toastify";
 import { api } from "../client.ts";
 import { copyLink } from "../helpers.ts";
 import { filesize } from "filesize";
-import "../../public/global.css";
+
 
 
 

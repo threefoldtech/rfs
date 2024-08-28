@@ -1,9 +1,22 @@
-<script setup lang="ts">
-</script>
 
 <template>
-  <router-view />
+  <v-app>
+    <Navbar v-if="path!=`login`"></Navbar>
+     <router-view />
+    <Footer v-if="path!=`login`"></Footer>
+  </v-app>
+ 
 </template>
+
+<script setup lang="ts">
+
+import Footer from './components/Footer.vue';
+import Navbar from './components/Navbar.vue';
+import { useRouter } from "vue-router";
+
+const path: string | undefined = useRouter().currentRoute?.value.path
+console.log(path)
+</script>
 <style scoped>
 .logo {
   height: 6em;

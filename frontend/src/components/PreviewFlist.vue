@@ -1,6 +1,4 @@
 <template>
-  <v-app>
-    <Navbar></Navbar>
     <div class="w-100 position-relative">
       <v-img :src="image" cover style="z-index: 2"></v-img>
       <div
@@ -65,15 +63,11 @@
         </v-row>
       </v-container>
     </v-main>
-    <Footer />
-  </v-app>
 </template>
 
 <script setup lang="ts">
 
 import { onMounted, ref } from "vue";
-import Navbar from "./Navbar.vue";
-import Footer from "./Footer.vue";
 import image from "../assets/home.png";
 import { toast } from "vue3-toastify";
 import "vue3-toastify/dist/index.css";

@@ -62,6 +62,7 @@
                 class="pr-5 rounded-pill background-green text-white"
                 size="large"
                 width="50%"
+                :disabled="loading"
                 @click="login"
                 >Sign In</v-btn
               >
@@ -82,10 +83,11 @@ import { User } from "../types/User.ts";
 import { api } from "../client.ts";
 import { toast } from "vue3-toastify";
 import "vue3-toastify/dist/index.css";
-import "../../public/global.css";
+
 
 
 const user = ref<User>({ username: "", password: "" });
+const loading = ref<boolean>(false)
 
 
 const visible = ref<boolean>(false);
