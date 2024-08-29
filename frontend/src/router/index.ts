@@ -15,7 +15,7 @@ const routes: Array<RouteRecordRaw> = [
     path: "/myflists",
     name: "myflists",
     component: UserFlist,
-    meta: { requireAuth: true },
+    meta: { requiresAuth: true },
   },
   {
     path: "/create",
@@ -24,14 +24,14 @@ const routes: Array<RouteRecordRaw> = [
     meta: { requiresAuth: true },
   },
   {
-    path: "/",
-    name: "home",
-    component: Home,
-  },
-  {
     path: "/flists/:username/:id",
     name: "previewflist",
     component: PreviewFlist,
+  },
+  {
+    path: "/",
+    name: "home",
+    component: Home,
   },
 ];
 
@@ -42,7 +42,10 @@ const router = createRouter({
 
 router.beforeEach((to, _, next) => {
   const token: string | null = sessionStorage.getItem("token");
-  if (to.meta.requiresAuth && token === null) {
+  console.log(token);
+  console.log(to.meta.requiresAuth);
+  if (to.meta.requiresAuth && (token == null || token.length == 0)) {
+    console.log("ffej");
     next({ name: "login" });
   } else {
     next();
