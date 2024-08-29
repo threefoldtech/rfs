@@ -1,4 +1,4 @@
-# fl-server frontend
+# Threefold RFS
 
 ## Description
 
