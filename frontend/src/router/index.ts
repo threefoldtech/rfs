@@ -3,7 +3,6 @@ const Login = () => import("../components/Login.vue");
 const CreateFlist = () => import("../components/CreateFlist.vue");
 const Home = () => import("../components/Home.vue");
 const UserFlist = () => import("../components/UserFlist.vue");
-const FollowUp = () => import("../components/FollowUp.vue");
 const PreviewFlist = () => import("../components/PreviewFlist.vue");
 
 const routes: Array<RouteRecordRaw> = [
@@ -16,12 +15,6 @@ const routes: Array<RouteRecordRaw> = [
     path: "/flists",
     name: "flists",
     component: UserFlist,
-    meta: { requireAuth: true },
-  },
-  {
-    path: "/follow_up/:id",
-    name: "followUp",
-    component: FollowUp,
     meta: { requireAuth: true },
   },
   {

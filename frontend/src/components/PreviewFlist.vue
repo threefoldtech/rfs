@@ -109,7 +109,6 @@ onMounted(async () => {
     showContent.value = "show content on click"
     pending.value = false
   } catch (error: any) {
-    console.error("Failed to fetch flists", error);
     toast.error(error.response?.data);
   }
 });

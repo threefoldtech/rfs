@@ -16,10 +16,6 @@
 <script setup lang="ts">
 import Footer from './components/Footer.vue';
 import Navbar from './components/Navbar.vue';
-import { useRoute } from 'vue-router';
-var path : string | undefined = useRoute().name?.toString()
-
-
 </script>
 <style scoped>
 .logo {

@@ -33,6 +33,7 @@
                 density="compact"
                 ><template v-slot:label>
                   <span class="text-subtitle-2">Private Registery</span>
+                  <v-tooltip activator="parent" location="start">Check this box to pull the Docker image from your private registry instead of the public repository.</v-tooltip>
                 </template>
               </v-checkbox>
 
@@ -52,7 +53,7 @@
                   <v-radio value="token">
                     <template v-slot:label>
                       <span class="text-subtitle-2">Identity Token</span>
-                      <v-tooltip activator="parent" location="bottom">Token generated from private registery</v-tooltip>
+                      <v-tooltip activator="parent" location="bottom">Token you can as an alternative to your email/username password</v-tooltip>
                     </template>
                   </v-radio>
                 </v-radio-group>
@@ -149,6 +150,8 @@
                 density="compact"
                 ><template v-slot:label>
                   <span class="text-subtitle-2">Self Hosted Registery</span>
+                  <v-tooltip activator="parent" location="start">Check this box to pull the Docker image from your self-hosted registry using registery address</v-tooltip>
+                  
                 </template>
               </v-checkbox>
               <div v-if="registeryAddress">
@@ -175,6 +178,8 @@
                 hide-details
                 ><template v-slot:label>
                   <span class="text-subtitle-2">Web Registery Token</span>
+                  <v-tooltip activator="parent" location="start">Check this box to use web registry token to pull image from your registry with secure authentication</v-tooltip>
+
                 </template>
               </v-checkbox>
               <div v-if="registeryToken">
@@ -249,7 +254,6 @@ const pullLists = async () => {
       router.push({name: "flists"})
     }
   } catch (error: any) {
-    console.error("failed to fetch flist status", error);
     pending.value = false;
     stopPolling.value = true;
     toast.error(error.response?.data)
@@ -288,7 +292,6 @@ const create = async () => {
     polling = setInterval(pullLists, 1 * 10000);
     
   } catch (error: any) {
-    console.error("Failed to create flist", error);
     toast.error(error.response?.data || "error occured");
     const errors: Number[] = [401, 403];
     if (errors.includes(error.response?.status)) {

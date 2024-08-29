@@ -98,7 +98,6 @@ const visible = ref<boolean>(false);
     const token = response.data.access_token;
     sessionStorage.setItem("token", token);
     sessionStorage.setItem("username", user.value.username);
-    //emit event for auth
     api.interceptors.request.use((config) => {
       if (token) {
         config.headers["Authorization"] = `Bearer ${token}`;
@@ -107,7 +106,6 @@ const visible = ref<boolean>(false);
     });
     router.push("/flists")
   } catch (error: any) {
-    console.error("Failed to login", error);
     toast.error(error.response?.data || "error occured");
   }
 };

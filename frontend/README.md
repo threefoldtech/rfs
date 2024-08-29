@@ -66,7 +66,7 @@ In fl-server dir:
 
 ### frontend
 
-- Move to `frontend` directory and execute the following commands to run the frontend:
+- Move to `frontend` directory, open new terminal and execute the following commands to run the frontend:
 
   ```bash
       npm install

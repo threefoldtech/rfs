@@ -42,7 +42,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { ref } from "vue";
 import whiteLogo from "../assets/logo_white.png";
 import { toast } from "vue3-toastify";
 import router from "../router";
@@ -57,7 +57,6 @@ const logout = async () => {
     auth.value = sessionStorage.getItem("token");
     router.push("/")
   } catch (error: any) {
-    console.error("Failed to logout", error);
     toast.error(error.response?.data || "error occured");
   }
 };
