@@ -1,7 +1,7 @@
 <template>
-  <v-container fluid class="overflow-hidden pa-0">
-    <v-row>
-      <v-col :cols="4" class="position-relative">
+  <v-container fluid class="overflow-hidden pa-0" style="height: 100vh;">
+    <v-row class="h-100 ma-0 pa-0">
+      <v-col :cols="4" class="position-relative ma-0 pa-0 h-100">
         <v-img :src="image" cover height="100%" style="z-index: 900"> </v-img>
         <v-container
           class="position-absolute top-0 d-flex flex-column justify-center ga-0"
@@ -58,14 +58,15 @@
                 required
               >
               </v-text-field>
-              <v-btn
-                class="pr-5 rounded-pill background-green text-white"
+                   <v-btn
+                class="pr-5 rounded-pill background-green text-white position-relative"
+                style="left: 205px;"
                 size="large"
                 width="50%"
                 :disabled="loading"
                 @click="login"
-                >Sign In</v-btn
-              >
+                >Sign In</v-btn>
+             
             </v-form>
           </v-col>
         </v-container>
@@ -104,7 +105,7 @@ const visible = ref<boolean>(false);
       }
       return config;
     });
-    router.push("/flists")
+    router.push("/myflists")
   } catch (error: any) {
     toast.error(error.response?.data || "error occured");
   }

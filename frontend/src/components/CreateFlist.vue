@@ -198,8 +198,12 @@
                 >
                 </v-text-field>
               </div>
-
-              <v-btn
+            </v-col>
+          </v-row>
+          <v-row>
+            <v-col offset="8" class="pa-0">
+              <div class="position-relative" style="left: -5%;" >
+                <v-btn
                 class="pr-5 rounded-pill background-green mb-8 mt-5 text-white"
                 size="large"
                 width="50%"
@@ -209,17 +213,18 @@
                 >
               Create
               </v-btn>
-                <v-progress-linear
-            :size="70"
-            color="#1aa18f"
-            indeterminate
-            class="mb-5 mt-5 w-25"
-            rounded=""
-            height="20"
-            v-else
-          >
-            <template v-slot:default> {{ progress }} % </template>
-          </v-progress-linear>
+              <v-progress-linear
+                :size="70"
+                color="#1aa18f"
+                indeterminate
+                class="mb-5 mt-5 w-50"
+                rounded=""
+                height="20"
+                v-else
+              >
+              <template v-slot:default> {{ progress }} % </template>
+              </v-progress-linear>
+              </div>
             </v-col>
           </v-row>
         </v-form>
@@ -251,7 +256,7 @@ const pullLists = async () => {
     } else {
       stopPolling.value = true;
       pending.value = false;
-      router.push({name: "flists"})
+      router.push({name: "myflists"})
     }
   } catch (error: any) {
     pending.value = false;
