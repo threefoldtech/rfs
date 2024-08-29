@@ -42,10 +42,7 @@ const router = createRouter({
 
 router.beforeEach((to, _, next) => {
   const token: string | null = sessionStorage.getItem("token");
-  console.log(token);
-  console.log(to.meta.requiresAuth);
   if (to.meta.requiresAuth && (token == null || token.length == 0)) {
-    console.log("ffej");
     next({ name: "login" });
   } else {
     next();
