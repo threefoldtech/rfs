@@ -27,7 +27,7 @@ path = "src/lib.rs"
 
 [dependencies]
 anyhow = "1.0.44"
-time = "0.3.3"
+time = "0.3"
 sqlx = { version = "0.7.4", features = [ "runtime-tokio-rustls", "sqlite" ] }
 tokio = { version = "1", features = [ "rt", "rt-multi-thread", "macros"] }
 libc = "0.2"
@@ -44,7 +44,6 @@ url = "2.3.1"
 blake2b_simd = "1"
 aes-gcm = "0.10"
 hex = "0.4"
-lazy_static = "1.4"
 rand = "0.8"
 # next are only needed for the binarys
 clap = { version = "4.2", features = ["derive"], optional = true}
@@ -56,6 +55,7 @@ rust-s3 = "0.34.0-rc3"
 openssl = { version = "0.10", features = ["vendored"] }
 regex = "1.9.6"
 which = "6.0"
+reqwest = "0.11"
 
 [dependencies.polyfuse]
 branch = "master"

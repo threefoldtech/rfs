@@ -3,7 +3,7 @@ resolver = "2"
 
 members = [
     "rfs",
-		"docker2fl"
+    "docker2fl"
 ]
 
 [profile.release]
