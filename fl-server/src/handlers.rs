@@ -8,10 +8,9 @@ use axum_macros::debug_handler;
 use std::{
     collections::HashMap,
     fs,
+    path::PathBuf,
     sync::{mpsc, Arc},
 };
-use tokio::io;
-use walkdir::WalkDir;
 
 use bollard::auth::DockerCredentials;
 use serde::{Deserialize, Serialize};
@@ -25,10 +24,7 @@ use crate::{
     response::{FileInfo, ResponseError, ResponseResult},
     serve_flists::visit_dir_one_level,
 };
-use rfs::{
-    cache,
-    fungi::{Reader, Writer},
-};
+use rfs::fungi::{Reader, Writer};
 use utoipa::{OpenApi, ToSchema};
 use uuid::Uuid;
 
@@ -58,7 +54,7 @@ pub struct FlistBody {
 
 #[derive(Debug, Deserialize, Serialize, Clone, ToSchema)]
 pub struct PreviewResponse {
-    pub content: Vec<String>,
+    pub content: Vec<PathBuf>,
     pub metadata: String,
     pub checksum: String,
 }
@@ -124,37 +120,28 @@ pub async fn create_flist_handler(
     }
 
     let fl_name = docker_image.replace([':', '/'], "-") + ".fl";
-    let username_dir = format!("{}/{}", cfg.flist_dir, username);
+    let username_dir = std::path::Path::new(&cfg.flist_dir).join(username);
+    let fl_path = username_dir.join(&fl_name);
 
-    match flist_exists(std::path::Path::new(&username_dir), &fl_name).await {
-        Ok(exists) => {
-            if exists {
-                return Err(ResponseError::Conflict("flist already exists".to_string()));
-            }
-        }
-        Err(e) => {
-            log::error!("failed to check flist existence with error {:?}", e);
-            return Err(ResponseError::InternalServerError);
-        }
+    if fl_path.exists() {
+        return Err(ResponseError::Conflict("flist already exists".to_string()));
     }
 
     let created = fs::create_dir_all(&username_dir);
     if created.is_err() {
         log::error!(
-            "failed to create user flist directory `{}` with error {:?}",
+            "failed to create user flist directory `{:?}` with error {:?}",
             &username_dir,
             created.err()
         );
         return Err(ResponseError::InternalServerError);
     }
 
-    let fl_path: String = format!("{}/{}", username_dir, fl_name);
-
     let meta = match Writer::new(&fl_path).await {
         Ok(writer) => writer,
         Err(err) => {
             log::error!(
-                "failed to create a new writer for flist `{}` with error {}",
+                "failed to create a new writer for flist `{:?}` with error {}",
                 fl_path,
                 err
             );
@@ -257,7 +244,7 @@ pub async fn create_flist_handler(
         state.jobs_state.lock().unwrap().insert(
             job.id.clone(),
             FlistState::Created(format!(
-                "flist {}:{}/{} is created successfully",
+                "flist {}:{}/{:?} is created successfully",
                 cfg.host, cfg.port, fl_path
             )),
         );
@@ -397,7 +384,7 @@ pub async fn preview_flist_handler(
         Err(err) => return Err(ResponseError::BadRequest(err.to_string())),
     };
 
-    let content = match unpack_flist(&fl_path).await {
+    let content = match get_flist_content(&fl_path).await {
         Ok(paths) => paths,
         Err(_) => return Err(ResponseError::InternalServerError),
     };
@@ -419,20 +406,6 @@ pub async fn preview_flist_handler(
         metadata: cfg.store_url.join("-"),
         checksum: sha256::digest(&bytes),
     }))
-}
-
-async fn flist_exists(dir_path: &std::path::Path, flist_name: &String) -> io::Result<bool> {
-    let mut dir = tokio::fs::read_dir(dir_path).await?;
-
-    while let Some(child) = dir.next_entry().await? {
-        let file_name = child.file_name().to_string_lossy().to_string();
-
-        if file_name.eq(flist_name) {
-            return Ok(true);
-        }
-    }
-
-    Ok(false)
 }
 
 async fn validate_flist_path(
@@ -466,7 +439,7 @@ async fn validate_flist_path(
     }
 
     // validate username
-    match get_user_by_username(users, parts[1]) {
+    match get_user_by_username(&users, parts[1]) {
         Some(_) => (),
         None => {
             return Err(anyhow::anyhow!(
@@ -493,23 +466,20 @@ async fn validate_flist_path(
     }
 
     // validate flist existence
-    let username_dir = format!("{}/{}", parts[0], parts[1]);
-    match flist_exists(std::path::Path::new(&username_dir), &fl_name).await {
-        Ok(exists) => {
-            if !exists {
-                return Err(anyhow::anyhow!("flist '{}' doesn't exist", fl_path));
-            }
-        }
-        Err(e) => {
-            log::error!("failed to check flist existence with error {:?}", e);
-            return Err(anyhow::anyhow!("Internal server error"));
-        }
+    if !std::path::Path::new(parts[0])
+        .join(parts[1])
+        .join(&fl_name)
+        .exists()
+    {
+        return Err(anyhow::anyhow!("flist '{}' doesn't exist", fl_path));
     }
 
     Ok(())
 }
 
-async fn unpack_flist(fl_path: &String) -> Result<Vec<std::string::String>, Error> {
+async fn get_flist_content(fl_path: &String) -> Result<Vec<PathBuf>, Error> {
+    let mut visitor = ReadVisitor::default();
+
     let meta = match Reader::new(&fl_path).await {
         Ok(reader) => reader,
         Err(err) => {
@@ -522,43 +492,38 @@ async fn unpack_flist(fl_path: &String) -> Result<Vec<std::string::String>, Erro
         }
     };
 
-    let router = match rfs::store::get_router(&meta).await {
-        Ok(r) => r,
+    match meta.walk(&mut visitor).await {
+        Ok(()) => return Ok(visitor.into_inner()),
         Err(err) => {
-            log::error!("failed to get router with error {}", err);
+            log::error!(
+                "failed to walk through metadata for flist `{}` with error {}",
+                fl_path,
+                err
+            );
             return Err(anyhow::anyhow!("Internal server error"));
         }
     };
+}
 
-    let cache = cache::Cache::new(String::from("/tmp/cache"), router);
-    let tmp_target = match tempdir::TempDir::new("target") {
-        Ok(dir) => dir,
-        Err(err) => {
-            log::error!("failed to create tmp dir with error {}", err);
-            return Err(anyhow::anyhow!("Internal server error"));
-        }
-    };
-    let tmp_target_path = tmp_target.path().to_owned();
+#[derive(Default)]
+struct ReadVisitor {
+    inner: Vec<PathBuf>,
+}
 
-    match rfs::unpack(&meta, &cache, &tmp_target_path, false).await {
-        Ok(_) => (),
-        Err(err) => {
-            log::error!("failed to unpack flist {} with error {}", fl_path, err);
-            return Err(anyhow::anyhow!("Internal server error"));
-        }
-    };
-
-    let mut paths = Vec::new();
-    for file in WalkDir::new(tmp_target_path.clone())
-        .into_iter()
-        .filter_map(|file| file.ok())
-    {
-        let path = file.path().to_string_lossy().to_string();
-        match path.strip_prefix(&tmp_target_path.to_string_lossy().to_string()) {
-            Some(p) => paths.push(p.to_string()),
-            None => return Err(anyhow::anyhow!("Internal server error")),
-        };
+impl ReadVisitor {
+    pub fn into_inner(self) -> Vec<PathBuf> {
+        self.inner
     }
+}
 
-    Ok(paths)
+#[async_trait::async_trait]
+impl rfs::fungi::meta::WalkVisitor for ReadVisitor {
+    async fn visit(
+        &mut self,
+        path: &std::path::Path,
+        _node: &rfs::fungi::meta::Inode,
+    ) -> rfs::fungi::meta::Result<rfs::fungi::meta::Walk> {
+        self.inner.push(path.to_path_buf());
+        Ok(rfs::fungi::meta::Walk::Continue)
+    }
 }

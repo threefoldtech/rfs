@@ -98,11 +98,7 @@ pub async fn visit_dir_one_level(
 
         let mut progress = 0.0;
         if is_file {
-            match state.flists_progress.lock().unwrap().get(&format!(
-                "{}/{}",
-                path.to_string_lossy().to_string(),
-                name
-            )) {
+            match state.flists_progress.lock().unwrap().get(&path.join(&name)) {
                 Some(p) => progress = p.to_owned(),
                 None => progress = 100.0,
             }

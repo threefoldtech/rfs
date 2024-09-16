@@ -55,7 +55,7 @@ pub async fn sign_in_handler(
     Extension(cfg): Extension<config::Config>,
     Json(user_data): Json<SignInBody>,
 ) -> impl IntoResponse {
-    let user = match get_user_by_username(cfg.users, &user_data.username) {
+    let user = match get_user_by_username(&cfg.users, &user_data.username) {
         Some(user) => user,
         None => {
             return Err(ResponseError::Unauthorized(
@@ -70,7 +70,7 @@ pub async fn sign_in_handler(
         ));
     }
 
-    let token = encode_jwt(user.username, cfg.jwt_secret, cfg.jwt_expire_hours)
+    let token = encode_jwt(user.username.clone(), cfg.jwt_secret, cfg.jwt_expire_hours)
         .map_err(|_| ResponseError::InternalServerError)?;
 
     Ok(ResponseResult::SignedIn(SignInResponse {
@@ -78,9 +78,9 @@ pub async fn sign_in_handler(
     }))
 }
 
-pub fn get_user_by_username(users: Vec<User>, username: &str) -> Option<User> {
+pub fn get_user_by_username<'a>(users: &'a [User], username: &str) -> Option<&'a User> {
     let user = users.iter().find(|u| u.username == username)?;
-    Some(user.clone())
+    Some(user)
 }
 
 pub fn encode_jwt(
@@ -138,7 +138,7 @@ pub async fn authorize(
         }
     };
 
-    let current_user = match get_user_by_username(cfg.users, &token_data.claims.username) {
+    let current_user = match get_user_by_username(&cfg.users, &token_data.claims.username) {
         Some(user) => user,
         None => {
             return Err(ResponseError::Unauthorized(
@@ -147,6 +147,6 @@ pub async fn authorize(
         }
     };
 
-    req.extensions_mut().insert(current_user.username);
+    req.extensions_mut().insert(current_user.username.clone());
     Ok(next.run(req).await)
 }
