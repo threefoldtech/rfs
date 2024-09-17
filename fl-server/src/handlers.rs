@@ -5,7 +5,6 @@ use axum::{
 };
 use axum_macros::debug_handler;
 use std::{collections::HashMap, fs, sync::Arc};
-use tokio::io;
 
 use bollard::auth::DockerCredentials;
 use serde::{Deserialize, Serialize};
@@ -78,10 +77,10 @@ pub async fn health_check_handler() -> ResponseResult {
 #[debug_handler]
 pub async fn create_flist_handler(
     State(state): State<Arc<config::AppState>>,
-    Extension(cfg): Extension<config::Config>,
     Extension(username): Extension<String>,
     Json(body): Json<FlistBody>,
 ) -> impl IntoResponse {
+    let cfg = state.config.clone();
     let credentials = Some(DockerCredentials {
         username: body.username,
         password: body.password,
@@ -98,37 +97,28 @@ pub async fn create_flist_handler(
     }
 
     let fl_name = docker_image.replace([':', '/'], "-") + ".fl";
-    let username_dir = format!("{}/{}", cfg.flist_dir, username);
+    let username_dir = std::path::Path::new(&cfg.flist_dir).join(&username);
+    let fl_path = username_dir.join(&fl_name);
 
-    match flist_exists(std::path::Path::new(&username_dir), &fl_name).await {
-        Ok(exists) => {
-            if exists {
-                return Err(ResponseError::Conflict("flist already exists".to_string()));
-            }
-        }
-        Err(e) => {
-            log::error!("failed to check flist existence with error {:?}", e);
-            return Err(ResponseError::InternalServerError);
-        }
+    if fl_path.exists() {
+        return Err(ResponseError::Conflict("flist already exists".to_string()));
     }
 
     let created = fs::create_dir_all(&username_dir);
     if created.is_err() {
         log::error!(
-            "failed to create user flist directory `{}` with error {:?}",
+            "failed to create user flist directory `{:?}` with error {:?}",
             &username_dir,
             created.err()
         );
         return Err(ResponseError::InternalServerError);
     }
 
-    let fl_path: String = format!("{}/{}", username_dir, fl_name);
-
     let meta = match Writer::new(&fl_path).await {
         Ok(writer) => writer,
         Err(err) => {
             log::error!(
-                "failed to create a new writer for flist `{}` with error {}",
+                "failed to create a new writer for flist `{:?}` with error {}",
                 fl_path,
                 err
             );
@@ -150,16 +140,29 @@ pub async fn create_flist_handler(
     };
     let current_job = job.clone();
 
-    state.jobs_state.lock().unwrap().insert(
-        job.id.clone(),
-        FlistState::Accepted(format!("flist '{}' is accepted", fl_name)),
-    );
+    state
+        .jobs_state
+        .lock()
+        .expect("failed to lock state")
+        .insert(
+            job.id.clone(),
+            FlistState::Accepted(format!("flist '{}' is accepted", &fl_name)),
+        );
+
+    let flist_download_url = std::path::Path::new(&format!("{}:{}", cfg.host, cfg.port))
+        .join(cfg.flist_dir)
+        .join(username)
+        .join(&fl_name);
 
     tokio::spawn(async move {
-        state.jobs_state.lock().unwrap().insert(
-            job.id.clone(),
-            FlistState::Started(format!("flist '{}' is started", fl_name)),
-        );
+        state
+            .jobs_state
+            .lock()
+            .expect("failed to lock state")
+            .insert(
+                job.id.clone(),
+                FlistState::Started(format!("flist '{}' is started", fl_name)),
+            );
 
         let res = docker2fl::convert(meta, store, &docker_image, credentials).await;
 
@@ -170,18 +173,22 @@ pub async fn create_flist_handler(
             state
                 .jobs_state
                 .lock()
-                .unwrap()
+                .expect("failed to lock state")
                 .insert(job.id.clone(), FlistState::Failed);
             return;
         }
 
-        state.jobs_state.lock().unwrap().insert(
-            job.id.clone(),
-            FlistState::Created(format!(
-                "flist {}:{}/{}/{}/{} is created successfully",
-                cfg.host, cfg.port, cfg.flist_dir, username, fl_name
-            )),
-        );
+        state
+            .jobs_state
+            .lock()
+            .expect("failed to lock state")
+            .insert(
+                job.id.clone(),
+                FlistState::Created(format!(
+                    "flist {:?} is created successfully",
+                    flist_download_url
+                )),
+            );
     });
 
     Ok(ResponseResult::FlistCreated(current_job))
@@ -209,7 +216,7 @@ pub async fn get_flist_state_handler(
     if !&state
         .jobs_state
         .lock()
-        .unwrap()
+        .expect("failed to lock state")
         .contains_key(&flist_job_id.clone())
     {
         return Err(ResponseError::NotFound("flist doesn't exist".to_string()));
@@ -218,9 +225,9 @@ pub async fn get_flist_state_handler(
     let res_state = state
         .jobs_state
         .lock()
-        .unwrap()
+        .expect("failed to lock state")
         .get(&flist_job_id.clone())
-        .unwrap()
+        .expect("failed to get from state")
         .to_owned();
 
     match res_state {
@@ -230,7 +237,7 @@ pub async fn get_flist_state_handler(
             state
                 .jobs_state
                 .lock()
-                .unwrap()
+                .expect("failed to lock state")
                 .remove(&flist_job_id.clone());
 
             Ok(ResponseResult::FlistState(res_state))
@@ -239,10 +246,10 @@ pub async fn get_flist_state_handler(
             state
                 .jobs_state
                 .lock()
-                .unwrap()
+                .expect("failed to lock state")
                 .remove(&flist_job_id.clone());
 
-            return Err(ResponseError::InternalServerError);
+            Err(ResponseError::InternalServerError)
         }
     }
 }
@@ -258,16 +265,15 @@ pub async fn get_flist_state_handler(
 	)
 )]
 #[debug_handler]
-pub async fn list_flists_handler(Extension(cfg): Extension<config::Config>) -> impl IntoResponse {
+pub async fn list_flists_handler(State(state): State<Arc<config::AppState>>) -> impl IntoResponse {
     let mut flists: HashMap<String, Vec<FileInfo>> = HashMap::new();
 
-    let rs = visit_dir_one_level(std::path::Path::new(&cfg.flist_dir)).await;
+    let rs = visit_dir_one_level(&state.config.flist_dir).await;
     match rs {
         Ok(files) => {
             for file in files {
                 if !file.is_file {
-                    let flists_per_username =
-                        visit_dir_one_level(std::path::Path::new(&file.path_uri)).await;
+                    let flists_per_username = visit_dir_one_level(&file.path_uri).await;
                     match flists_per_username {
                         Ok(files) => flists.insert(file.name, files),
                         Err(e) => {
@@ -285,18 +291,4 @@ pub async fn list_flists_handler(Extension(cfg): Extension<config::Config>) -> i
     }
 
     Ok(ResponseResult::Flists(flists))
-}
-
-pub async fn flist_exists(dir_path: &std::path::Path, flist_name: &String) -> io::Result<bool> {
-    let mut dir = tokio::fs::read_dir(dir_path).await?;
-
-    while let Some(child) = dir.next_entry().await? {
-        let file_name = child.file_name().to_string_lossy().to_string();
-
-        if file_name.eq(flist_name) {
-            return Ok(true);
-        }
-    }
-
-    Ok(false)
 }

@@ -1,5 +1,6 @@
 mod auth;
 mod config;
+mod db;
 mod handlers;
 mod response;
 mod serve_flists;
@@ -26,7 +27,7 @@ use std::{
 };
 use tokio::{runtime::Builder, signal};
 use tower::ServiceBuilder;
-use tower_http::{add_extension::AddExtensionLayer, cors::CorsLayer};
+use tower_http::cors::CorsLayer;
 use tower_http::{cors::Any, trace::TraceLayer};
 
 use utoipa::OpenApi;
@@ -71,8 +72,12 @@ async fn app() -> Result<()> {
         .await
         .context("failed to parse config file")?;
 
+    let db = Arc::new(db::VecDB::new(&config.users));
+
     let app_state = Arc::new(config::AppState {
         jobs_state: Mutex::new(HashMap::new()),
+        db,
+        config,
     });
 
     let cors = CorsLayer::new()
@@ -86,14 +91,14 @@ async fn app() -> Result<()> {
         .route(
             "/v1/api/fl",
             post(handlers::create_flist_handler).layer(middleware::from_fn_with_state(
-                config.clone(),
+                app_state.clone(),
                 auth::authorize,
             )),
         )
         .route(
             "/v1/api/fl/:job_id",
             get(handlers::get_flist_state_handler).layer(middleware::from_fn_with_state(
-                config.clone(),
+                app_state.clone(),
                 auth::authorize,
             )),
         )
@@ -114,19 +119,18 @@ async fn app() -> Result<()> {
                 .timeout(Duration::from_secs(10))
                 .layer(TraceLayer::new_for_http()),
         )
-        .layer(AddExtensionLayer::new(config.clone()))
         .with_state(Arc::clone(&app_state))
         .layer(cors);
 
-    let address = format!("{}:{}", config.host, config.port);
+    let address = format!("{}:{}", app_state.config.host, app_state.config.port);
     let listener = tokio::net::TcpListener::bind(address)
         .await
         .context("failed to bind address")?;
 
     log::info!(
         "🚀 Server started successfully at {}:{}",
-        config.host,
-        config.port
+        app_state.config.host,
+        app_state.config.port
     );
 
     axum::serve(listener, app)
