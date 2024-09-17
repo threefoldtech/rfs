@@ -9,7 +9,6 @@ use std::{
     fs,
     sync::{mpsc, Arc},
 };
-use tokio::io;
 
 use bollard::auth::DockerCredentials;
 use serde::{Deserialize, Serialize};
@@ -109,37 +108,28 @@ pub async fn create_flist_handler(
     }
 
     let fl_name = docker_image.replace([':', '/'], "-") + ".fl";
-    let username_dir = format!("{}/{}", cfg.flist_dir, username);
+    let username_dir = std::path::Path::new(&cfg.flist_dir).join(&username);
+    let fl_path = username_dir.join(&fl_name);
 
-    match flist_exists(std::path::Path::new(&username_dir), &fl_name).await {
-        Ok(exists) => {
-            if exists {
-                return Err(ResponseError::Conflict("flist already exists".to_string()));
-            }
-        }
-        Err(e) => {
-            log::error!("failed to check flist existence with error {:?}", e);
-            return Err(ResponseError::InternalServerError);
-        }
+    if fl_path.exists() {
+        return Err(ResponseError::Conflict("flist already exists".to_string()));
     }
 
     let created = fs::create_dir_all(&username_dir);
     if created.is_err() {
         log::error!(
-            "failed to create user flist directory `{}` with error {:?}",
+            "failed to create user flist directory `{:?}` with error {:?}",
             &username_dir,
             created.err()
         );
         return Err(ResponseError::InternalServerError);
     }
 
-    let fl_path: String = format!("{}/{}", username_dir, fl_name);
-
     let meta = match Writer::new(&fl_path).await {
         Ok(writer) => writer,
         Err(err) => {
             log::error!(
-                "failed to create a new writer for flist `{}` with error {}",
+                "failed to create a new writer for flist `{:?}` with error {}",
                 fl_path,
                 err
             );
@@ -242,7 +232,7 @@ pub async fn create_flist_handler(
         state.jobs_state.lock().unwrap().insert(
             job.id.clone(),
             FlistState::Created(format!(
-                "flist {}:{}/{} is created successfully",
+                "flist {}:{}/{:?} is created successfully",
                 cfg.host, cfg.port, fl_path
             )),
         );
@@ -330,13 +320,12 @@ pub async fn list_flists_handler(
 ) -> impl IntoResponse {
     let mut flists: HashMap<String, Vec<FileInfo>> = HashMap::new();
 
-    let rs = visit_dir_one_level(std::path::Path::new(&cfg.flist_dir), &state).await;
+    let rs = visit_dir_one_level(&cfg.flist_dir, &state).await;
     match rs {
         Ok(files) => {
             for file in files {
                 if !file.is_file {
-                    let flists_per_username =
-                        visit_dir_one_level(std::path::Path::new(&file.path_uri), &state).await;
+                    let flists_per_username = visit_dir_one_level(&file.path_uri, &state).await;
                     match flists_per_username {
                         Ok(files) => flists.insert(file.name, files),
                         Err(e) => {
@@ -354,18 +343,4 @@ pub async fn list_flists_handler(
     }
 
     Ok(ResponseResult::Flists(flists))
-}
-
-pub async fn flist_exists(dir_path: &std::path::Path, flist_name: &String) -> io::Result<bool> {
-    let mut dir = tokio::fs::read_dir(dir_path).await?;
-
-    while let Some(child) = dir.next_entry().await? {
-        let file_name = child.file_name().to_string_lossy().to_string();
-
-        if file_name.eq(flist_name) {
-            return Ok(true);
-        }
-    }
-
-    Ok(false)
 }

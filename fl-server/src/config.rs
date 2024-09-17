@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fs, sync::Mutex};
+use std::{collections::HashMap, fs, path::PathBuf, sync::Mutex};
 use utoipa::ToSchema;
 
 use crate::{auth, handlers};
@@ -13,7 +13,7 @@ pub struct Job {
 #[derive(Debug, ToSchema)]
 pub struct AppState {
     pub jobs_state: Mutex<HashMap<String, handlers::FlistState>>,
-    pub flists_progress: Mutex<HashMap<String, f32>>,
+    pub flists_progress: Mutex<HashMap<PathBuf, f32>>,
 }
 
 #[derive(Debug, Default, Clone, Deserialize)]
