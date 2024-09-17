@@ -77,7 +77,8 @@ pub async fn serve_flists(req: Request<Body>) -> impl IntoResponse {
     };
 }
 
-pub async fn visit_dir_one_level(path: &std::path::Path) -> io::Result<Vec<FileInfo>> {
+pub async fn visit_dir_one_level<P: AsRef<std::path::Path>>(path: P) -> io::Result<Vec<FileInfo>> {
+    let path = path.as_ref();
     let mut dir = tokio::fs::read_dir(path).await?;
     let mut files: Vec<FileInfo> = Vec::new();
 
