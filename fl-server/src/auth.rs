@@ -79,8 +79,7 @@ pub async fn sign_in_handler(
 }
 
 pub fn get_user_by_username<'a>(users: &'a [User], username: &str) -> Option<&'a User> {
-    let user = users.iter().find(|u| u.username == username)?;
-    Some(user)
+    users.iter().find(|u| u.username == username)
 }
 
 pub fn encode_jwt(

@@ -120,7 +120,7 @@ pub async fn create_flist_handler(
     }
 
     let fl_name = docker_image.replace([':', '/'], "-") + ".fl";
-    let username_dir = std::path::Path::new(&cfg.flist_dir).join(username);
+    let username_dir = std::path::Path::new(&cfg.flist_dir).join(&username);
     let fl_path = username_dir.join(&fl_name);
 
     if fl_path.exists() {
@@ -332,13 +332,12 @@ pub async fn list_flists_handler(
 ) -> impl IntoResponse {
     let mut flists: HashMap<String, Vec<FileInfo>> = HashMap::new();
 
-    let rs = visit_dir_one_level(std::path::Path::new(&cfg.flist_dir), &state).await;
+    let rs = visit_dir_one_level(&cfg.flist_dir, &state).await;
     match rs {
         Ok(files) => {
             for file in files {
                 if !file.is_file {
-                    let flists_per_username =
-                        visit_dir_one_level(std::path::Path::new(&file.path_uri), &state).await;
+                    let flists_per_username = visit_dir_one_level(&file.path_uri, &state).await;
                     match flists_per_username {
                         Ok(files) => flists.insert(file.name, files),
                         Err(e) => {

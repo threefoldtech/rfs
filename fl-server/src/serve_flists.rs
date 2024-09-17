@@ -84,10 +84,11 @@ pub async fn serve_flists(
     };
 }
 
-pub async fn visit_dir_one_level(
-    path: &std::path::Path,
+pub async fn visit_dir_one_level<P: AsRef<std::path::Path>>(
+    path: P,
     state: &Arc<config::AppState>,
 ) -> io::Result<Vec<FileInfo>> {
+    let path = path.as_ref();
     let mut dir = tokio::fs::read_dir(path).await?;
     let mut files: Vec<FileInfo> = Vec::new();
 
@@ -99,7 +100,7 @@ pub async fn visit_dir_one_level(
         let mut progress = 0.0;
         if is_file {
             match state.flists_progress.lock().unwrap().get(&path.join(&name)) {
-                Some(p) => progress = p.to_owned(),
+                Some(p) => progress = *p,
                 None => progress = 100.0,
             }
 
