@@ -106,7 +106,7 @@ impl DockerImageToFlist {
         Ok(())
     }
 
-    pub async fn pack<S: Store>(&mut self, store: S, sender: Option<Sender<i32>>) -> Result<()> {
+    pub async fn pack<S: Store>(&mut self, store: S, sender: Option<Sender<u32>>) -> Result<()> {
         rfs::pack(
             self.meta.clone(),
             store,
@@ -121,7 +121,7 @@ impl DockerImageToFlist {
         Ok(())
     }
 
-    pub async fn convert<S: Store>(&mut self, store: S, sender: Option<Sender<i32>>) -> Result<()> {
+    pub async fn convert<S: Store>(&mut self, store: S, sender: Option<Sender<u32>>) -> Result<()> {
         self.prepare().await?;
         self.pack(store, sender).await?;
 

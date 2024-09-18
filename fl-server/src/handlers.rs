@@ -16,7 +16,7 @@ use bollard::auth::DockerCredentials;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    auth::{SignInBody, SignInResponse, __path_sign_in_handler, get_user_by_username, User},
+    auth::{SignInBody, SignInResponse, __path_sign_in_handler},
     response::{DirListTemplate, DirLister, ErrorTemplate, TemplateErr},
 };
 use crate::{
@@ -100,10 +100,10 @@ pub async fn health_check_handler() -> ResponseResult {
 #[debug_handler]
 pub async fn create_flist_handler(
     State(state): State<Arc<config::AppState>>,
-    Extension(cfg): Extension<config::Config>,
     Extension(username): Extension<String>,
     Json(body): Json<FlistBody>,
 ) -> impl IntoResponse {
+    let cfg = state.config.clone();
     let credentials = Some(DockerCredentials {
         username: body.username,
         password: body.password,
@@ -163,24 +163,33 @@ pub async fn create_flist_handler(
     };
     let current_job = job.clone();
 
-    state.jobs_state.lock().unwrap().insert(
-        job.id.clone(),
-        FlistState::Accepted(format!("flist '{}' is accepted", fl_name)),
-    );
     state
-        .flists_progress
+        .jobs_state
         .lock()
-        .unwrap()
-        .insert(fl_path.clone(), 0.0);
-
-    tokio::spawn(async move {
-        state.jobs_state.lock().unwrap().insert(
+        .expect("failed to lock state")
+        .insert(
             job.id.clone(),
-            FlistState::Started(format!("flist '{}' is started", fl_name)),
+            FlistState::Accepted(format!("flist '{}' is accepted", &fl_name)),
         );
 
+    let flist_download_url = std::path::Path::new(&format!("{}:{}", cfg.host, cfg.port))
+        .join(cfg.flist_dir)
+        .join(username)
+        .join(&fl_name);
+
+    tokio::spawn(async move {
+        state
+            .jobs_state
+            .lock()
+            .expect("failed to lock state")
+            .insert(
+                job.id.clone(),
+                FlistState::Started(format!("flist '{}' is started", fl_name)),
+            );
+
         let container_name = Uuid::new_v4().to_string();
-        let docker_tmp_dir = tempdir::TempDir::new(&container_name).unwrap();
+        let docker_tmp_dir =
+            tempdir::TempDir::new(&container_name).expect("failed to create tmp dir for docker");
         let docker_tmp_dir_path = docker_tmp_dir.path().to_owned();
 
         let (tx, rx) = mpsc::channel();
@@ -197,7 +206,7 @@ pub async fn create_flist_handler(
             state
                 .jobs_state
                 .lock()
-                .unwrap()
+                .expect("failed to lock state")
                 .insert(job.id.clone(), FlistState::Failed);
             return;
         }
@@ -210,10 +219,10 @@ pub async fn create_flist_handler(
             let mut progress: f32 = 0.0;
 
             for _ in 0..files_count - 1 {
-                let step = rx.recv().unwrap() as f32;
+                let step = rx.recv().expect("failed to receive progress") as f32;
                 progress += step;
                 let progress_percentage = progress / files_count as f32 * 100.0;
-                st.jobs_state.lock().unwrap().insert(
+                st.jobs_state.lock().expect("failed to lock state").insert(
                     job_id.clone(),
                     FlistState::InProgress(FlistStateInfo {
                         msg: "flist is in progress".to_string(),
@@ -222,7 +231,7 @@ pub async fn create_flist_handler(
                 );
                 st.flists_progress
                     .lock()
-                    .unwrap()
+                    .expect("failed to lock state")
                     .insert(cloned_fl_path.clone(), progress_percentage);
             }
         });
@@ -236,19 +245,27 @@ pub async fn create_flist_handler(
             state
                 .jobs_state
                 .lock()
-                .unwrap()
+                .expect("failed to lock state")
                 .insert(job.id.clone(), FlistState::Failed);
             return;
         }
 
-        state.jobs_state.lock().unwrap().insert(
-            job.id.clone(),
-            FlistState::Created(format!(
-                "flist {}:{}/{:?} is created successfully",
-                cfg.host, cfg.port, fl_path
-            )),
-        );
-        state.flists_progress.lock().unwrap().insert(fl_path, 100.0);
+        state
+            .jobs_state
+            .lock()
+            .expect("failed to lock state")
+            .insert(
+                job.id.clone(),
+                FlistState::Created(format!(
+                    "flist {:?} is created successfully",
+                    flist_download_url
+                )),
+            );
+        state
+            .flists_progress
+            .lock()
+            .expect("failed to lock state")
+            .insert(fl_path, 100.0);
     });
 
     Ok(ResponseResult::FlistCreated(current_job))
@@ -276,7 +293,7 @@ pub async fn get_flist_state_handler(
     if !&state
         .jobs_state
         .lock()
-        .unwrap()
+        .expect("failed to lock state")
         .contains_key(&flist_job_id.clone())
     {
         return Err(ResponseError::NotFound("flist doesn't exist".to_string()));
@@ -285,9 +302,9 @@ pub async fn get_flist_state_handler(
     let res_state = state
         .jobs_state
         .lock()
-        .unwrap()
+        .expect("failed to lock state")
         .get(&flist_job_id.clone())
-        .unwrap()
+        .expect("failed to get from state")
         .to_owned();
 
     match res_state {
@@ -298,7 +315,7 @@ pub async fn get_flist_state_handler(
             state
                 .jobs_state
                 .lock()
-                .unwrap()
+                .expect("failed to lock state")
                 .remove(&flist_job_id.clone());
 
             Ok(ResponseResult::FlistState(res_state))
@@ -307,10 +324,10 @@ pub async fn get_flist_state_handler(
             state
                 .jobs_state
                 .lock()
-                .unwrap()
+                .expect("failed to lock state")
                 .remove(&flist_job_id.clone());
 
-            return Err(ResponseError::InternalServerError);
+            Err(ResponseError::InternalServerError)
         }
     }
 }
@@ -326,13 +343,11 @@ pub async fn get_flist_state_handler(
 	)
 )]
 #[debug_handler]
-pub async fn list_flists_handler(
-    Extension(cfg): Extension<config::Config>,
-    State(state): State<Arc<config::AppState>>,
-) -> impl IntoResponse {
+pub async fn list_flists_handler(State(state): State<Arc<config::AppState>>) -> impl IntoResponse {
     let mut flists: HashMap<String, Vec<FileInfo>> = HashMap::new();
 
-    let rs = visit_dir_one_level(&cfg.flist_dir, &state).await;
+    let rs: Result<Vec<FileInfo>, std::io::Error> =
+        visit_dir_one_level(&state.config.flist_dir, &state).await;
     match rs {
         Ok(files) => {
             for file in files {
@@ -373,12 +388,12 @@ pub async fn list_flists_handler(
 )]
 #[debug_handler]
 pub async fn preview_flist_handler(
-    Extension(cfg): Extension<config::Config>,
+    State(state): State<Arc<config::AppState>>,
     Path(flist_path): Path<String>,
 ) -> impl IntoResponse {
     let fl_path = flist_path;
 
-    match validate_flist_path(cfg.users, &cfg.flist_dir, &fl_path).await {
+    match validate_flist_path(&state, &fl_path).await {
         Ok(_) => (),
         Err(err) => return Err(ResponseError::BadRequest(err.to_string())),
     };
@@ -402,16 +417,12 @@ pub async fn preview_flist_handler(
 
     Ok(ResponseResult::PreviewFlist(PreviewResponse {
         content,
-        metadata: cfg.store_url.join("-"),
+        metadata: state.config.store_url.join("-"),
         checksum: sha256::digest(&bytes),
     }))
 }
 
-async fn validate_flist_path(
-    users: Vec<User>,
-    flist_dir: &String,
-    fl_path: &String,
-) -> Result<(), Error> {
+async fn validate_flist_path(state: &Arc<config::AppState>, fl_path: &String) -> Result<(), Error> {
     // validate path starting with `/`
     if fl_path.starts_with("/") {
         return Err(anyhow::anyhow!(
@@ -429,16 +440,16 @@ async fn validate_flist_path(
     }
 
     // validate parent dir
-    if parts[0] != flist_dir {
+    if parts[0] != state.config.flist_dir {
         return Err(anyhow::anyhow!(
             "invalid flist path '{}', parent directory should be '{}'",
             fl_path,
-            flist_dir
+            state.config.flist_dir
         ));
     }
 
     // validate username
-    match get_user_by_username(&users, parts[1]) {
+    match state.db.get_user_by_username(&parts[1]) {
         Some(_) => (),
         None => {
             return Err(anyhow::anyhow!(

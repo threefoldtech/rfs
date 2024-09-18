@@ -99,7 +99,12 @@ pub async fn visit_dir_one_level<P: AsRef<std::path::Path>>(
 
         let mut progress = 0.0;
         if is_file {
-            match state.flists_progress.lock().unwrap().get(&path.join(&name)) {
+            match state
+                .flists_progress
+                .lock()
+                .expect("failed to lock state")
+                .get(&path.join(&name).to_path_buf())
+            {
                 Some(p) => progress = *p,
                 None => progress = 100.0,
             }
@@ -107,7 +112,7 @@ pub async fn visit_dir_one_level<P: AsRef<std::path::Path>>(
             let ext = child
                 .path()
                 .extension()
-                .unwrap()
+                .expect("failed to get path extension")
                 .to_string_lossy()
                 .to_string();
             if ext != "fl" {
@@ -125,7 +130,7 @@ pub async fn visit_dir_one_level<P: AsRef<std::path::Path>>(
                 .await?
                 .modified()?
                 .duration_since(std::time::SystemTime::UNIX_EPOCH)
-                .unwrap()
+                .expect("failed to get duration")
                 .as_secs() as i64,
             progress,
         });
