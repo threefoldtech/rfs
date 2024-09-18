@@ -131,7 +131,7 @@ pub async fn visit_dir_one_level<P: AsRef<std::path::Path>>(
                 .await?
                 .modified()?
                 .duration_since(std::time::SystemTime::UNIX_EPOCH)
-                .unwrap()
+                .expect("failed to get duration")
                 .as_secs() as i64,
             progress,
         });
@@ -146,9 +146,9 @@ mod filters {
             time::format_description::parse("[year]-[month]-[day] [hour]:[minute]:[second] UTC")
         {
             return Ok(time::OffsetDateTime::from_unix_timestamp(*ts)
-                .unwrap()
+                .expect("failed to get utc time")
                 .format(&format)
-                .unwrap());
+                .expect("failed to format time"));
         }
         Err(askama::Error::Fmt(std::fmt::Error))
     }
@@ -211,18 +211,24 @@ impl IntoResponse for ErrorTemplate {
                 match t.err {
                     ResponseError::FileNotFound(reason) => {
                         *resp.status_mut() = StatusCode::NOT_FOUND;
-                        resp.headers_mut()
-                            .insert(FAIL_REASON_HEADER_NAME, reason.parse().unwrap());
+                        resp.headers_mut().insert(
+                            FAIL_REASON_HEADER_NAME,
+                            reason.parse().expect("failed to parse error"),
+                        );
                     }
                     ResponseError::BadRequest(reason) => {
                         *resp.status_mut() = StatusCode::BAD_REQUEST;
-                        resp.headers_mut()
-                            .insert(FAIL_REASON_HEADER_NAME, reason.parse().unwrap());
+                        resp.headers_mut().insert(
+                            FAIL_REASON_HEADER_NAME,
+                            reason.parse().expect("failed to parse error"),
+                        );
                     }
                     ResponseError::InternalError(reason) => {
                         *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
-                        resp.headers_mut()
-                            .insert(FAIL_REASON_HEADER_NAME, reason.parse().unwrap());
+                        resp.headers_mut().insert(
+                            FAIL_REASON_HEADER_NAME,
+                            reason.parse().expect("failed to parse error"),
+                        );
                     }
                 }
                 resp

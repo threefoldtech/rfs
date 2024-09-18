@@ -1,19 +1,29 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fs, path::PathBuf, sync::Mutex};
+use std::{
+    collections::HashMap,
+    fs,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 use utoipa::ToSchema;
 
-use crate::{auth, handlers};
+use crate::{
+    db::{User, DB},
+    handlers,
+};
 
 #[derive(Debug, ToSchema, Serialize, Clone)]
 pub struct Job {
     pub id: String,
 }
 
-#[derive(Debug, ToSchema)]
+#[derive(ToSchema)]
 pub struct AppState {
     pub jobs_state: Mutex<HashMap<String, handlers::FlistState>>,
     pub flists_progress: Mutex<HashMap<PathBuf, f32>>,
+    pub db: Arc<dyn DB>,
+    pub config: Config,
 }
 
 #[derive(Debug, Default, Clone, Deserialize)]
@@ -25,8 +35,7 @@ pub struct Config {
 
     pub jwt_secret: String,
     pub jwt_expire_hours: i64,
-
-    pub users: Vec<auth::User>,
+    pub users: Vec<User>,
 }
 
 /// Parse the config file into Config struct.

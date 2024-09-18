@@ -1,9 +1,10 @@
+use std::sync::Arc;
+
 use axum::{
     extract::{Json, Request, State},
     http::{self, StatusCode},
     middleware::Next,
     response::IntoResponse,
-    Extension,
 };
 use axum_macros::debug_handler;
 use chrono::{Duration, Utc};
@@ -15,12 +16,6 @@ use crate::{
     config,
     response::{ResponseError, ResponseResult},
 };
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct User {
-    pub username: String,
-    pub password: String,
-}
 
 #[derive(Serialize, Deserialize)]
 pub struct Claims {
@@ -52,10 +47,10 @@ pub struct SignInResponse {
 )]
 #[debug_handler]
 pub async fn sign_in_handler(
-    Extension(cfg): Extension<config::Config>,
+    State(state): State<Arc<config::AppState>>,
     Json(user_data): Json<SignInBody>,
 ) -> impl IntoResponse {
-    let user = match get_user_by_username(&cfg.users, &user_data.username) {
+    let user = match state.db.get_user_by_username(&user_data.username) {
         Some(user) => user,
         None => {
             return Err(ResponseError::Unauthorized(
@@ -70,16 +65,16 @@ pub async fn sign_in_handler(
         ));
     }
 
-    let token = encode_jwt(user.username.clone(), cfg.jwt_secret, cfg.jwt_expire_hours)
-        .map_err(|_| ResponseError::InternalServerError)?;
+    let token = encode_jwt(
+        user.username.clone(),
+        state.config.jwt_secret.clone(),
+        state.config.jwt_expire_hours,
+    )
+    .map_err(|_| ResponseError::InternalServerError)?;
 
     Ok(ResponseResult::SignedIn(SignInResponse {
         access_token: token,
     }))
-}
-
-pub fn get_user_by_username<'a>(users: &'a [User], username: &str) -> Option<&'a User> {
-    users.iter().find(|u| u.username == username)
 }
 
 pub fn encode_jwt(
@@ -111,7 +106,7 @@ pub fn decode_jwt(jwt_token: String, jwt_secret: String) -> Result<TokenData<Cla
 }
 
 pub async fn authorize(
-    State(cfg): State<config::Config>,
+    State(state): State<Arc<config::AppState>>,
     mut req: Request,
     next: Next,
 ) -> impl IntoResponse {
@@ -128,7 +123,15 @@ pub async fn authorize(
 
     let mut header = auth_header.split_whitespace();
     let (_, token) = (header.next(), header.next());
-    let token_data = match decode_jwt(token.unwrap().to_string(), cfg.jwt_secret) {
+    let token_str = match token {
+        Some(t) => t.to_string(),
+        None => {
+            log::error!("failed to get token string");
+            return Err(ResponseError::InternalServerError);
+        }
+    };
+
+    let token_data = match decode_jwt(token_str, state.config.jwt_secret.clone()) {
         Ok(data) => data,
         Err(_) => {
             return Err(ResponseError::Forbidden(
@@ -137,7 +140,7 @@ pub async fn authorize(
         }
     };
 
-    let current_user = match get_user_by_username(&cfg.users, &token_data.claims.username) {
+    let current_user = match state.db.get_user_by_username(&token_data.claims.username) {
         Some(user) => user,
         None => {
             return Err(ResponseError::Unauthorized(
