@@ -103,7 +103,7 @@ pub async fn visit_dir_one_level<P: AsRef<std::path::Path>>(
             match state
                 .flists_progress
                 .lock()
-                .unwrap()
+                .expect("failed to lock state")
                 .get(&path.join(&name).to_path_buf())
             {
                 Some(p) => progress = *p,
@@ -113,7 +113,7 @@ pub async fn visit_dir_one_level<P: AsRef<std::path::Path>>(
             let ext = child
                 .path()
                 .extension()
-                .unwrap()
+                .expect("failed to get path extension")
                 .to_string_lossy()
                 .to_string();
             if ext != "fl" {

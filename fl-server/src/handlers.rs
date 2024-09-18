@@ -176,7 +176,8 @@ pub async fn create_flist_handler(
             );
 
         let container_name = Uuid::new_v4().to_string();
-        let docker_tmp_dir = tempdir::TempDir::new(&container_name).unwrap();
+        let docker_tmp_dir =
+            tempdir::TempDir::new(&container_name).expect("failed to create tmp dir for docker");
         let docker_tmp_dir_path = docker_tmp_dir.path().to_owned();
 
         let (tx, rx) = mpsc::channel();
@@ -193,7 +194,7 @@ pub async fn create_flist_handler(
             state
                 .jobs_state
                 .lock()
-                .unwrap()
+                .expect("failed to lock state")
                 .insert(job.id.clone(), FlistState::Failed);
             return;
         }
@@ -206,10 +207,10 @@ pub async fn create_flist_handler(
             let mut progress: f32 = 0.0;
 
             for _ in 0..files_count - 1 {
-                let step = rx.recv().unwrap() as f32;
+                let step = rx.recv().expect("failed to receive progress") as f32;
                 progress += step;
                 let progress_percentage = progress / files_count as f32 * 100.0;
-                st.jobs_state.lock().unwrap().insert(
+                st.jobs_state.lock().expect("failed to lock state").insert(
                     job_id.clone(),
                     FlistState::InProgress(FlistStateInfo {
                         msg: "flist is in progress".to_string(),
@@ -218,7 +219,7 @@ pub async fn create_flist_handler(
                 );
                 st.flists_progress
                     .lock()
-                    .unwrap()
+                    .expect("failed to lock state")
                     .insert(cloned_fl_path.clone(), progress_percentage);
             }
         });
@@ -248,7 +249,11 @@ pub async fn create_flist_handler(
                     flist_download_url
                 )),
             );
-        state.flists_progress.lock().unwrap().insert(fl_path, 100.0);
+        state
+            .flists_progress
+            .lock()
+            .expect("failed to lock state")
+            .insert(fl_path, 100.0);
     });
 
     Ok(ResponseResult::FlistCreated(current_job))

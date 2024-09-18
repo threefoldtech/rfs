@@ -27,7 +27,7 @@ pub async fn pack<P: Into<PathBuf>, S: Store>(
     store: S,
     root: P,
     strip_password: bool,
-    sender: Option<Sender<i32>>,
+    sender: Option<Sender<u32>>,
 ) -> Result<()> {
     use tokio::fs;
 
@@ -72,13 +72,13 @@ pub async fn pack<P: Into<PathBuf>, S: Store>(
         &writer,
         &mut pool,
         Item(0, root, OsString::from("/"), meta),
-        sender.clone(),
+        sender.as_ref(),
     )
     .await?;
 
     while !list.is_empty() {
         let dir = list.pop_back().unwrap();
-        pack_one(&mut list, &writer, &mut pool, dir, sender.clone()).await?;
+        pack_one(&mut list, &writer, &mut pool, dir, sender.as_ref()).await?;
     }
 
     pool.close().await;
@@ -105,7 +105,7 @@ async fn pack_one<S: Store>(
     writer: &Writer,
     pool: &mut WorkerPool<Uploader<S>>,
     Item(parent, path, name, meta): Item,
-    sender: Option<Sender<i32>>,
+    sender: Option<&Sender<u32>>,
 ) -> Result<()> {
     use std::os::unix::fs::MetadataExt;
     use tokio::fs;
@@ -139,12 +139,8 @@ async fn pack_one<S: Store>(
         let meta = child.metadata().await?;
         let child_path = path.join(&name);
 
-        if sender.is_some() {
-            sender
-                .clone()
-                .unwrap()
-                .send(1)
-                .context("failed to send progress")?;
+        if let Some(ref sender) = sender {
+            sender.send(1).context("failed to send progress")?;
         }
 
         // if this child a directory we add to the tail of the list
