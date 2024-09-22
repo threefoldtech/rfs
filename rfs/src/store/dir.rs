@@ -37,16 +37,21 @@ impl Store for DirStore {
         let file_name = hex::encode(key);
         let dir_path = self.root.join(&file_name[0..2]);
 
-        let path = match fs::try_exists(&dir_path).await {
-            Ok(true) => dir_path.join(file_name),
-            Ok(false) => self.root.join(file_name),
-            Err(e) => return Err(Error::IO(e)),
-        };
-
+        let mut path = dir_path.join(&file_name);
         let data = match fs::read(&path).await {
             Ok(data) => data,
             Err(err) if err.kind() == ErrorKind::NotFound => {
-                return Err(Error::KeyNotFound);
+                path = self.root.join(file_name);
+                let data = match fs::read(&path).await {
+                    Ok(data) => data,
+                    Err(err) if err.kind() == ErrorKind::NotFound => {
+                        return Err(Error::KeyNotFound);
+                    }
+                    Err(err) => {
+                        return Err(Error::IO(err));
+                    }
+                };
+                data
             }
             Err(err) => {
                 return Err(Error::IO(err));
