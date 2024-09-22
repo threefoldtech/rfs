@@ -2,3 +2,5 @@
 /tests/*.flist.d
 result
 .direnv/
+fl-server/flists
+fl-server/config.toml
