@@ -76,6 +76,7 @@ async fn app() -> Result<()> {
 
     let app_state = Arc::new(config::AppState {
         jobs_state: Mutex::new(HashMap::new()),
+        flists_progress: Mutex::new(HashMap::new()),
         db,
         config,
     });

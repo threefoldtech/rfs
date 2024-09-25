@@ -31,3 +31,4 @@ toml = "0.4.2"
 clap = { version = "4.2", features = ["derive"] }
 serde = { version = "1.0.159" , features = ["derive"] }
 tokio-async-drop = "0.1.0"
+walkdir = "2.5.0"
