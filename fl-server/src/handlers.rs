@@ -178,15 +178,10 @@ pub async fn create_flist_handler(
         let container_name = Uuid::new_v4().to_string();
         let docker_tmp_dir =
             tempdir::TempDir::new(&container_name).expect("failed to create tmp dir for docker");
-        let docker_tmp_dir_path = docker_tmp_dir.path().to_owned();
 
         let (tx, rx) = mpsc::channel();
-        let mut docker_to_fl = docker2fl::DockerImageToFlist::new(
-            meta,
-            docker_image,
-            credentials,
-            docker_tmp_dir_path.clone(),
-        );
+        let mut docker_to_fl =
+            docker2fl::DockerImageToFlist::new(meta, docker_image, credentials, docker_tmp_dir);
 
         let res = docker_to_fl.prepare().await;
         if res.is_err() {
@@ -336,25 +331,26 @@ pub async fn list_flists_handler(State(state): State<Arc<config::AppState>>) -> 
 
     let rs: Result<Vec<FileInfo>, std::io::Error> =
         visit_dir_one_level(&state.config.flist_dir, &state).await;
-    match rs {
-        Ok(files) => {
-            for file in files {
-                if !file.is_file {
-                    let flists_per_username = visit_dir_one_level(&file.path_uri, &state).await;
-                    match flists_per_username {
-                        Ok(files) => flists.insert(file.name, files),
-                        Err(e) => {
-                            log::error!("failed to list flists per username with error: {}", e);
-                            return Err(ResponseError::InternalServerError);
-                        }
-                    };
-                };
-            }
-        }
+
+    let files = match rs {
+        Ok(files) => files,
         Err(e) => {
             log::error!("failed to list flists directory with error: {}", e);
             return Err(ResponseError::InternalServerError);
         }
+    };
+
+    for file in files {
+        if !file.is_file {
+            let flists_per_username = visit_dir_one_level(&file.path_uri, &state).await;
+            match flists_per_username {
+                Ok(files) => flists.insert(file.name, files),
+                Err(e) => {
+                    log::error!("failed to list flists per username with error: {}", e);
+                    return Err(ResponseError::InternalServerError);
+                }
+            };
+        };
     }
 
     Ok(ResponseResult::Flists(flists))

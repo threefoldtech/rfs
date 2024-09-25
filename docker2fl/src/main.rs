@@ -89,11 +89,11 @@ async fn main() -> Result<()> {
     let store = parse_router(&opts.store).await?;
 
     let container_name = Uuid::new_v4().to_string();
-    let docker_tmp_dir = tempdir::TempDir::new(&container_name).unwrap();
-    let docker_tmp_dir_path = docker_tmp_dir.path().to_owned();
+    let docker_tmp_dir =
+        tempdir::TempDir::new(&container_name).expect("failed to create tmp directory");
 
     let mut docker_to_fl =
-        docker2fl::DockerImageToFlist::new(meta, docker_image, credentials, docker_tmp_dir_path);
+        docker2fl::DockerImageToFlist::new(meta, docker_image, credentials, docker_tmp_dir);
     let res = docker_to_fl.convert(store, None).await;
 
     // remove the file created with the writer if fl creation failed
