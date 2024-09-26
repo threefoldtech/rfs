@@ -4,7 +4,7 @@
 
 The idea behind the FL format is to build a full filesystem description that is compact and also easy to use from almost ANY language. The format need to be easy to edit by tools like `rfs` or any other tool.
 
-We decided to eventually use `sqlite`! Yes the `FL` file is just a `sqlite` database that has the following [schema](../schema/schema.sql)
+We decided to eventually use `sqlite`! Yes the `FL` file is just a `sqlite` database that has the following [schema](../rfs/schema/schema.sql)
 
 ## Tables
 
