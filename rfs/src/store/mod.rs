@@ -10,6 +10,8 @@ use rand::seq::SliceRandom;
 pub use bs::BlockStore;
 use regex::Regex;
 
+use crate::fungi;
+
 pub use self::router::Router;
 
 pub async fn make<U: AsRef<str>>(u: U) -> Result<Stores> {
@@ -166,6 +168,19 @@ where
 
         routes
     }
+}
+
+pub async fn get_router(meta: &fungi::Reader) -> Result<Router<Stores>> {
+    let mut router = Router::new();
+
+    for route in meta.routes().await.context("failed to get store routes")? {
+        let store = make(&route.url)
+            .await
+            .with_context(|| format!("failed to initialize store '{}'", route.url))?;
+        router.add(route.start, route.end, store);
+    }
+
+    Ok(router)
 }
 
 pub async fn parse_router(urls: &[String]) -> anyhow::Result<Router<Stores>> {

@@ -48,3 +48,5 @@ utoipa-swagger-ui = { version = "7", features = ["axum"] }
 thiserror = "1.0.63"
 hostname-validator = "1.1.1"
 walkdir = "2.5.0"
+sha256 = "1.5.0"
+async-trait = "0.1.53"
