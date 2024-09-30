@@ -1,7 +1,7 @@
 use askama::Template;
 use axum::response::{Html, Response};
 use serde::Serialize;
-use std::path::PathBuf;
+use std::{io::Error, path::PathBuf};
 use tokio::io;
 use tower::util::ServiceExt;
 use tower_http::services::ServeDir;
@@ -24,22 +24,16 @@ pub async fn serve_flists(req: Request<Body>) -> impl IntoResponse {
             let status = res.status();
             match status {
                 StatusCode::NOT_FOUND => {
-                    let path = path.trim_start_matches('/');
-                    let path = percent_decode(path.as_ref()).decode_utf8_lossy();
-
-                    let mut full_path = PathBuf::new();
-
-                    // validate
-                    for seg in path.split('/') {
-                        if seg.starts_with("..") || seg.contains('\\') {
+                    let full_path = match validate_path(&path) {
+                        Ok(p) => p,
+                        Err(_) => {
                             return Err(ErrorTemplate {
                                 err: ResponseError::BadRequest("invalid path".to_string()),
                                 cur_path: path.to_string(),
                                 message: "invalid path".to_owned(),
                             });
                         }
-                        full_path.push(seg);
-                    }
+                    };
 
                     let cur_path = std::path::Path::new(&full_path);
 
@@ -75,6 +69,23 @@ pub async fn serve_flists(req: Request<Body>) -> impl IntoResponse {
             message: format!("Unhandled error: {}", err),
         }),
     };
+}
+
+fn validate_path(path: &str) -> io::Result<PathBuf> {
+    let path = path.trim_start_matches('/');
+    let path = percent_decode(path.as_ref()).decode_utf8_lossy();
+
+    let mut full_path = PathBuf::new();
+
+    // validate
+    for seg in path.split('/') {
+        if seg.starts_with("..") || seg.contains('\\') {
+            return Err(Error::other("invalid path"));
+        }
+        full_path.push(seg);
+    }
+
+    Ok(full_path)
 }
 
 pub async fn visit_dir_one_level<P: AsRef<std::path::Path>>(path: P) -> io::Result<Vec<FileInfo>> {

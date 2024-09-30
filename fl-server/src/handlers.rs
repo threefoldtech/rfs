@@ -104,12 +104,11 @@ pub async fn create_flist_handler(
         return Err(ResponseError::Conflict("flist already exists".to_string()));
     }
 
-    let created = fs::create_dir_all(&username_dir);
-    if created.is_err() {
+    if let Err(err) = fs::create_dir_all(&username_dir) {
         log::error!(
             "failed to create user flist directory `{:?}` with error {:?}",
             &username_dir,
-            created.err()
+            err
         );
         return Err(ResponseError::InternalServerError);
     }
