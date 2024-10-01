@@ -1,0 +1,49 @@
+[package]
+name = "fl-server"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[build-dependencies]
+git-version = "0.3.5"
+
+[[bin]]
+name = "fl-server"
+path = "src/main.rs"
+
+[dependencies]
+log = "0.4"
+anyhow = "1.0.44"
+regex = "1.9.6"
+rfs = { path = "../rfs"}
+docker2fl = { path = "../docker2fl"}
+tokio = { version = "1", features = ["full"] }
+bollard = "0.15.0"
+futures-util = "0.3"
+simple_logger = {version = "1.0.1"}
+uuid = { version = "1.3.1", features = ["v4"] }
+tempdir = "0.3"
+serde_json = "1.0"
+toml = "0.4.2"
+clap = { version = "4.5.8", features = ["derive"] }
+
+serde = { version = "1.0.159" , features = ["derive"] }
+axum = "0.7"
+axum-macros = "0.4.1"
+tower = { version = "0.4", features = ["util", "timeout", "load-shed", "limit"] }
+tower-http = { version = "0.5.2", features = ["fs", "cors", "add-extension", "auth", "compression-full", "trace", "limit"] }
+tokio-async-drop = "0.1.0"
+mime_guess = "2.0.5"
+mime = "0.3.17"
+percent-encoding = "2.3.1"
+tracing = "0.1.40"
+askama = "0.12.1"
+hyper = { version = "1.4.0", features = ["full"] }
+time = { version = "0.3.36", features = ["formatting"] }
+chrono = "0.4.38"
+jsonwebtoken = "9.3.0"
+
+utoipa = { version = "4", features = ["axum_extras"] }
+utoipa-swagger-ui = { version = "7", features = ["axum"] }
+thiserror = "1.0.63"
+hostname-validator = "1.1.1"

@@ -1,0 +1,6 @@
+services:
+  fl-server:
+    build: .
+    ports:
+      # <HOST_PORT>:<CONTAINER_PORT>
+      - 3000:3000
