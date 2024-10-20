@@ -27,7 +27,7 @@ pub struct AppState {
 #[derive(Debug, Default, Clone, Deserialize)]
 pub struct Config {
     pub host: String,
-    pub port: usize,
+    pub port: u16,
     pub store_url: Vec<String>,
     pub flist_dir: String,
 
@@ -43,13 +43,6 @@ pub async fn parse_config(filepath: &str) -> Result<Config> {
 
     if !hostname_validator::is_valid(&c.host) {
         anyhow::bail!("host '{}' is invalid", c.host)
-    }
-
-    if c.port > 65535 {
-        anyhow::bail!(format!(
-            "port '{}' is invalid, must be between [0, 65535]",
-            c.port
-        ))
     }
 
     rfs::store::parse_router(&c.store_url)
