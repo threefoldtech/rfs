@@ -246,16 +246,13 @@ async fn container_boot(
 
     let cmd = container_config.cmd.expect("failed to get cmd configs");
 
-    if container_config.entrypoint.is_some() {
-        let entrypoint = container_config
-            .entrypoint
-            .expect("failed to get entry point");
-        command = (entrypoint.first().expect("failed to get first entry point")).to_string();
+    if let Some(entrypoint) = container_config.entrypoint {
+        command = (entrypoint.first().expect("failed to get first entrypoint")).to_string();
 
         if entrypoint.len() > 1 {
             let (_, entries) = entrypoint
                 .split_first()
-                .expect("failed to split entry point");
+                .expect("failed to split entrypoint");
             args = entries.to_vec();
         } else {
             args = cmd;
