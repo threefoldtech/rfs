@@ -85,7 +85,7 @@ async fn main() -> Result<()> {
     });
 
     let fl_name = docker_image.replace([':', '/'], "-") + ".fl";
-    let meta = fungi::Writer::new(&fl_name).await?;
+    let meta = fungi::Writer::new(&fl_name, true).await?;
     let store = parse_router(&opts.store).await?;
 
     let container_name = Uuid::new_v4().to_string();

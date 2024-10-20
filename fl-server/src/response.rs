@@ -56,9 +56,7 @@ impl IntoResponse for ResponseResult {
             ResponseResult::SignedIn(token) => {
                 (StatusCode::CREATED, Json(serde_json::json!(token))).into_response()
             }
-            ResponseResult::FlistCreated(job) => {
-                (StatusCode::CREATED, Json(serde_json::json!(job))).into_response()
-            }
+            ResponseResult::FlistCreated(job) => (StatusCode::CREATED, Json(job)).into_response(),
             ResponseResult::FlistState(flist_state) => (
                 StatusCode::OK,
                 Json(serde_json::json!({
@@ -66,9 +64,7 @@ impl IntoResponse for ResponseResult {
                 })),
             )
                 .into_response(),
-            ResponseResult::Flists(flists) => {
-                (StatusCode::OK, Json(serde_json::json!(flists))).into_response()
-            }
+            ResponseResult::Flists(flists) => (StatusCode::OK, Json(flists)).into_response(),
         }
     }
 }
