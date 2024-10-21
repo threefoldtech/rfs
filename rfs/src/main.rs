@@ -242,7 +242,7 @@ fn unpack(opts: UnpackOptions) -> Result<()> {
             .await
             .context("failed to initialize metadata database")?;
 
-        let router = get_router(&meta).await?;
+        let router = store::get_router(&meta).await?;
 
         let cache = cache::Cache::new(opts.cache, router);
         rfs::unpack(&meta, &cache, opts.target, opts.preserve_ownership).await?;
@@ -324,25 +324,12 @@ async fn fuse(opts: MountOptions) -> Result<()> {
         .await
         .context("failed to initialize metadata database")?;
 
-    let router = get_router(&meta).await?;
+    let router = store::get_router(&meta).await?;
 
     let cache = cache::Cache::new(opts.cache, router);
     let filesystem = fs::Filesystem::new(meta, cache);
 
     filesystem.mount(opts.target).await
-}
-
-async fn get_router(meta: &fungi::Reader) -> Result<Router<Stores>> {
-    let mut router = store::Router::new();
-
-    for route in meta.routes().await.context("failed to get store routes")? {
-        let store = store::make(&route.url)
-            .await
-            .with_context(|| format!("failed to initialize store '{}'", route.url))?;
-        router.add(route.start, route.end, store);
-    }
-
-    Ok(router)
 }
 
 fn clone(opts: CloneOptions) -> Result<()> {
@@ -354,7 +341,7 @@ fn clone(opts: CloneOptions) -> Result<()> {
             .await
             .context("failed to initialize metadata database")?;
 
-        let router = get_router(&meta).await?;
+        let router = store::get_router(&meta).await?;
 
         let cache = cache::Cache::new(opts.cache, router);
         rfs::clone(meta, store, cache).await?;

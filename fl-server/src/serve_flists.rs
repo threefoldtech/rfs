@@ -1,14 +1,8 @@
-use askama::Template;
-use axum::{
-    extract::State,
-    response::{Html, Response},
-};
-use serde::Serialize;
+use axum::extract::State;
 use std::{io::Error, path::PathBuf, sync::Arc};
 use tokio::io;
 use tower::util::ServiceExt;
 use tower_http::services::ServeDir;
-use utoipa::ToSchema;
 
 use axum::{
     body::Body,
@@ -18,7 +12,13 @@ use axum::{
 use axum_macros::debug_handler;
 use percent_encoding::percent_decode;
 
-use crate::config;
+use crate::{
+    config,
+    response::{
+        DirListTemplate, DirLister, ErrorTemplate, FileInfo, ResponseError, ResponseResult,
+        TemplateErr,
+    },
+};
 
 #[debug_handler]
 pub async fn serve_flists(
@@ -35,11 +35,11 @@ pub async fn serve_flists(
                     let full_path = match validate_path(&path) {
                         Ok(p) => p,
                         Err(_) => {
-                            return Err(ErrorTemplate {
-                                err: ResponseError::BadRequest("invalid path".to_string()),
+                            return Err(ResponseError::TemplateError(ErrorTemplate {
+                                err: TemplateErr::BadRequest("invalid path".to_string()),
                                 cur_path: path.to_string(),
                                 message: "invalid path".to_owned(),
-                            });
+                            }));
                         }
                     };
 
@@ -49,33 +49,32 @@ pub async fn serve_flists(
                         true => {
                             let rs = visit_dir_one_level(&full_path, &state).await;
                             match rs {
-                                Ok(files) => Ok(DirListTemplate {
+                                Ok(files) => Ok(ResponseResult::DirTemplate(DirListTemplate {
                                     lister: DirLister { files },
                                     cur_path: path.to_string(),
-                                }
-                                .into_response()),
-                                Err(e) => Err(ErrorTemplate {
-                                    err: ResponseError::InternalError(e.to_string()),
+                                })),
+                                Err(e) => Err(ResponseError::TemplateError(ErrorTemplate {
+                                    err: TemplateErr::InternalServerError(e.to_string()),
                                     cur_path: path.to_string(),
                                     message: e.to_string(),
-                                }),
+                                })),
                             }
                         }
-                        false => Err(ErrorTemplate {
-                            err: ResponseError::FileNotFound("file not found".to_string()),
+                        false => Err(ResponseError::TemplateError(ErrorTemplate {
+                            err: TemplateErr::NotFound("file not found".to_string()),
                             cur_path: path.to_string(),
                             message: "file not found".to_owned(),
-                        }),
+                        })),
                     }
                 }
-                _ => Ok(res.map(axum::body::Body::new)),
+                _ => Ok(ResponseResult::Res(res)),
             }
         }
-        Err(err) => Err(ErrorTemplate {
-            err: ResponseError::InternalError(format!("Unhandled error: {}", err)),
+        Err(err) => Err(ResponseError::TemplateError(ErrorTemplate {
+            err: TemplateErr::InternalServerError(format!("Unhandled error: {}", err)),
             cur_path: path.to_string(),
             message: format!("Unhandled error: {}", err),
-        }),
+        })),
     };
 }
 
@@ -149,115 +148,4 @@ pub async fn visit_dir_one_level<P: AsRef<std::path::Path>>(
     }
 
     Ok(files)
-}
-
-mod filters {
-    pub(crate) fn datetime(ts: &i64) -> ::askama::Result<String> {
-        if let Ok(format) =
-            time::format_description::parse("[year]-[month]-[day] [hour]:[minute]:[second] UTC")
-        {
-            return Ok(time::OffsetDateTime::from_unix_timestamp(*ts)
-                .expect("failed to get utc time")
-                .format(&format)
-                .expect("failed to format time"));
-        }
-        Err(askama::Error::Fmt(std::fmt::Error))
-    }
-}
-
-#[derive(Template)]
-#[template(path = "index.html")]
-struct DirListTemplate {
-    lister: DirLister,
-    cur_path: String,
-}
-
-impl IntoResponse for DirListTemplate {
-    fn into_response(self) -> Response<Body> {
-        let t = self;
-        match t.render() {
-            Ok(html) => Html(html).into_response(),
-            Err(err) => {
-                tracing::error!("template render failed, err={}", err);
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to render template. Error: {}", err),
-                )
-                    .into_response()
-            }
-        }
-    }
-}
-
-struct DirLister {
-    files: Vec<FileInfo>,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct FileInfo {
-    pub name: String,
-    pub path_uri: String,
-    pub is_file: bool,
-    pub size: u64,
-    pub last_modified: i64,
-    pub progress: f32,
-}
-
-#[derive(Template)]
-#[template(path = "error.html")]
-struct ErrorTemplate {
-    err: ResponseError,
-    cur_path: String,
-    message: String,
-}
-
-const FAIL_REASON_HEADER_NAME: &str = "fl-server-fail-reason";
-
-impl IntoResponse for ErrorTemplate {
-    fn into_response(self) -> Response<Body> {
-        let t = self;
-        match t.render() {
-            Ok(html) => {
-                let mut resp = Html(html).into_response();
-                match t.err {
-                    ResponseError::FileNotFound(reason) => {
-                        *resp.status_mut() = StatusCode::NOT_FOUND;
-                        resp.headers_mut().insert(
-                            FAIL_REASON_HEADER_NAME,
-                            reason.parse().expect("failed to parse error"),
-                        );
-                    }
-                    ResponseError::BadRequest(reason) => {
-                        *resp.status_mut() = StatusCode::BAD_REQUEST;
-                        resp.headers_mut().insert(
-                            FAIL_REASON_HEADER_NAME,
-                            reason.parse().expect("failed to parse error"),
-                        );
-                    }
-                    ResponseError::InternalError(reason) => {
-                        *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
-                        resp.headers_mut().insert(
-                            FAIL_REASON_HEADER_NAME,
-                            reason.parse().expect("failed to parse error"),
-                        );
-                    }
-                }
-                resp
-            }
-            Err(err) => {
-                tracing::error!("template render failed, err={}", err);
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to render template. Error: {}", err),
-                )
-                    .into_response()
-            }
-        }
-    }
-}
-
-enum ResponseError {
-    BadRequest(String),
-    FileNotFound(String),
-    InternalError(String),
 }

@@ -1,3 +1,4 @@
+use anyhow::Error;
 use axum::{
     extract::{Path, State},
     response::IntoResponse,
@@ -7,26 +8,30 @@ use axum_macros::debug_handler;
 use std::{
     collections::HashMap,
     fs,
+    path::PathBuf,
     sync::{mpsc, Arc},
 };
 
 use bollard::auth::DockerCredentials;
 use serde::{Deserialize, Serialize};
 
-use crate::auth::{SignInBody, SignInResponse, __path_sign_in_handler};
+use crate::{
+    auth::{SignInBody, SignInResponse, __path_sign_in_handler},
+    response::{DirListTemplate, DirLister, ErrorTemplate, TemplateErr},
+};
 use crate::{
     config::{self, Job},
-    response::{ResponseError, ResponseResult},
-    serve_flists::{visit_dir_one_level, FileInfo},
+    response::{FileInfo, ResponseError, ResponseResult},
+    serve_flists::visit_dir_one_level,
 };
-use rfs::fungi::Writer;
+use rfs::fungi::{Reader, Writer};
 use utoipa::{OpenApi, ToSchema};
 use uuid::Uuid;
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(health_check_handler, create_flist_handler, get_flist_state_handler, list_flists_handler, sign_in_handler),
-    components(schemas(FlistBody, Job, ResponseError, ResponseResult, FileInfo, SignInBody, FlistState, SignInResponse, FlistStateInfo)),
+    paths(health_check_handler, create_flist_handler, get_flist_state_handler, preview_flist_handler, list_flists_handler, sign_in_handler),
+    components(schemas(DirListTemplate, DirLister, FlistBody, Job, ResponseError, ErrorTemplate, TemplateErr, ResponseResult, FileInfo, SignInBody, FlistState, SignInResponse, FlistStateInfo, PreviewResponse)),
     tags(
         (name = "fl-server", description = "Flist conversion API")
     )
@@ -45,6 +50,13 @@ pub struct FlistBody {
     pub server_address: Option<String>,
     pub identity_token: Option<String>,
     pub registry_token: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, ToSchema)]
+pub struct PreviewResponse {
+    pub content: Vec<PathBuf>,
+    pub metadata: String,
+    pub checksum: String,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, ToSchema)]
@@ -353,4 +365,167 @@ pub async fn list_flists_handler(State(state): State<Arc<config::AppState>>) -> 
     }
 
     Ok(ResponseResult::Flists(flists))
+}
+
+#[utoipa::path(
+	get,
+	path = "/v1/api/fl/preview/{flist_path}",
+	responses(
+        (status = 200, description = "Flist preview result", body = PreviewResponse),
+        (status = 400, description = "Bad request"),
+        (status = 401, description = "Unauthorized user"),
+        (status = 403, description = "Forbidden"),
+        (status = 500, description = "Internal server error"),
+	),
+    params(
+        ("flist_path" = String, Path, description = "flist file path")
+    )
+)]
+#[debug_handler]
+pub async fn preview_flist_handler(
+    State(state): State<Arc<config::AppState>>,
+    Path(flist_path): Path<String>,
+) -> impl IntoResponse {
+    let fl_path = flist_path;
+
+    match validate_flist_path(&state, &fl_path).await {
+        Ok(_) => (),
+        Err(err) => return Err(ResponseError::BadRequest(err.to_string())),
+    };
+
+    let content = match get_flist_content(&fl_path).await {
+        Ok(paths) => paths,
+        Err(_) => return Err(ResponseError::InternalServerError),
+    };
+
+    let bytes = match std::fs::read(&fl_path) {
+        Ok(b) => b,
+        Err(err) => {
+            log::error!(
+                "failed to read flist '{}' into bytes with error {}",
+                fl_path,
+                err
+            );
+            return Err(ResponseError::InternalServerError);
+        }
+    };
+
+    Ok(ResponseResult::PreviewFlist(PreviewResponse {
+        content,
+        metadata: state.config.store_url.join("-"),
+        checksum: sha256::digest(&bytes),
+    }))
+}
+
+async fn validate_flist_path(state: &Arc<config::AppState>, fl_path: &String) -> Result<(), Error> {
+    // validate path starting with `/`
+    if fl_path.starts_with("/") {
+        anyhow::bail!("invalid flist path '{}', shouldn't start with '/'", fl_path);
+    }
+
+    // path should include 3 parts [parent dir, username, flist file]
+    let parts: Vec<_> = fl_path.split("/").collect();
+    if parts.len() != 3 {
+        anyhow::bail!(
+            format!("invalid flist path '{}', should consist of 3 parts [parent directory, username and flist name", fl_path
+        ));
+    }
+
+    // validate parent dir
+    if parts[0] != state.config.flist_dir {
+        anyhow::bail!(
+            "invalid flist path '{}', parent directory should be '{}'",
+            fl_path,
+            state.config.flist_dir
+        );
+    }
+
+    // validate username
+    match state.db.get_user_by_username(&parts[1]) {
+        Some(_) => (),
+        None => {
+            anyhow::bail!(
+                "invalid flist path '{}', username '{}' doesn't exist",
+                fl_path,
+                parts[1]
+            );
+        }
+    };
+
+    // validate flist extension
+    let fl_name = parts[2].to_string();
+    let ext = match std::path::Path::new(&fl_name).extension() {
+        Some(ex) => ex.to_string_lossy().to_string(),
+        None => "".to_string(),
+    };
+
+    if ext != "fl" {
+        anyhow::bail!(
+            "invalid flist path '{}', invalid flist extension '{}' should be 'fl'",
+            fl_path,
+            ext
+        );
+    }
+
+    // validate flist existence
+    if !std::path::Path::new(parts[0])
+        .join(parts[1])
+        .join(&fl_name)
+        .exists()
+    {
+        anyhow::bail!("flist '{}' doesn't exist", fl_path);
+    }
+
+    Ok(())
+}
+
+async fn get_flist_content(fl_path: &String) -> Result<Vec<PathBuf>, Error> {
+    let mut visitor = ReadVisitor::default();
+
+    let meta = match Reader::new(&fl_path).await {
+        Ok(reader) => reader,
+        Err(err) => {
+            log::error!(
+                "failed to initialize metadata database for flist `{}` with error {}",
+                fl_path,
+                err
+            );
+            anyhow::bail!("Internal server error");
+        }
+    };
+
+    match meta.walk(&mut visitor).await {
+        Ok(()) => return Ok(visitor.into_inner()),
+        Err(err) => {
+            log::error!(
+                "failed to walk through metadata for flist `{}` with error {}",
+                fl_path,
+                err
+            );
+            anyhow::bail!("Internal server error");
+        }
+    };
+}
+
+#[derive(Default)]
+struct ReadVisitor {
+    inner: Vec<PathBuf>,
+}
+
+impl ReadVisitor {
+    pub fn into_inner(self) -> Vec<PathBuf> {
+        self.inner
+    }
+}
+
+#[async_trait::async_trait]
+impl rfs::fungi::meta::WalkVisitor for ReadVisitor {
+    async fn visit(
+        &mut self,
+        path: &std::path::Path,
+        _node: &rfs::fungi::meta::Inode,
+    ) -> rfs::fungi::meta::Result<rfs::fungi::meta::Walk> {
+        self.inner.push(path.to_path_buf());
+        Ok(rfs::fungi::meta::Walk::Continue)
+    }
 }

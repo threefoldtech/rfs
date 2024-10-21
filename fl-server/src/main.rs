@@ -103,6 +103,10 @@ async fn app() -> Result<()> {
                 auth::authorize,
             )),
         )
+        .route(
+            "/v1/api/fl/preview/:flist_path",
+            get(handlers::preview_flist_handler),
+        )
         .route("/v1/api/fl", get(handlers::list_flists_handler))
         .route("/*path", get(serve_flists::serve_flists));
 
