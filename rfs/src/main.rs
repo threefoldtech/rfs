@@ -2,14 +2,15 @@
 extern crate log;
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
+use std::error::Error;
 use std::io::Read;
 
 use anyhow::{Context, Result};
 use clap::{ArgAction, Args, Parser, Subcommand};
 
-use rfs::cache;
 use rfs::fungi;
 use rfs::store::{self, Router, Stores};
+use rfs::{cache, config};
 
 mod fs;
 /// mount flists
@@ -32,6 +33,10 @@ enum Commands {
     Pack(PackOptions),
     /// unpack (downloads) content of an FL the provided location
     Unpack(UnpackOptions),
+    /// clone copies the data from the stores of an FL to another stores
+    Clone(CloneOptions),
+    /// list or modify FL metadata and stores
+    Config(ConfigOptions),
 }
 
 #[derive(Args, Debug)]
@@ -90,8 +95,105 @@ struct UnpackOptions {
     #[clap(short, long, default_value_t = false)]
     preserve_ownership: bool,
 
-    /// target directory to upload
+    /// target directory for unpacking
     target: String,
+}
+
+#[derive(Args, Debug)]
+struct CloneOptions {
+    /// path to metadata file (flist)
+    #[clap(short, long)]
+    meta: String,
+
+    /// store url in the format [xx-xx=]<url>. the range xx-xx is optional and used for
+    /// sharding. the URL is per store type, please check docs for more information
+    #[clap(short, long, action=ArgAction::Append)]
+    store: Vec<String>,
+
+    /// directory used as cache for downloaded file chunks
+    #[clap(short, long, default_value_t = String::from("/tmp/cache"))]
+    cache: String,
+}
+
+#[derive(Args, Debug)]
+struct ConfigOptions {
+    /// path to metadata file (flist)
+    #[clap(short, long)]
+    meta: String,
+
+    #[command(subcommand)]
+    command: ConfigCommands,
+}
+
+#[derive(Subcommand, Debug)]
+enum ConfigCommands {
+    #[command(subcommand)]
+    Tag(TagOperation),
+    #[command(subcommand)]
+    Store(StoreOperation),
+}
+
+#[derive(Subcommand, Debug)]
+enum TagOperation {
+    List,
+    Add(TagAddOptions),
+    Delete(TagDeleteOptions),
+}
+
+#[derive(Args, Debug)]
+struct TagAddOptions {
+    /// pair of key-values separated with '='
+    #[clap(short, long, value_parser = parse_key_val::<String, String>, number_of_values = 1)]
+    tag: Vec<(String, String)>,
+}
+
+#[derive(Args, Debug)]
+struct TagDeleteOptions {
+    /// key to remove
+    #[clap(short, long, action=ArgAction::Append)]
+    key: Vec<String>,
+    /// remove all tags
+    #[clap(short, long, default_value_t = false)]
+    all: bool,
+}
+
+#[derive(Subcommand, Debug)]
+enum StoreOperation {
+    List,
+    Add(StoreAddOptions),
+    Delete(StoreDeleteOptions),
+}
+
+#[derive(Args, Debug)]
+struct StoreAddOptions {
+    /// store url in the format [xx-xx=]<url>. the range xx-xx is optional and used for
+    /// sharding. the URL is per store type, please check docs for more information
+    #[clap(short, long, action=ArgAction::Append)]
+    store: Vec<String>,
+}
+
+#[derive(Args, Debug)]
+struct StoreDeleteOptions {
+    /// store to remove
+    #[clap(short, long, action=ArgAction::Append)]
+    store: Vec<String>,
+    /// remove all stores
+    #[clap(short, long, default_value_t = false)]
+    all: bool,
+}
+
+/// Parse a single key-value pair
+fn parse_key_val<T, U>(s: &str) -> Result<(T, U), Box<dyn Error + Send + Sync + 'static>>
+where
+    T: std::str::FromStr,
+    T::Err: Error + Send + Sync + 'static,
+    U: std::str::FromStr,
+    U::Err: Error + Send + Sync + 'static,
+{
+    let pos = s
+        .find('=')
+        .ok_or_else(|| format!("invalid KEY=value: no `=` found in `{s}`"))?;
+    Ok((s[..pos].parse()?, s[pos + 1..].parse()?))
 }
 
 fn main() -> Result<()> {
@@ -115,6 +217,8 @@ fn main() -> Result<()> {
         Commands::Mount(opts) => mount(opts),
         Commands::Pack(opts) => pack(opts),
         Commands::Unpack(opts) => unpack(opts),
+        Commands::Clone(opts) => clone(opts),
+        Commands::Config(opts) => config(opts),
     }
 }
 
@@ -123,7 +227,7 @@ fn pack(opts: PackOptions) -> Result<()> {
 
     rt.block_on(async move {
         let store = store::parse_router(opts.store.as_slice()).await?;
-        let meta = fungi::Writer::new(opts.meta).await?;
+        let meta = fungi::Writer::new(opts.meta, true).await?;
         rfs::pack(meta, store, opts.target, !opts.no_strip_password, None).await?;
 
         Ok(())
@@ -226,4 +330,54 @@ async fn fuse(opts: MountOptions) -> Result<()> {
     let filesystem = fs::Filesystem::new(meta, cache);
 
     filesystem.mount(opts.target).await
+}
+
+fn clone(opts: CloneOptions) -> Result<()> {
+    let rt = tokio::runtime::Runtime::new()?;
+
+    rt.block_on(async move {
+        let store = store::parse_router(opts.store.as_slice()).await?;
+        let meta = fungi::Reader::new(opts.meta)
+            .await
+            .context("failed to initialize metadata database")?;
+
+        let router = store::get_router(&meta).await?;
+
+        let cache = cache::Cache::new(opts.cache, router);
+        rfs::clone(meta, store, cache).await?;
+
+        Ok(())
+    })
+}
+fn config(opts: ConfigOptions) -> Result<()> {
+    let rt = tokio::runtime::Runtime::new()?;
+
+    rt.block_on(async move {
+        let writer = fungi::Writer::new(opts.meta.clone(), false)
+            .await
+            .context("failed to initialize metadata database")?;
+
+        let reader = fungi::Reader::new(opts.meta)
+            .await
+            .context("failed to initialize metadata database")?;
+
+        match opts.command {
+            ConfigCommands::Tag(opts) => match opts {
+                TagOperation::List => config::tag_list(reader).await?,
+                TagOperation::Add(opts) => config::tag_add(writer, opts.tag).await?,
+                TagOperation::Delete(opts) => {
+                    config::tag_delete(writer, opts.key, opts.all).await?
+                }
+            },
+            ConfigCommands::Store(opts) => match opts {
+                StoreOperation::List => config::store_list(reader).await?,
+                StoreOperation::Add(opts) => config::store_add(writer, opts.store).await?,
+                StoreOperation::Delete(opts) => {
+                    config::store_delete(writer, opts.store, opts.all).await?
+                }
+            },
+        }
+
+        Ok(())
+    })
 }

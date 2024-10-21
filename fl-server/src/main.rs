@@ -72,7 +72,7 @@ async fn app() -> Result<()> {
         .await
         .context("failed to parse config file")?;
 
-    let db = Arc::new(db::VecDB::new(&config.users));
+    let db = Arc::new(db::MapDB::new(&config.users.clone()));
 
     let app_state = Arc::new(config::AppState {
         jobs_state: Mutex::new(HashMap::new()),

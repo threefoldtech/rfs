@@ -4,7 +4,7 @@
 
 The idea behind the FL format is to build a full filesystem description that is compact and also easy to use from almost ANY language. The format need to be easy to edit by tools like `rfs` or any other tool.
 
-We decided to eventually use `sqlite`! Yes the `FL` file is just a `sqlite` database that has the following [schema](../schema/schema.sql)
+We decided to eventually use `sqlite`! Yes the `FL` file is just a `sqlite` database that has the following [schema](../rfs/schema/schema.sql)
 
 ## Tables
 
@@ -64,10 +64,10 @@ the `block` table is used to associate data file blocks with files. An `id` fiel
 
 the route table holds routing information for the blobs. It basically describe where to find `blobs` with certain `ids`. The routing is done as following:
 
-> Note routing table is loaded one time when `rfs` is started and
+> Note routing table is loaded one time when `rfs` is started.
 
 - We use the first byte of the blob `id` as the `route key`
-- The `route key`` is then consulted against the routing table
+- The `route key` is then consulted against the routing table
 - While building an `FL` all matching stores are updated with the new blob. This is how the system does replication
 - On `getting` an object, the list of matching routes are tried in random order the first one to return a value is used
 - Note that same range and overlapping ranges are allowed, this is how shards and replications are done.

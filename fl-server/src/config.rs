@@ -29,7 +29,7 @@ pub struct AppState {
 #[derive(Debug, Default, Clone, Deserialize)]
 pub struct Config {
     pub host: String,
-    pub port: usize,
+    pub port: u16,
     pub store_url: Vec<String>,
     pub flist_dir: String,
 
@@ -44,14 +44,7 @@ pub async fn parse_config(filepath: &str) -> Result<Config> {
     let c: Config = toml::from_str(&content).context("failed to convert toml config data")?;
 
     if !hostname_validator::is_valid(&c.host) {
-        return Err(anyhow::Error::msg(format!("host '{}' is invalid", c.host)));
-    }
-
-    if c.port > 65535 {
-        return Err(anyhow::Error::msg(format!(
-            "port '{}' is invalid, must be between [0, 65535]",
-            c.port
-        )));
+        anyhow::bail!("host '{}' is invalid", c.host)
     }
 
     rfs::store::parse_router(&c.store_url)
@@ -60,10 +53,10 @@ pub async fn parse_config(filepath: &str) -> Result<Config> {
     fs::create_dir_all(&c.flist_dir).context("failed to create flists directory")?;
 
     if c.jwt_expire_hours < 1 || c.jwt_expire_hours > 24 {
-        return Err(anyhow::Error::msg(format!(
+        anyhow::bail!(format!(
             "jwt expiry interval in hours '{}' is invalid, must be between [1, 24]",
             c.jwt_expire_hours
-        )));
+        ))
     }
 
     Ok(c)

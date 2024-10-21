@@ -34,11 +34,24 @@ impl DirStore {
 #[async_trait::async_trait]
 impl Store for DirStore {
     async fn get(&self, key: &[u8]) -> Result<Vec<u8>> {
-        let path = self.root.join(hex::encode(key));
+        let file_name = hex::encode(key);
+        let dir_path = self.root.join(&file_name[0..2]);
+
+        let mut path = dir_path.join(&file_name);
         let data = match fs::read(&path).await {
             Ok(data) => data,
             Err(err) if err.kind() == ErrorKind::NotFound => {
-                return Err(Error::KeyNotFound);
+                path = self.root.join(file_name);
+                let data = match fs::read(&path).await {
+                    Ok(data) => data,
+                    Err(err) if err.kind() == ErrorKind::NotFound => {
+                        return Err(Error::KeyNotFound);
+                    }
+                    Err(err) => {
+                        return Err(Error::IO(err));
+                    }
+                };
+                data
             }
             Err(err) => {
                 return Err(Error::IO(err));
@@ -49,9 +62,13 @@ impl Store for DirStore {
     }
 
     async fn set(&self, key: &[u8], blob: &[u8]) -> Result<()> {
-        let path = self.root.join(hex::encode(key));
+        let file_name = hex::encode(key);
+        let dir_path = self.root.join(&file_name[0..2]);
 
-        fs::write(path, blob).await?;
+        fs::create_dir_all(&dir_path).await?;
+
+        let file_path = dir_path.join(file_name);
+        fs::write(file_path, blob).await?;
         Ok(())
     }
 

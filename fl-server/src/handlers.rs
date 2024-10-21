@@ -127,17 +127,16 @@ pub async fn create_flist_handler(
         return Err(ResponseError::Conflict("flist already exists".to_string()));
     }
 
-    let created = fs::create_dir_all(&username_dir);
-    if created.is_err() {
+    if let Err(err) = fs::create_dir_all(&username_dir) {
         log::error!(
             "failed to create user flist directory `{:?}` with error {:?}",
             &username_dir,
-            created.err()
+            err
         );
         return Err(ResponseError::InternalServerError);
     }
 
-    let meta = match Writer::new(&fl_path).await {
+    let meta = match Writer::new(&fl_path, true).await {
         Ok(writer) => writer,
         Err(err) => {
             log::error!(
@@ -190,15 +189,10 @@ pub async fn create_flist_handler(
         let container_name = Uuid::new_v4().to_string();
         let docker_tmp_dir =
             tempdir::TempDir::new(&container_name).expect("failed to create tmp dir for docker");
-        let docker_tmp_dir_path = docker_tmp_dir.path().to_owned();
 
         let (tx, rx) = mpsc::channel();
-        let mut docker_to_fl = docker2fl::DockerImageToFlist::new(
-            meta,
-            docker_image,
-            credentials,
-            docker_tmp_dir_path.clone(),
-        );
+        let mut docker_to_fl =
+            docker2fl::DockerImageToFlist::new(meta, docker_image, credentials, docker_tmp_dir);
 
         let res = docker_to_fl.prepare().await;
         if res.is_err() {
@@ -348,25 +342,26 @@ pub async fn list_flists_handler(State(state): State<Arc<config::AppState>>) -> 
 
     let rs: Result<Vec<FileInfo>, std::io::Error> =
         visit_dir_one_level(&state.config.flist_dir, &state).await;
-    match rs {
-        Ok(files) => {
-            for file in files {
-                if !file.is_file {
-                    let flists_per_username = visit_dir_one_level(&file.path_uri, &state).await;
-                    match flists_per_username {
-                        Ok(files) => flists.insert(file.name, files),
-                        Err(e) => {
-                            log::error!("failed to list flists per username with error: {}", e);
-                            return Err(ResponseError::InternalServerError);
-                        }
-                    };
-                };
-            }
-        }
+
+    let files = match rs {
+        Ok(files) => files,
         Err(e) => {
             log::error!("failed to list flists directory with error: {}", e);
             return Err(ResponseError::InternalServerError);
         }
+    };
+
+    for file in files {
+        if !file.is_file {
+            let flists_per_username = visit_dir_one_level(&file.path_uri, &state).await;
+            match flists_per_username {
+                Ok(files) => flists.insert(file.name, files),
+                Err(e) => {
+                    log::error!("failed to list flists per username with error: {}", e);
+                    return Err(ResponseError::InternalServerError);
+                }
+            };
+        };
     }
 
     Ok(ResponseResult::Flists(flists))
@@ -425,38 +420,35 @@ pub async fn preview_flist_handler(
 async fn validate_flist_path(state: &Arc<config::AppState>, fl_path: &String) -> Result<(), Error> {
     // validate path starting with `/`
     if fl_path.starts_with("/") {
-        return Err(anyhow::anyhow!(
-            "invalid flist path '{}', shouldn't start with '/'",
-            fl_path
-        ));
+        anyhow::bail!("invalid flist path '{}', shouldn't start with '/'", fl_path);
     }
 
     // path should include 3 parts [parent dir, username, flist file]
     let parts: Vec<_> = fl_path.split("/").collect();
     if parts.len() != 3 {
-        return Err(anyhow::anyhow!(
+        anyhow::bail!(
             format!("invalid flist path '{}', should consist of 3 parts [parent directory, username and flist name", fl_path
-        )));
+        ));
     }
 
     // validate parent dir
     if parts[0] != state.config.flist_dir {
-        return Err(anyhow::anyhow!(
+        anyhow::bail!(
             "invalid flist path '{}', parent directory should be '{}'",
             fl_path,
             state.config.flist_dir
-        ));
+        );
     }
 
     // validate username
     match state.db.get_user_by_username(&parts[1]) {
         Some(_) => (),
         None => {
-            return Err(anyhow::anyhow!(
+            anyhow::bail!(
                 "invalid flist path '{}', username '{}' doesn't exist",
                 fl_path,
                 parts[1]
-            ));
+            );
         }
     };
 
@@ -468,11 +460,11 @@ async fn validate_flist_path(state: &Arc<config::AppState>, fl_path: &String) ->
     };
 
     if ext != "fl" {
-        return Err(anyhow::anyhow!(
+        anyhow::bail!(
             "invalid flist path '{}', invalid flist extension '{}' should be 'fl'",
             fl_path,
             ext
-        ));
+        );
     }
 
     // validate flist existence
@@ -481,7 +473,7 @@ async fn validate_flist_path(state: &Arc<config::AppState>, fl_path: &String) ->
         .join(&fl_name)
         .exists()
     {
-        return Err(anyhow::anyhow!("flist '{}' doesn't exist", fl_path));
+        anyhow::bail!("flist '{}' doesn't exist", fl_path);
     }
 
     Ok(())
@@ -498,7 +490,7 @@ async fn get_flist_content(fl_path: &String) -> Result<Vec<PathBuf>, Error> {
                 fl_path,
                 err
             );
-            return Err(anyhow::anyhow!("Internal server error"));
+            anyhow::bail!("Internal server error");
         }
     };
 
@@ -510,7 +502,7 @@ async fn get_flist_content(fl_path: &String) -> Result<Vec<PathBuf>, Error> {
                 fl_path,
                 err
             );
-            return Err(anyhow::anyhow!("Internal server error"));
+            anyhow::bail!("Internal server error");
         }
     };
 }
