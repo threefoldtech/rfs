@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     fs,
+    path::PathBuf,
     sync::{Arc, Mutex},
 };
 use utoipa::ToSchema;
@@ -20,6 +21,7 @@ pub struct Job {
 #[derive(ToSchema)]
 pub struct AppState {
     pub jobs_state: Mutex<HashMap<String, handlers::FlistState>>,
+    pub flists_progress: Mutex<HashMap<PathBuf, f32>>,
     pub db: Arc<dyn DB>,
     pub config: Config,
 }

@@ -228,7 +228,7 @@ fn pack(opts: PackOptions) -> Result<()> {
     rt.block_on(async move {
         let store = store::parse_router(opts.store.as_slice()).await?;
         let meta = fungi::Writer::new(opts.meta, true).await?;
-        rfs::pack(meta, store, opts.target, !opts.no_strip_password).await?;
+        rfs::pack(meta, store, opts.target, !opts.no_strip_password, None).await?;
 
         Ok(())
     })

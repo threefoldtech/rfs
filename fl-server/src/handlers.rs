@@ -4,7 +4,11 @@ use axum::{
     Extension, Json,
 };
 use axum_macros::debug_handler;
-use std::{collections::HashMap, fs, sync::Arc};
+use std::{
+    collections::HashMap,
+    fs,
+    sync::{mpsc, Arc},
+};
 
 use bollard::auth::DockerCredentials;
 use serde::{Deserialize, Serialize};
@@ -22,7 +26,7 @@ use uuid::Uuid;
 #[derive(OpenApi)]
 #[openapi(
     paths(health_check_handler, create_flist_handler, get_flist_state_handler, list_flists_handler, sign_in_handler),
-    components(schemas(FlistBody, Job, ResponseError, ResponseResult, FileInfo, SignInBody, FlistState, SignInResponse)),
+    components(schemas(FlistBody, Job, ResponseError, ResponseResult, FileInfo, SignInBody, FlistState, SignInResponse, FlistStateInfo)),
     tags(
         (name = "fl-server", description = "Flist conversion API")
     )
@@ -47,8 +51,15 @@ pub struct FlistBody {
 pub enum FlistState {
     Accepted(String),
     Started(String),
+    InProgress(FlistStateInfo),
     Created(String),
     Failed,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, ToSchema)]
+pub struct FlistStateInfo {
+    msg: String,
+    progress: f32,
 }
 
 #[utoipa::path(
@@ -113,7 +124,7 @@ pub async fn create_flist_handler(
         return Err(ResponseError::InternalServerError);
     }
 
-    let meta = match Writer::new(&fl_path).await {
+    let meta = match Writer::new(&fl_path, true).await {
         Ok(writer) => writer,
         Err(err) => {
             log::error!(
@@ -163,7 +174,51 @@ pub async fn create_flist_handler(
                 FlistState::Started(format!("flist '{}' is started", fl_name)),
             );
 
-        let res = docker2fl::convert(meta, store, &docker_image, credentials).await;
+        let container_name = Uuid::new_v4().to_string();
+        let docker_tmp_dir =
+            tempdir::TempDir::new(&container_name).expect("failed to create tmp dir for docker");
+
+        let (tx, rx) = mpsc::channel();
+        let mut docker_to_fl =
+            docker2fl::DockerImageToFlist::new(meta, docker_image, credentials, docker_tmp_dir);
+
+        let res = docker_to_fl.prepare().await;
+        if res.is_err() {
+            let _ = tokio::fs::remove_file(&fl_path).await;
+            state
+                .jobs_state
+                .lock()
+                .expect("failed to lock state")
+                .insert(job.id.clone(), FlistState::Failed);
+            return;
+        }
+
+        let files_count = docker_to_fl.files_count();
+        let st = state.clone();
+        let job_id = job.id.clone();
+        let cloned_fl_path = fl_path.clone();
+        tokio::spawn(async move {
+            let mut progress: f32 = 0.0;
+
+            for _ in 0..files_count - 1 {
+                let step = rx.recv().expect("failed to receive progress") as f32;
+                progress += step;
+                let progress_percentage = progress / files_count as f32 * 100.0;
+                st.jobs_state.lock().expect("failed to lock state").insert(
+                    job_id.clone(),
+                    FlistState::InProgress(FlistStateInfo {
+                        msg: "flist is in progress".to_string(),
+                        progress: progress_percentage,
+                    }),
+                );
+                st.flists_progress
+                    .lock()
+                    .expect("failed to lock state")
+                    .insert(cloned_fl_path.clone(), progress_percentage);
+            }
+        });
+
+        let res = docker_to_fl.pack(store, Some(tx)).await;
 
         // remove the file created with the writer if fl creation failed
         if res.is_err() {
@@ -188,6 +243,11 @@ pub async fn create_flist_handler(
                     flist_download_url
                 )),
             );
+        state
+            .flists_progress
+            .lock()
+            .expect("failed to lock state")
+            .insert(fl_path, 100.0);
     });
 
     Ok(ResponseResult::FlistCreated(current_job))
@@ -232,6 +292,7 @@ pub async fn get_flist_state_handler(
     match res_state {
         FlistState::Accepted(_) => Ok(ResponseResult::FlistState(res_state)),
         FlistState::Started(_) => Ok(ResponseResult::FlistState(res_state)),
+        FlistState::InProgress(_) => Ok(ResponseResult::FlistState(res_state)),
         FlistState::Created(_) => {
             state
                 .jobs_state
@@ -267,26 +328,28 @@ pub async fn get_flist_state_handler(
 pub async fn list_flists_handler(State(state): State<Arc<config::AppState>>) -> impl IntoResponse {
     let mut flists: HashMap<String, Vec<FileInfo>> = HashMap::new();
 
-    let rs = visit_dir_one_level(&state.config.flist_dir).await;
-    match rs {
-        Ok(files) => {
-            for file in files {
-                if !file.is_file {
-                    let flists_per_username = visit_dir_one_level(&file.path_uri).await;
-                    match flists_per_username {
-                        Ok(files) => flists.insert(file.name, files),
-                        Err(e) => {
-                            log::error!("failed to list flists per username with error: {}", e);
-                            return Err(ResponseError::InternalServerError);
-                        }
-                    };
-                };
-            }
-        }
+    let rs: Result<Vec<FileInfo>, std::io::Error> =
+        visit_dir_one_level(&state.config.flist_dir, &state).await;
+
+    let files = match rs {
+        Ok(files) => files,
         Err(e) => {
             log::error!("failed to list flists directory with error: {}", e);
             return Err(ResponseError::InternalServerError);
         }
+    };
+
+    for file in files {
+        if !file.is_file {
+            let flists_per_username = visit_dir_one_level(&file.path_uri, &state).await;
+            match flists_per_username {
+                Ok(files) => flists.insert(file.name, files),
+                Err(e) => {
+                    log::error!("failed to list flists per username with error: {}", e);
+                    return Err(ResponseError::InternalServerError);
+                }
+            };
+        };
     }
 
     Ok(ResponseResult::Flists(flists))

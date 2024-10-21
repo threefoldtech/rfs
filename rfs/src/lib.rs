@@ -67,7 +67,7 @@ mod test {
         store.add(0x00, 0x7f, store0);
         store.add(0x80, 0xff, store1);
 
-        pack(writer, store, &source, false).await.unwrap();
+        pack(writer, store, &source, false, None).await.unwrap();
 
         println!("packing complete");
         // recreate the stores for reading.

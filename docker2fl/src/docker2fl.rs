@@ -4,6 +4,9 @@ use bollard::container::{
 };
 use bollard::image::{CreateImageOptions, RemoveImageOptions};
 use bollard::Docker;
+use std::sync::mpsc::Sender;
+use tempdir::TempDir;
+use walkdir::WalkDir;
 
 use anyhow::{Context, Result};
 use futures_util::stream::StreamExt;
@@ -17,8 +20,6 @@ use tokio_async_drop::tokio_async_drop;
 
 use rfs::fungi::Writer;
 use rfs::store::Store;
-
-use uuid::Uuid;
 
 struct DockerInfo {
     image_name: String,
@@ -43,46 +44,87 @@ impl Drop for DockerInfo {
     }
 }
 
-pub async fn convert<S: Store>(
+pub struct DockerImageToFlist {
     meta: Writer,
-    store: S,
-    image_name: &str,
+    image_name: String,
     credentials: Option<DockerCredentials>,
-) -> Result<()> {
-    #[cfg(unix)]
-    let docker = Docker::connect_with_socket_defaults().context("failed to create docker")?;
+    docker_tmp_dir: TempDir,
+}
 
-    let container_name = Uuid::new_v4().to_string();
+impl DockerImageToFlist {
+    pub fn new(
+        meta: Writer,
+        image_name: String,
+        credentials: Option<DockerCredentials>,
+        docker_tmp_dir: TempDir,
+    ) -> Self {
+        DockerImageToFlist {
+            meta,
+            image_name,
+            credentials,
+            docker_tmp_dir,
+        }
+    }
 
-    let docker_tmp_dir = tempdir::TempDir::new(&container_name)?;
-    let docker_tmp_dir_path = docker_tmp_dir.path();
+    pub fn files_count(&self) -> usize {
+        WalkDir::new(self.docker_tmp_dir.path()).into_iter().count()
+    }
 
-    let docker_info = DockerInfo {
-        image_name: image_name.to_owned(),
-        container_name,
-        docker,
-    };
+    pub async fn prepare(&mut self) -> Result<()> {
+        #[cfg(unix)]
+        let docker = Docker::connect_with_socket_defaults().context("failed to create docker")?;
 
-    extract_image(
-        &docker_info.docker,
-        &docker_info.image_name,
-        &docker_info.container_name,
-        docker_tmp_dir_path,
-        credentials,
-    )
-    .await
-    .context("failed to extract docker image to a directory")?;
-    log::info!(
-        "docker image '{}' is extracted successfully",
-        docker_info.image_name
-    );
+        let container_file =
+            Path::file_stem(self.docker_tmp_dir.path()).expect("failed to get directory name");
+        let container_name = container_file
+            .to_str()
+            .expect("failed to get container name")
+            .to_owned();
 
-    rfs::pack(meta, store, docker_tmp_dir_path, true)
+        let docker_info = DockerInfo {
+            image_name: self.image_name.to_owned(),
+            container_name,
+            docker,
+        };
+
+        extract_image(
+            &docker_info.docker,
+            &docker_info.image_name,
+            &docker_info.container_name,
+            self.docker_tmp_dir.path(),
+            self.credentials.clone(),
+        )
+        .await
+        .context("failed to extract docker image to a directory")?;
+        log::info!(
+            "docker image '{}' is extracted successfully",
+            docker_info.image_name
+        );
+
+        Ok(())
+    }
+
+    pub async fn pack<S: Store>(&mut self, store: S, sender: Option<Sender<u32>>) -> Result<()> {
+        rfs::pack(
+            self.meta.clone(),
+            store,
+            &self.docker_tmp_dir.path(),
+            true,
+            sender,
+        )
         .await
         .context("failed to pack flist")?;
 
-    log::info!("flist has been created successfully");
-    Ok(())
+        log::info!("flist has been created successfully");
+        Ok(())
+    }
+
+    pub async fn convert<S: Store>(&mut self, store: S, sender: Option<Sender<u32>>) -> Result<()> {
+        self.prepare().await?;
+        self.pack(store, sender).await?;
+
+        Ok(())
+    }
 }
 
 async fn extract_image(
@@ -202,37 +244,37 @@ async fn container_boot(
     let mut env: HashMap<String, String> = HashMap::new();
     let mut cwd = String::from("/");
 
-    let cmd = container_config.cmd.unwrap();
+    let cmd = container_config.cmd.expect("failed to get cmd configs");
 
-    if container_config.entrypoint.is_some() {
-        let entrypoint = container_config.entrypoint.unwrap();
-        command = (entrypoint.first().unwrap()).to_string();
+    if let Some(entrypoint) = container_config.entrypoint {
+        command = (entrypoint.first().expect("failed to get first entrypoint")).to_string();
 
         if entrypoint.len() > 1 {
-            let (_, entries) = entrypoint.split_first().unwrap();
+            let (_, entries) = entrypoint
+                .split_first()
+                .expect("failed to split entrypoint");
             args = entries.to_vec();
         } else {
             args = cmd;
         }
     } else {
-        command = (cmd.first().unwrap()).to_string();
-        let (_, entries) = cmd.split_first().unwrap();
+        command = (cmd.first().expect("failed to get first cmd")).to_string();
+        let (_, entries) = cmd.split_first().expect("failed to split cmd");
         args = entries.to_vec();
     }
 
-    if container_config.env.is_some() {
-        for entry in container_config.env.unwrap().iter() {
-            let mut split = entry.split('=');
-            env.insert(
-                split.next().unwrap().to_string(),
-                split.next().unwrap().to_string(),
-            );
+    if let Some(envs) = container_config.env {
+        for entry in envs.iter() {
+            if let Some((key, value)) = entry.split_once('=') {
+                env.insert(key.to_string(), value.to_string());
+            }
         }
     }
 
-    let working_dir = container_config.working_dir.unwrap();
-    if !working_dir.is_empty() {
-        cwd = working_dir;
+    if let Some(ref working_dir) = container_config.working_dir {
+        if !working_dir.is_empty() {
+            cwd = working_dir.to_string();
+        }
     }
 
     let metadata = json!({
