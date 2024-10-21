@@ -263,21 +263,18 @@ async fn container_boot(
         args = entries.to_vec();
     }
 
-    if container_config.env.is_some() {
-        for entry in container_config.env.expect("failed to get env").iter() {
-            let mut split = entry.split('=');
-            env.insert(
-                split.next().expect("failed to get env key").to_string(),
-                split.next().expect("failed to get env value").to_string(),
-            );
+    if let Some(envs) = container_config.env {
+        for entry in envs.iter() {
+            if let Some((key, value)) = entry.split_once('=') {
+                env.insert(key.to_string(), value.to_string());
+            }
         }
     }
 
-    let working_dir = container_config
-        .working_dir
-        .expect("failed to get working dir");
-    if !working_dir.is_empty() {
-        cwd = working_dir;
+    if let Some(ref working_dir) = container_config.working_dir {
+        if !working_dir.is_empty() {
+            cwd = working_dir.to_string();
+        }
     }
 
     let metadata = json!({
