@@ -9,7 +9,7 @@ use anyhow::{Context, Result};
 use clap::{ArgAction, Args, Parser, Subcommand};
 
 use rfs::fungi;
-use rfs::store::{self, Router, Stores};
+use rfs::store::{self};
 use rfs::{cache, config};
 
 mod fs;

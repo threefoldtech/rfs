@@ -3,6 +3,7 @@ use bollard::auth::DockerCredentials;
 use clap::{ArgAction, Parser};
 use rfs::fungi;
 use rfs::store::parse_router;
+use tokio::runtime::Builder;
 use uuid::Uuid;
 
 mod docker2fl;
@@ -53,8 +54,16 @@ struct Options {
     registry_token: Option<String>,
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
+    let rt = Builder::new_multi_thread()
+        .thread_stack_size(8 * 1024 * 1024)
+        .enable_all()
+        .build()
+        .unwrap();
+    rt.block_on(run())
+}
+
+async fn run() -> Result<()> {
     let opts = Options::parse();
 
     simple_logger::SimpleLogger::new()
