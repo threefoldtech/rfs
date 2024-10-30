@@ -12,31 +12,33 @@ use crate::store;
 
 const ID_LEN: usize = 32;
 const KEY_LEN: usize = 32;
-const TYPE_MASK: u32 = nix::libc::S_IFMT;
+const TYPE_MASK: u32 = nix::libc::S_IFMT as u32;
 
 #[repr(u32)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FileType {
-    Regular = nix::libc::S_IFREG,
-    Dir = nix::libc::S_IFDIR,
-    Link = nix::libc::S_IFLNK,
-    Block = nix::libc::S_IFBLK,
-    Char = nix::libc::S_IFCHR,
-    Socket = nix::libc::S_IFSOCK,
-    FIFO = nix::libc::S_IFIFO,
+    // we can't simply write `Regular = nix::libc::S_IFREG` because it is u32 in Linux but u16 in MacOS
+    Regular = nix::libc::S_IFREG as u32,
+    Dir = nix::libc::S_IFDIR as u32,
+    Link = nix::libc::S_IFLNK as u32,
+    Block = nix::libc::S_IFBLK as u32,
+    Char = nix::libc::S_IFCHR as u32,
+    Socket = nix::libc::S_IFSOCK as u32,
+    FIFO = nix::libc::S_IFIFO as u32,
     Unknown = 0,
 }
 
 impl From<u32> for FileType {
     fn from(value: u32) -> Self {
         match value {
-            nix::libc::S_IFREG => Self::Regular,
-            nix::libc::S_IFDIR => Self::Dir,
-            nix::libc::S_IFLNK => Self::Link,
-            nix::libc::S_IFBLK => Self::Block,
-            nix::libc::S_IFCHR => Self::Char,
-            nix::libc::S_IFSOCK => Self::Socket,
-            nix::libc::S_IFIFO => Self::FIFO,
+            // we can't simply write `nix::libc::S_IFREG => Self::Regular` because it is u32 in Linux but u16 in MacOS
+            x if x == nix::libc::S_IFREG as u32 => Self::Regular,
+            x if x == nix::libc::S_IFDIR as u32 => Self::Dir,
+            x if x == nix::libc::S_IFLNK as u32 => Self::Link,
+            x if x == nix::libc::S_IFBLK as u32 => Self::Block,
+            x if x == nix::libc::S_IFCHR as u32 => Self::Char,
+            x if x == nix::libc::S_IFSOCK as u32 => Self::Socket,
+            x if x == nix::libc::S_IFIFO as u32 => Self::FIFO,
             _ => Self::Unknown,
         }
     }

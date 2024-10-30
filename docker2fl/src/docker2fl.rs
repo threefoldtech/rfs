@@ -71,8 +71,16 @@ impl DockerImageToFlist {
     }
 
     pub async fn prepare(&mut self) -> Result<()> {
-        #[cfg(unix)]
+        #[cfg(all(unix, not(target_os = "macos")))]
         let docker = Docker::connect_with_socket_defaults().context("failed to create docker")?;
+
+        #[cfg(target_os = "macos")]
+        let docker = Docker::connect_with_socket(
+            concat!(env!("HOME"), "/.docker/run/docker.sock"),
+            120,
+            bollard::API_DEFAULT_VERSION,
+        )
+        .context("failed to create docker")?;
 
         let container_file =
             Path::file_stem(self.docker_tmp_dir.path()).expect("failed to get directory name");
