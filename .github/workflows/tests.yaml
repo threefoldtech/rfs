@@ -16,13 +16,12 @@ jobs:
       - uses: clechasseur/rs-fmt-check@v2
 
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
-      - name: Get Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install capnproto
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
