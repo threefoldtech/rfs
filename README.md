@@ -34,3 +34,10 @@ you can copy the binaries then to `/usr/bin/` to be able to use from anywhere on
 -   [docker2fl](./docker2fl/README.md)
 -   [fl-server](./fl-server/README.md)
 -   [fl-frontend](./frontend/README.md)
+
+## Flist-Server
+
+- Dockerfile for the backend: https://github.com/threefoldtech/rfs/blob/master/Dockerfile
+- backend config: https://github.com/threefoldtech/rfs/blob/master/fl-server/README.md
+- Dockerfile for the frontend: https://github.com/threefoldtech/rfs/blob/master/frontend/Dockerfile
+
