@@ -32,3 +32,5 @@ you can copy the binaries then to `/usr/bin/` to be able to use from anywhere on
 
 -   [rfs](./rfs/README.md)
 -   [docker2fl](./docker2fl/README.md)
+-   [fl-server](./fl-server/README.md)
+-   [fl-frontend](./frontend/README.md)
