@@ -204,6 +204,7 @@ pub async fn parse_router(urls: &[String]) -> anyhow::Result<Router<Stores>> {
     Ok(router)
 }
 
+#[derive(Clone)]
 pub enum Stores {
     S3(s3store::S3Store),
     Dir(dir::DirStore),

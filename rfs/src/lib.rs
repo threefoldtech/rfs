@@ -12,8 +12,11 @@ pub use unpack::unpack;
 mod clone;
 pub use clone::clone;
 pub mod config;
+mod docker;
+pub use docker::DockerImageToFlist;
 
-const PARALLEL_UPLOAD: usize = 10; // number of files we can upload in parallel
+const PARALLEL_UPLOAD: usize = 20; // number of files we can upload in parallel
+const PARALLEL_DOWNLOAD: usize = 20; // number of files we can download in parallel
 
 #[cfg(test)]
 mod test {

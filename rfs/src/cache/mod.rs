@@ -8,7 +8,7 @@ use tokio::fs::{self, File, OpenOptions};
 use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 
 /// Cache implements a caching layer on top of a block store
-//#[derive(Clone)]
+#[derive(Clone)]
 pub struct Cache<S: Store> {
     store: BlockStore<S>,
     root: PathBuf,
@@ -120,7 +120,15 @@ impl Locker {
     pub async fn lock(&self) -> Result<()> {
         let fd = self.fd;
         tokio::task::spawn_blocking(move || {
-            nix::fcntl::flock(fd, nix::fcntl::FlockArg::LockExclusive)
+            // Use libc instead of nix for file locking
+            unsafe {
+                let result = libc::flock(fd, libc::LOCK_EX);
+                if result != 0 {
+                    Err(std::io::Error::last_os_error())
+                } else {
+                    Ok(())
+                }
+            }
         })
         .await
         .context("failed to spawn file locking")?
@@ -131,10 +139,20 @@ impl Locker {
 
     pub async fn unlock(&self) -> Result<()> {
         let fd = self.fd;
-        tokio::task::spawn_blocking(move || nix::fcntl::flock(fd, nix::fcntl::FlockArg::Unlock))
-            .await
-            .context("failed to spawn file lunlocking")?
-            .context("failed to unlock file")?;
+        tokio::task::spawn_blocking(move || {
+            // Use libc instead of nix for file unlocking
+            unsafe {
+                let result = libc::flock(fd, libc::LOCK_UN);
+                if result != 0 {
+                    Err(std::io::Error::last_os_error())
+                } else {
+                    Ok(())
+                }
+            }
+        })
+        .await
+        .context("failed to spawn file unlocking")?
+        .context("failed to unlock file")?;
 
         Ok(())
     }

@@ -24,20 +24,34 @@ cargo build --features build-binary --release --target=x86_64-unknown-linux-musl
 
 The rfs binary will be available under `./target/x86_64-unknown-linux-musl/release/rfs`
 
-The docker2fl binary will be available under `./target/x86_64-unknown-linux-musl/release/docker2fl`
-
 you can copy the binaries then to `/usr/bin/` to be able to use from anywhere on your system.
+
+## Testing
+
+The project includes various tests to ensure functionality:
+
+```bash
+# Run all tests
+cd tests
+make all
+
+# Or run specific test types
+make unit
+make integration
+make e2e
+make performance
+```
+
+See the [tests README](./tests/README.md) for more details.
 
 ## Binaries and libraries
 
--   [rfs](./rfs/README.md)
--   [docker2fl](./docker2fl/README.md)
--   [fl-server](./fl-server/README.md)
--   [fl-frontend](./frontend/README.md)
+- [rfs](./rfs/README.md) - Main tool with docker2fl functionality as a subcommand
+- [fl-server](./fl-server/README.md)
+- [fl-frontend](./frontend/README.md)
 
-## Flist-Server
+## FL Server
 
-- Dockerfile for the backend: https://github.com/threefoldtech/rfs/blob/master/Dockerfile
-- backend config: https://github.com/threefoldtech/rfs/blob/master/fl-server/README.md
-- Dockerfile for the frontend: https://github.com/threefoldtech/rfs/blob/master/frontend/Dockerfile
-
+- Dockerfile for the backend: [Dockerfile](https://github.com/threefoldtech/rfs/blob/master/Dockerfile)
+- Backend config: [fl-server README](https://github.com/threefoldtech/rfs/blob/master/fl-server/README.md)
+- Dockerfile for the frontend: [Frontend Dockerfile](https://github.com/threefoldtech/rfs/blob/master/frontend/Dockerfile)
