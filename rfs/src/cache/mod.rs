@@ -120,15 +120,7 @@ impl Locker {
     pub async fn lock(&self) -> Result<()> {
         let fd = self.fd;
         tokio::task::spawn_blocking(move || {
-            // Use libc instead of nix for file locking
-            unsafe {
-                let result = libc::flock(fd, libc::LOCK_EX);
-                if result != 0 {
-                    Err(std::io::Error::last_os_error())
-                } else {
-                    Ok(())
-                }
-            }
+            nix::fcntl::flock(fd, nix::fcntl::FlockArg::LockExclusive)
         })
         .await
         .context("failed to spawn file locking")?
@@ -139,20 +131,10 @@ impl Locker {
 
     pub async fn unlock(&self) -> Result<()> {
         let fd = self.fd;
-        tokio::task::spawn_blocking(move || {
-            // Use libc instead of nix for file unlocking
-            unsafe {
-                let result = libc::flock(fd, libc::LOCK_UN);
-                if result != 0 {
-                    Err(std::io::Error::last_os_error())
-                } else {
-                    Ok(())
-                }
-            }
-        })
-        .await
-        .context("failed to spawn file unlocking")?
-        .context("failed to unlock file")?;
+        tokio::task::spawn_blocking(move || nix::fcntl::flock(fd, nix::fcntl::FlockArg::Unlock))
+            .await
+            .context("failed to spawn file unlocking")?
+            .context("failed to unlock file")?;
 
         Ok(())
     }

@@ -5,13 +5,13 @@ use crate::fungi::{
 };
 use crate::store::Store;
 use anyhow::Context;
+use nix::unistd::{fchownat, FchownatFlags, Gid, Uid};
 use std::fs::Permissions;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::{ffi::OsStr, fs, sync::Arc};
 use tokio::fs::OpenOptions;
-use std::process::Command;
 use workers::WorkerPool;
 
 /// unpack an FL to the given root location. it will download the files and reconstruct
@@ -106,17 +106,14 @@ where
         };
 
         if self.preserve {
-            // Use chown command instead of nix::unistd::fchownat
-            let status = Command::new("chown")
-                .arg("-h") // equivalent to NoFollowSymlink
-                .arg(format!("{}:{}", node.uid, node.gid))
-                .arg(&rooted)
-                .status()
-                .with_context(|| format!("failed to execute chown command for '{:?}'", &rooted))?;
-
-            if !status.success() {
-                return Err(anyhow::anyhow!("failed to change ownership of '{:?}'", &rooted).into());
-            }
+            fchownat(
+                None,
+                &rooted,
+                Some(Uid::from_raw(node.uid)),
+                Some(Gid::from_raw(node.gid)),
+                FchownatFlags::NoFollowSymlink,
+            )
+            .with_context(|| format!("failed to change ownership of '{:?}'", &rooted))?;
         }
 
         Ok(Walk::Continue)
@@ -194,17 +191,14 @@ where
         };
 
         if self.preserve {
-            // Use chown command instead of nix::unistd::fchownat
-            let status = Command::new("chown")
-                .arg("-h") // equivalent to NoFollowSymlink
-                .arg(format!("{}:{}", node.uid, node.gid))
-                .arg(&rooted)
-                .status()
-                .with_context(|| format!("failed to execute chown command for '{:?}'", &rooted))?;
-
-            if !status.success() {
-                return Err(anyhow::anyhow!("failed to change ownership of '{:?}'", &rooted).into());
-            }
+            fchownat(
+                None,
+                &rooted,
+                Some(Uid::from_raw(node.uid)),
+                Some(Gid::from_raw(node.gid)),
+                FchownatFlags::NoFollowSymlink,
+            )
+            .with_context(|| format!("failed to change ownership of '{:?}'", &rooted))?;
         }
 
         Ok(Walk::Continue)

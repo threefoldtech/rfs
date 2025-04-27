@@ -1,8 +1,9 @@
 #[macro_use]
 extern crate log;
+use nix::sys::signal::{self, Signal};
+use nix::unistd::Pid;
 use std::error::Error;
 use std::io::Read;
-use std::process::Command;
 
 use anyhow::{Context, Result};
 use clap::{ArgAction, Args, Parser, Subcommand};
@@ -365,11 +366,7 @@ fn wait_child(target: String, mut pid_file: tempfile::NamedTempFile) {
     match pid {
         Err(e) => error!("failed to parse pid_file contents {}: {:#}", buf, e),
         Ok(v) => {
-            // Use kill command instead of nix::signal::kill
-            let _ = Command::new("kill")
-                .arg("-TERM")
-                .arg(v.to_string())
-                .output();
+            let _ = signal::kill(Pid::from_raw(v), Signal::SIGTERM);
         } // probably the child exited on its own
     }
     // cleanup is not performed if the process is terminated with exit(2)

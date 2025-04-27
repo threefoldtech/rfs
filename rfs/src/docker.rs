@@ -67,9 +67,7 @@ impl DockerImageToFlist {
     }
 
     pub fn files_count(&self) -> u32 {
-        WalkDir::new(self.docker_tmp_dir.path())
-            .into_iter()
-            .count() as u32
+        WalkDir::new(self.docker_tmp_dir.path()).into_iter().count() as u32
     }
 
     pub async fn prepare(&mut self) -> Result<()> {
