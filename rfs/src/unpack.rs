@@ -232,7 +232,7 @@ where
             .with_context(|| format!("failed to create file '{:?}'", path))?;
 
         self.cache
-            .direct(&blocks, &mut fd)
+            .direct(blocks, &mut fd)
             .await
             .with_context(|| format!("failed to download file '{:?}'", path))?;
 

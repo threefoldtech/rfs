@@ -1907,6 +1907,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "mycofs"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bollard",
+ "clap",
+ "daemonize",
+ "git-version",
+ "log",
+ "nix",
+ "rfs",
+ "simple_logger",
+ "tempdir",
+ "tempfile",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "native-tls"
 version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"

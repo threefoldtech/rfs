@@ -1,6 +1,10 @@
 .PHONY: all e2e performance unit integration clean
 
-all: unit integration e2e performance
+all: build unit integration e2e performance
+
+# Build binaries
+build:
+	cargo build --features build-binary --release
 
 # Run unit tests
 unit:

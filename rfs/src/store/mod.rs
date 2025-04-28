@@ -23,7 +23,7 @@ pub async fn make<U: AsRef<str>>(u: U) -> Result<Stores> {
         "s3" | "s3s" | "s3s+tls" => return Ok(Stores::S3(s3store::S3Store::make(&u).await?)),
         "zdb" => return Ok(Stores::ZDB(zdb::ZdbStore::make(&u).await?)),
         "http" | "https" => return Ok(Stores::HTTP(http::HTTPStore::make(&u).await?)),
-        _ => return Err(Error::UnknownStore(parsed.scheme().into())),
+        _ => Err(Error::UnknownStore(parsed.scheme().into())),
     }
 }
 

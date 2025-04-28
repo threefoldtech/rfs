@@ -58,7 +58,7 @@ pub struct S3Store {
 impl S3Store {
     pub async fn make<U: AsRef<str>>(url: &U) -> Result<S3Store> {
         let (cred, region, bucket_name) = get_config(url.as_ref())?;
-        Ok(S3Store::new(url.as_ref(), &bucket_name, region, cred)?)
+        S3Store::new(url.as_ref(), &bucket_name, region, cred)
     }
     pub fn new(url: &str, bucket_name: &str, region: Region, cred: Credentials) -> Result<Self> {
         let bucket = Bucket::new(bucket_name, region, cred)

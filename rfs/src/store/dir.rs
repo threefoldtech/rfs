@@ -22,7 +22,7 @@ impl DirStore {
             return Err(Error::InvalidScheme(u.scheme().into(), SCHEME.into()));
         }
 
-        Ok(DirStore::new(u.path()).await?)
+        DirStore::new(u.path()).await
     }
     pub async fn new<P: Into<PathBuf>>(root: P) -> Result<Self> {
         let root = root.into();
@@ -42,7 +42,7 @@ impl Store for DirStore {
             Ok(data) => data,
             Err(err) if err.kind() == ErrorKind::NotFound => {
                 path = self.root.join(file_name);
-                let data = match fs::read(&path).await {
+                match fs::read(&path).await {
                     Ok(data) => data,
                     Err(err) if err.kind() == ErrorKind::NotFound => {
                         return Err(Error::KeyNotFound);
@@ -50,8 +50,7 @@ impl Store for DirStore {
                     Err(err) => {
                         return Err(Error::IO(err));
                     }
-                };
-                data
+                }
             }
             Err(err) => {
                 return Err(Error::IO(err));

@@ -27,7 +27,7 @@ pub async fn serve_flists(
 ) -> impl IntoResponse {
     let path = req.uri().path().to_string();
 
-    return match ServeDir::new("").oneshot(req).await {
+    match ServeDir::new("").oneshot(req).await {
         Ok(res) => {
             let status = res.status();
             match status {
@@ -75,7 +75,7 @@ pub async fn serve_flists(
             cur_path: path.to_string(),
             message: format!("Unhandled error: {}", err),
         })),
-    };
+    }
 }
 
 fn validate_path(path: &str) -> io::Result<PathBuf> {

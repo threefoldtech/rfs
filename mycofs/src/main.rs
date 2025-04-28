@@ -12,10 +12,10 @@ use rfs::fungi;
 use rfs::store::{self};
 use rfs::{cache, config};
 
-mod fs;
+use rfs::fs;
 /// mount flists
 #[derive(Parser, Debug)]
-#[clap(name ="rfs", author, version = env!("GIT_VERSION"), about, long_about = None)]
+#[clap(name ="mycofs", author, version = env!("GIT_VERSION"), about, long_about = None)]
 struct Options {
     /// enable debugging logs
     #[clap(long, action=ArgAction::Count)]
@@ -39,6 +39,8 @@ enum Commands {
     Config(ConfigOptions),
     /// convert a docker image to an FL
     Docker(DockerOptions),
+    /// run the fl-server
+    Server(ServerOptions),
 }
 
 #[derive(Args, Debug)]
@@ -225,6 +227,17 @@ struct DockerOptions {
     registry_token: Option<String>,
 }
 
+#[derive(Args, Debug)]
+struct ServerOptions {
+    /// config file path
+    #[clap(short, long)]
+    config_path: String,
+
+    /// enable debugging logs
+    #[clap(short, long, action=ArgAction::Count)]
+    debug: u8,
+}
+
 /// Parse a single key-value pair
 fn parse_key_val<T, U>(s: &str) -> Result<(T, U), Box<dyn Error + Send + Sync + 'static>>
 where
@@ -263,6 +276,7 @@ fn main() -> Result<()> {
         Commands::Clone(opts) => clone(opts),
         Commands::Config(opts) => config(opts),
         Commands::Docker(opts) => docker(opts),
+        Commands::Server(opts) => server(opts),
     }
 }
 
@@ -406,42 +420,6 @@ fn clone(opts: CloneOptions) -> Result<()> {
         Ok(())
     })
 }
-fn config(opts: ConfigOptions) -> Result<()> {
-    let rt = tokio::runtime::Builder::new_multi_thread()
-        .thread_stack_size(16 * 1024 * 1024) // Use a larger stack size
-        .enable_all()
-        .build()
-        .unwrap();
-
-    rt.block_on(async move {
-        let writer = fungi::Writer::new(opts.meta.clone(), false)
-            .await
-            .context("failed to initialize metadata database")?;
-
-        let reader = fungi::Reader::new(opts.meta)
-            .await
-            .context("failed to initialize metadata database")?;
-
-        match opts.command {
-            ConfigCommands::Tag(opts) => match opts {
-                TagOperation::List => config::tag_list(reader).await?,
-                TagOperation::Add(opts) => config::tag_add(writer, opts.tag).await?,
-                TagOperation::Delete(opts) => {
-                    config::tag_delete(writer, opts.key, opts.all).await?
-                }
-            },
-            ConfigCommands::Store(opts) => match opts {
-                StoreOperation::List => config::store_list(reader).await?,
-                StoreOperation::Add(opts) => config::store_add(writer, opts.store).await?,
-                StoreOperation::Delete(opts) => {
-                    config::store_delete(writer, opts.store, opts.all).await?
-                }
-            },
-        }
-
-        Ok(())
-    })
-}
 
 fn docker(opts: DockerOptions) -> Result<()> {
     use bollard::auth::DockerCredentials;
@@ -485,6 +463,80 @@ fn docker(opts: DockerOptions) -> Result<()> {
         if res.is_err() {
             tokio::fs::remove_file(fl_name).await?;
             return res;
+        }
+
+        Ok(())
+    })
+}
+
+fn server(opts: ServerOptions) -> Result<()> {
+    use std::process::{Command, Stdio};
+
+    println!("Starting fl-server with config: {}", opts.config_path);
+
+    // Find the fl-server binary in the same directory as the mycofs binary
+    let current_exe = std::env::current_exe()?;
+    let bin_dir = current_exe
+        .parent()
+        .context("Failed to get binary directory")?;
+    let fl_server_path = bin_dir.join("fl-server");
+
+    // Build the command with proper arguments
+    let mut cmd = Command::new(fl_server_path);
+
+    // Add config path
+    cmd.arg("-c").arg(&opts.config_path);
+
+    // Add debug flags if specified
+    if opts.debug > 0 {
+        for _ in 0..opts.debug {
+            cmd.arg("-d");
+        }
+    }
+
+    // Make sure we can see the output
+    cmd.stdout(Stdio::inherit()).stderr(Stdio::inherit());
+
+    // Run the fl-server binary
+    let status = cmd.status().context("Failed to execute fl-server")?;
+
+    if !status.success() {
+        anyhow::bail!("fl-server exited with status: {}", status);
+    }
+
+    Ok(())
+}
+fn config(opts: ConfigOptions) -> Result<()> {
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .thread_stack_size(16 * 1024 * 1024) // Use a larger stack size
+        .enable_all()
+        .build()
+        .unwrap();
+
+    rt.block_on(async move {
+        let writer = fungi::Writer::new(opts.meta.clone(), false)
+            .await
+            .context("failed to initialize metadata database")?;
+
+        let reader = fungi::Reader::new(opts.meta)
+            .await
+            .context("failed to initialize metadata database")?;
+
+        match opts.command {
+            ConfigCommands::Tag(opts) => match opts {
+                TagOperation::List => config::tag_list(reader).await?,
+                TagOperation::Add(opts) => config::tag_add(writer, opts.tag).await?,
+                TagOperation::Delete(opts) => {
+                    config::tag_delete(writer, opts.key, opts.all).await?
+                }
+            },
+            ConfigCommands::Store(opts) => match opts {
+                StoreOperation::List => config::store_list(reader).await?,
+                StoreOperation::Add(opts) => config::store_add(writer, opts.store).await?,
+                StoreOperation::Delete(opts) => {
+                    config::store_delete(writer, opts.store, opts.all).await?
+                }
+            },
         }
 
         Ok(())

@@ -3,7 +3,8 @@ resolver = "2"
 
 members = [
     "rfs",
-    "fl-server"
+    "fl-server",
+    "mycofs"
 ]
 
 [profile.release]

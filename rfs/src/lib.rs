@@ -2,6 +2,7 @@
 extern crate log;
 
 pub mod cache;
+pub mod fs;
 pub mod fungi;
 pub mod store;
 

@@ -139,7 +139,7 @@ async fn pack_one<S: Store>(
         let meta = child.metadata().await?;
         let child_path = path.join(&name);
 
-        if let Some(ref sender) = sender {
+        if let Some(sender) = sender {
             sender.send(1).context("failed to send progress")?;
         }
 
