@@ -8,7 +8,7 @@ use tokio::fs::{self, File, OpenOptions};
 use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 
 /// Cache implements a caching layer on top of a block store
-//#[derive(Clone)]
+#[derive(Clone)]
 pub struct Cache<S: Store> {
     store: BlockStore<S>,
     root: PathBuf,
@@ -133,7 +133,7 @@ impl Locker {
         let fd = self.fd;
         tokio::task::spawn_blocking(move || nix::fcntl::flock(fd, nix::fcntl::FlockArg::Unlock))
             .await
-            .context("failed to spawn file lunlocking")?
+            .context("failed to spawn file unlocking")?
             .context("failed to unlock file")?;
 
         Ok(())

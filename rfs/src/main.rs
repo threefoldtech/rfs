@@ -37,6 +37,8 @@ enum Commands {
     Clone(CloneOptions),
     /// list or modify FL metadata and stores
     Config(ConfigOptions),
+    /// convert a docker image to an FL
+    Docker(DockerOptions),
 }
 
 #[derive(Args, Debug)]
@@ -182,6 +184,47 @@ struct StoreDeleteOptions {
     all: bool,
 }
 
+#[derive(Args, Debug)]
+struct DockerOptions {
+    /// name of the docker image to be converted to flist
+    #[clap(short, long, required = true)]
+    image_name: String,
+
+    /// store url for rfs in the format [xx-xx=]<url>. the range xx-xx is optional and used for
+    /// sharding. the URL is per store type, please check docs for more information
+    #[clap(short, long, required = true, action=ArgAction::Append)]
+    store: Vec<String>,
+
+    // docker credentials
+    /// docker hub server username
+    #[clap(long, required = false)]
+    username: Option<String>,
+
+    /// docker hub server password
+    #[clap(long, required = false)]
+    password: Option<String>,
+
+    /// docker hub server auth
+    #[clap(long, required = false)]
+    auth: Option<String>,
+
+    /// docker hub server email
+    #[clap(long, required = false)]
+    email: Option<String>,
+
+    /// docker hub server address
+    #[clap(long, required = false)]
+    server_address: Option<String>,
+
+    /// docker hub server identity token
+    #[clap(long, required = false)]
+    identity_token: Option<String>,
+
+    /// docker hub server registry token
+    #[clap(long, required = false)]
+    registry_token: Option<String>,
+}
+
 /// Parse a single key-value pair
 fn parse_key_val<T, U>(s: &str) -> Result<(T, U), Box<dyn Error + Send + Sync + 'static>>
 where
@@ -219,11 +262,16 @@ fn main() -> Result<()> {
         Commands::Unpack(opts) => unpack(opts),
         Commands::Clone(opts) => clone(opts),
         Commands::Config(opts) => config(opts),
+        Commands::Docker(opts) => docker(opts),
     }
 }
 
 fn pack(opts: PackOptions) -> Result<()> {
-    let rt = tokio::runtime::Runtime::new()?;
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .thread_stack_size(16 * 1024 * 1024) // Use a larger stack size
+        .enable_all()
+        .build()
+        .unwrap();
 
     rt.block_on(async move {
         let store = store::parse_router(opts.store.as_slice()).await?;
@@ -235,7 +283,11 @@ fn pack(opts: PackOptions) -> Result<()> {
 }
 
 fn unpack(opts: UnpackOptions) -> Result<()> {
-    let rt = tokio::runtime::Runtime::new()?;
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .thread_stack_size(16 * 1024 * 1024) // Use a larger stack size
+        .enable_all()
+        .build()
+        .unwrap();
 
     rt.block_on(async move {
         let meta = fungi::Reader::new(opts.meta)
@@ -278,7 +330,11 @@ fn mount(opts: MountOptions) -> Result<()> {
         }
     }
 
-    let rt = tokio::runtime::Runtime::new()?;
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .thread_stack_size(16 * 1024 * 1024) // Use a larger stack size
+        .enable_all()
+        .build()
+        .unwrap();
 
     rt.block_on(fuse(opts))
 }
@@ -333,7 +389,11 @@ async fn fuse(opts: MountOptions) -> Result<()> {
 }
 
 fn clone(opts: CloneOptions) -> Result<()> {
-    let rt = tokio::runtime::Runtime::new()?;
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .thread_stack_size(16 * 1024 * 1024) // Use a larger stack size
+        .enable_all()
+        .build()
+        .unwrap();
 
     rt.block_on(async move {
         let store = store::parse_router(opts.store.as_slice()).await?;
@@ -350,7 +410,11 @@ fn clone(opts: CloneOptions) -> Result<()> {
     })
 }
 fn config(opts: ConfigOptions) -> Result<()> {
-    let rt = tokio::runtime::Runtime::new()?;
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .thread_stack_size(16 * 1024 * 1024) // Use a larger stack size
+        .enable_all()
+        .build()
+        .unwrap();
 
     rt.block_on(async move {
         let writer = fungi::Writer::new(opts.meta.clone(), false)
@@ -376,6 +440,54 @@ fn config(opts: ConfigOptions) -> Result<()> {
                     config::store_delete(writer, opts.store, opts.all).await?
                 }
             },
+        }
+
+        Ok(())
+    })
+}
+
+fn docker(opts: DockerOptions) -> Result<()> {
+    use bollard::auth::DockerCredentials;
+    use uuid::Uuid;
+
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .thread_stack_size(16 * 1024 * 1024) // Use a larger stack size
+        .enable_all()
+        .build()
+        .unwrap();
+
+    rt.block_on(async move {
+        let mut docker_image = opts.image_name.to_string();
+        if !docker_image.contains(':') {
+            docker_image.push_str(":latest");
+        }
+
+        let credentials = Some(DockerCredentials {
+            username: opts.username,
+            password: opts.password,
+            auth: opts.auth,
+            email: opts.email,
+            serveraddress: opts.server_address,
+            identitytoken: opts.identity_token,
+            registrytoken: opts.registry_token,
+        });
+
+        let fl_name = docker_image.replace([':', '/'], "-") + ".fl";
+        let meta = fungi::Writer::new(&fl_name, true).await?;
+        let store = store::parse_router(&opts.store).await?;
+
+        let container_name = Uuid::new_v4().to_string();
+        let docker_tmp_dir =
+            tempdir::TempDir::new(&container_name).expect("failed to create tmp directory");
+
+        let mut docker_to_fl =
+            rfs::DockerImageToFlist::new(meta, docker_image, credentials, docker_tmp_dir);
+        let res = docker_to_fl.convert(store, None).await;
+
+        // remove the file created with the writer if fl creation failed
+        if res.is_err() {
+            tokio::fs::remove_file(fl_name).await?;
+            return res;
         }
 
         Ok(())
