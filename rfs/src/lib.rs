@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate log;
 
+
 pub mod cache;
 pub mod fungi;
 pub mod store;
@@ -12,6 +13,8 @@ pub use unpack::unpack;
 mod clone;
 pub use clone::clone;
 pub mod config;
+mod merge;
+pub use merge::merge;
 mod docker;
 pub use docker::DockerImageToFlist;
 
@@ -106,5 +109,120 @@ mod test {
             .unwrap();
 
         assert!(status.success());
+    }
+
+    #[tokio::test]
+    async fn test_merge(){
+        const ROOT: &str = "/tmp/merge-test";
+        let _ = fs::remove_dir_all(ROOT).await;
+
+        println!("declaring directories");
+
+        let root: PathBuf = ROOT.into();
+        let source1 = root.join("source1");
+        let source2 = root.join("source2");
+        let merged_dest = root.join("merged");
+        let cache_dir = root.join("cache");
+
+        println!("creating directories");
+        
+        fs::create_dir_all(&source1).await.unwrap();
+        fs::create_dir_all(&source2).await.unwrap();
+        fs::create_dir_all(&cache_dir).await.unwrap();
+
+        println!("creating test files");
+
+        create_test_files(&source1, "file1.txt", 1024).await;
+        create_test_files(&source1, "file2.txt", 2048).await;
+
+        create_test_files(&source2, "file3.txt", 2048).await;
+        create_test_files(&source2, "file4.txt", 512).await;
+
+        println!("test files created");
+        println!("packing source1");
+        let meta1_path = root.join("meta1.fl");
+        let writer1 = meta::Writer::new(&meta1_path, true).await.unwrap();
+        let store1 = DirStore::new(root.join("store1")).await.unwrap();
+        let mut router1 = Router::new();
+        router1.add(0x00, 0xFF, store1);
+        
+        pack(writer1, router1, &source1, false, None).await.unwrap();
+        println!("packing complete for source1");
+
+        println!("packing source2");
+        let meta2_path = root.join("meta2.fl");
+        let writer2 = meta::Writer::new(&meta2_path, true).await.unwrap();
+        let store2 = DirStore::new(root.join("store2")).await.unwrap();
+        let mut router2 = Router::new();
+        router2.add(0x00, 0xFF, store2);
+        pack(writer2, router2, &source2, false, None).await.unwrap();
+
+        println!("packing complete for source2");
+        let merged_meta_path = root.join("merged.fl");
+        let merged_writer = meta::Writer::new(&merged_meta_path, true).await.unwrap();
+        let merged_store = DirStore::new(root.join("merged_store")).await.unwrap();
+        let block_store = store::BlockStore::from(merged_store);
+
+        println!("merging");
+
+        merge(
+            merged_writer,
+            block_store,
+            vec![meta1_path.to_string_lossy().to_string(), meta2_path.to_string_lossy().to_string()],
+            cache_dir.to_string_lossy().to_string(),
+        ).await.unwrap();
+
+        println!("merge complete");
+        let merged_reader = meta::Reader::new(&merged_meta_path).await.unwrap();
+        let merged_router = store::get_router(&merged_reader).await.unwrap();
+        let merged_cache = Cache::new(root.join("merged_cache"), merged_router);
+        
+        unpack(&merged_reader, &merged_cache, &merged_dest, false)
+            .await
+            .unwrap();
+
+        assert!(merged_dest.join("file1.txt").exists());
+        assert!(merged_dest.join("file2.txt").exists());
+        assert!(merged_dest.join("file3.txt").exists());
+        assert!(merged_dest.join("file4.txt").exists());
+
+
+        verify_file_content(merged_dest.join("file1.txt"), 1024).await;
+        verify_file_content(merged_dest.join("file2.txt"), 2048).await;
+        verify_file_content(merged_dest.join("file3.txt"), 2048).await;
+        verify_file_content(merged_dest.join("file4.txt"), 512).await;
+
+
+    }
+
+    async fn create_test_files<P: AsRef<std::path::Path>>(dir: P, name: &str, size: usize) {
+        let mut urandom = fs::OpenOptions::default()
+            .read(true)
+            .open("/dev/urandom")
+            .await
+            .unwrap()
+            .take(size as u64);
+
+        let p = dir.as_ref().join(name);
+        let mut file = fs::OpenOptions::default()
+            .create(true)
+            .write(true)
+            .open(p)
+            .await
+            .unwrap();
+
+        tokio::io::copy(&mut urandom, &mut file).await.unwrap();
+    }
+
+    async fn verify_file_content<P: AsRef<std::path::Path>>(path: P, expected_size: usize) {
+        let mut file = fs::OpenOptions::default()
+            .read(true)
+            .open(path)
+            .await
+            .unwrap();
+
+        let mut buffer = vec![0; expected_size];
+        let size = file.read(&mut buffer).await.unwrap();
+        assert_eq!(size, expected_size);
     }
 }

@@ -37,6 +37,8 @@ enum Commands {
     Clone(CloneOptions),
     /// list or modify FL metadata and stores
     Config(ConfigOptions),
+    /// merge 2 or more FLs into a new one
+    Merge(MergeOptions),
     /// convert a docker image to an FL
     Docker(DockerOptions),
 }
@@ -113,6 +115,22 @@ struct CloneOptions {
     store: Vec<String>,
 
     /// directory used as cache for downloaded file chunks
+    #[clap(short, long, default_value_t = String::from("/tmp/cache"))]
+    cache: String,
+}
+
+#[derive(Args, Debug)]
+struct MergeOptions{
+    /// path to metadata file (flist)
+    #[clap(short, long)]
+    meta: String,
+
+    #[clap(short, long, action=ArgAction::Append)]
+    store: Vec<String>,
+
+    #[clap(short, long, action=ArgAction::Append)]
+    target_flists: Vec<String>,
+
     #[clap(short, long, default_value_t = String::from("/tmp/cache"))]
     cache: String,
 }
@@ -262,6 +280,7 @@ fn main() -> Result<()> {
         Commands::Unpack(opts) => unpack(opts),
         Commands::Clone(opts) => clone(opts),
         Commands::Config(opts) => config(opts),
+        Commands::Merge(opts) => merge(opts),
         Commands::Docker(opts) => docker(opts),
     }
 }
@@ -442,6 +461,17 @@ fn config(opts: ConfigOptions) -> Result<()> {
             },
         }
 
+        Ok(())
+    })
+}
+
+fn merge(opts: MergeOptions) -> Result<()> {
+    let rt = tokio::runtime::Runtime::new()?;
+
+    rt.block_on(async move {
+        let store = store::parse_router(opts.store.as_slice()).await?;
+        let meta = fungi::Writer::new(opts.meta, true).await?;
+        rfs::merge(meta, store.into(), opts.target_flists, opts.cache).await?;
         Ok(())
     })
 }
