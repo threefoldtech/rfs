@@ -120,13 +120,16 @@ struct CloneOptions {
 }
 
 #[derive(Args, Debug)]
-struct MergeOptions{
+struct MergeOptions {
     /// path to metadata file (flist)
     #[clap(short, long)]
     meta: String,
 
     #[clap(short, long, action=ArgAction::Append)]
     store: Vec<String>,
+
+    #[clap(long, default_value_t = false)]
+    no_strip_password: bool,
 
     #[clap(short, long, action=ArgAction::Append)]
     target_flists: Vec<String>,
@@ -471,7 +474,14 @@ fn merge(opts: MergeOptions) -> Result<()> {
     rt.block_on(async move {
         let store = store::parse_router(opts.store.as_slice()).await?;
         let meta = fungi::Writer::new(opts.meta, true).await?;
-        rfs::merge(meta, store.into(), opts.target_flists, opts.cache).await?;
+        rfs::merge(
+            meta,
+            store,
+            !opts.no_strip_password,
+            opts.target_flists,
+            opts.cache,
+        )
+        .await?;
         Ok(())
     })
 }

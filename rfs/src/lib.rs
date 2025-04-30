@@ -1,7 +1,6 @@
 #[macro_use]
 extern crate log;
 
-
 pub mod cache;
 pub mod fungi;
 pub mod store;
@@ -112,7 +111,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_merge(){
+    async fn test_merge() {
         const ROOT: &str = "/tmp/merge-test";
         let _ = fs::remove_dir_all(ROOT).await;
 
@@ -125,7 +124,7 @@ mod test {
         let cache_dir = root.join("cache");
 
         println!("creating directories");
-        
+
         fs::create_dir_all(&source1).await.unwrap();
         fs::create_dir_all(&source2).await.unwrap();
         fs::create_dir_all(&cache_dir).await.unwrap();
@@ -145,7 +144,7 @@ mod test {
         let store1 = DirStore::new(root.join("store1")).await.unwrap();
         let mut router1 = Router::new();
         router1.add(0x00, 0xFF, store1);
-        
+
         pack(writer1, router1, &source1, false, None).await.unwrap();
         println!("packing complete for source1");
 
@@ -161,22 +160,29 @@ mod test {
         let merged_meta_path = root.join("merged.fl");
         let merged_writer = meta::Writer::new(&merged_meta_path, true).await.unwrap();
         let merged_store = DirStore::new(root.join("merged_store")).await.unwrap();
-        let block_store = store::BlockStore::from(merged_store);
+        let mut router = Router::new();
+        router.add(0x00, 0xFF, merged_store);
 
         println!("merging");
 
         merge(
             merged_writer,
-            block_store,
-            vec![meta1_path.to_string_lossy().to_string(), meta2_path.to_string_lossy().to_string()],
+            router,
+            false,
+            vec![
+                meta1_path.to_string_lossy().to_string(),
+                meta2_path.to_string_lossy().to_string(),
+            ],
             cache_dir.to_string_lossy().to_string(),
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         println!("merge complete");
         let merged_reader = meta::Reader::new(&merged_meta_path).await.unwrap();
         let merged_router = store::get_router(&merged_reader).await.unwrap();
         let merged_cache = Cache::new(root.join("merged_cache"), merged_router);
-        
+
         unpack(&merged_reader, &merged_cache, &merged_dest, false)
             .await
             .unwrap();
@@ -186,13 +192,10 @@ mod test {
         assert!(merged_dest.join("file3.txt").exists());
         assert!(merged_dest.join("file4.txt").exists());
 
-
         verify_file_content(merged_dest.join("file1.txt"), 1024).await;
         verify_file_content(merged_dest.join("file2.txt"), 2048).await;
         verify_file_content(merged_dest.join("file3.txt"), 2048).await;
         verify_file_content(merged_dest.join("file4.txt"), 512).await;
-
-
     }
 
     async fn create_test_files<P: AsRef<std::path::Path>>(dir: P, name: &str, size: usize) {

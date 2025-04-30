@@ -1,20 +1,43 @@
 use crate::{
     cache::Cache,
-    fungi::{meta::{FileType, Inode, Walk, WalkVisitor}, Reader, Result, Writer},
+    fungi::{
+        meta::{FileType, Inode, Walk, WalkVisitor},
+        Reader, Result, Writer,
+    },
     store::{get_router, BlockStore, Router, Store, Stores},
 };
-use std::path::Path;
+use anyhow::Context;
 use hex::ToHex;
+use std::path::Path;
 use tokio::io::AsyncReadExt;
-use std::collections::HashSet;
 
 pub async fn merge<S: Store>(
     writer: Writer,
-    store: BlockStore<S>,
+    store: S,
+    strip_password: bool,
     target_flists: Vec<String>,
-    cache: String
+    cache: String,
 ) -> Result<()> {
-    
+    for route in store.routes() {
+        let mut store_url = route.url;
+
+        if strip_password {
+            let mut url = url::Url::parse(&store_url).context("failed to parse store url")?;
+            if url.password().is_some() {
+                url.set_password(None)
+                    .map_err(|_| anyhow::anyhow!("failed to strip password"))?;
+
+                store_url = url.to_string();
+            }
+        }
+
+        let range_start = route.start.unwrap_or_default();
+        let range_end = route.end.unwrap_or(u8::MAX);
+
+        writer.route(range_start, range_end, store_url).await?;
+    }
+
+    let store = store.into();
     for target_flist in target_flists {
         let reader = Reader::new(&target_flist).await?;
         let router = get_router(&reader).await?;
@@ -23,6 +46,7 @@ pub async fn merge<S: Store>(
         let mut visitor = MergeVisitor::new(writer.clone(), reader.clone(), &store, cache);
         reader.walk(&mut visitor).await?;
     }
+
     Ok(())
 }
 
@@ -34,35 +58,33 @@ where
     reader: Reader,
     store: &'a BlockStore<S>,
     cache: Cache<Router<Stores>>,
-    visited: HashSet<u64>
 }
 
 impl<'a, S> MergeVisitor<'a, S>
 where
     S: Store,
 {
-    pub fn new(writer: Writer, reader: Reader, store: &'a BlockStore<S>, cache: Cache<Router<Stores>>) -> Self {
+    pub fn new(
+        writer: Writer,
+        reader: Reader,
+        store: &'a BlockStore<S>,
+        cache: Cache<Router<Stores>>,
+    ) -> Self {
         Self {
             writer,
             reader,
             store,
             cache,
-            visited: HashSet::new(),
         }
     }
 }
 
 #[async_trait::async_trait]
-impl<'a, S> WalkVisitor for MergeVisitor<'a, S> 
+impl<'a, S> WalkVisitor for MergeVisitor<'a, S>
 where
     S: Store,
 {
     async fn visit(&mut self, _path: &Path, node: &Inode) -> Result<Walk> {
-        if self.visited.contains(&node.ino) {
-            return Ok(Walk::Break);
-        }
-        self.visited.insert(node.ino);
-
         match node.mode.file_type() {
             FileType::Dir => {
                 self.writer.inode(node.clone()).await?;
@@ -83,25 +105,31 @@ where
                     }
                 }
                 for block in blocks_to_store {
-
                     let (_, mut file) = self.cache.get(&block).await?;
                     let mut data = Vec::new();
                     if let Err(e) = file.read_to_end(&mut data).await {
-                        log::error!("failed to read block {}: {}", block.id.as_slice().encode_hex::<String>(), e);
+                        log::error!(
+                            "failed to read block {}: {}",
+                            block.id.as_slice().encode_hex::<String>(),
+                            e
+                        );
                         return Err(e.into());
                     }
                     if let Err(e) = self.store.set(&data).await {
-                        log::error!("failed to set block {}: {}", block.id.as_slice().encode_hex::<String>(), e);
+                        log::error!(
+                            "failed to set block {}: {}",
+                            block.id.as_slice().encode_hex::<String>(),
+                            e
+                        );
                         return Err(e.into());
                     }
                 }
-
             }
             _ => {
                 log::warn!("Unknown file type for node: {:?}", node);
             }
         }
-        
-        Ok(Walk::Continue) 
+
+        Ok(Walk::Continue)
     }
 }
