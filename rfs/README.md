@@ -1,4 +1,3 @@
-
 # Introduction
 
 `rfs` is the main tool to create, mount and extract FungiStore lists (FungiList)`fl` for short. An `fl` is a simple format
@@ -41,6 +40,7 @@ The simplest form of `<store-specs>` is a `url`. the store `url` defines the sto
 - `s3`: aws-s3 is used for storing and retrieving large amounts of data (blobs) in buckets (directories). An example `s3://<username>:<password>@<host>:<port>/<bucket-name>`
 
   `region` is an optional param for s3 stores, if you want to provide one you can add it as a query to the url `?region=<region-name>`
+
 - `http`: http is a store mostly used for wrapping a dir store to fetch data through http requests. It does not support uploading, just fetching the data.
   It can be set in the FL file as the store to fetch the data with `rfs config`. Example: `http://localhost:9000/store` (https works too).
 
@@ -143,6 +143,41 @@ Options:
 ```
 
 By default when unpacking the `-p` flag is not set. which means downloaded files will be `owned` by the current user/group. If `-p` flag is set, the files ownership will be same as the original files used to create the fl (preserve `uid` and `gid` of the files and directories) this normally requires `sudo` while unpacking.
+
+# Merge an `fl`
+
+rfs provides a `merge` subcommand that combines multiple file lists (FL files) into a single unified file list.
+
+```bash
+rfs merge -m merged.fl -t flist1.fl -t flist2.fl -s dir:///tmp/store
+```
+
+This tells rfs to create an `fl` named `merged.fl` by combining the file lists `flist1.fl` and `flist2.fl`. A store must be specified with the `-s` option to handle block storage during the merge operation.
+
+## Requirements for Merge
+
+- At least 2 input file lists must be specified with the `-t` option
+- A store must be specified with the `-s` option to store blocks that need to be copied or moved
+
+## Full Command Help
+
+```bash
+# rfs merge --help
+
+merge 2 or more FLs into a new one
+
+Usage: rfs merge [OPTIONS] --store <STORE> <META> <TARGET_FLISTS>...
+
+Arguments:
+  <META>              path to metadata file (flist)
+  <TARGET_FLISTS>...
+
+Options:
+  -s, --store <STORE>                  store url in the format [xx-xx=]<url>
+      --no-strip-password              disables automatic password stripping from store url
+  -c, --cache <CACHE>                  directory used as cache for downloaded file chunks [default: /tmp/cache]
+  -h, --help                           Print help
+```
 
 # Specifications
 

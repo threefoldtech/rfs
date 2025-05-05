@@ -122,20 +122,29 @@ struct CloneOptions {
 #[derive(Args, Debug)]
 struct MergeOptions {
     /// path to metadata file (flist)
-    #[clap(short, long)]
     meta: String,
 
-    #[clap(short, long, action=ArgAction::Append)]
+    #[clap(short, long, action=ArgAction::Append, required = true)]
     store: Vec<String>,
 
     #[clap(long, default_value_t = false)]
     no_strip_password: bool,
 
-    #[clap(short, long, action=ArgAction::Append)]
+    #[clap(action=ArgAction::Append, required = true)]
     target_flists: Vec<String>,
 
-    #[clap(short, long, default_value_t = String::from("/tmp/cache"))]
+        #[clap(short, long, default_value_t = String::from("/tmp/cache"))]
     cache: String,
+}
+
+impl MergeOptions {
+    
+    fn validate(&self) -> Result<()> {
+        if self.target_flists.len() < 2 {
+            return Err(anyhow::anyhow!("At least 2 target file lists are required for merge operation"));
+        }
+        Ok(())
+    }
 }
 
 #[derive(Args, Debug)]
@@ -469,6 +478,9 @@ fn config(opts: ConfigOptions) -> Result<()> {
 }
 
 fn merge(opts: MergeOptions) -> Result<()> {
+    
+    opts.validate()?;
+    
     let rt = tokio::runtime::Runtime::new()?;
 
     rt.block_on(async move {
