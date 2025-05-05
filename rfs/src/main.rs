@@ -133,15 +133,16 @@ struct MergeOptions {
     #[clap(action=ArgAction::Append, required = true)]
     target_flists: Vec<String>,
 
-        #[clap(short, long, default_value_t = String::from("/tmp/cache"))]
+    #[clap(short, long, default_value_t = String::from("/tmp/cache"))]
     cache: String,
 }
 
 impl MergeOptions {
-    
     fn validate(&self) -> Result<()> {
         if self.target_flists.len() < 2 {
-            return Err(anyhow::anyhow!("At least 2 target file lists are required for merge operation"));
+            return Err(anyhow::anyhow!(
+                "At least 2 target file lists are required for merge operation"
+            ));
         }
         Ok(())
     }
@@ -478,9 +479,8 @@ fn config(opts: ConfigOptions) -> Result<()> {
 }
 
 fn merge(opts: MergeOptions) -> Result<()> {
-    
     opts.validate()?;
-    
+
     let rt = tokio::runtime::Runtime::new()?;
 
     rt.block_on(async move {
