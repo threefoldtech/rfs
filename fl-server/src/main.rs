@@ -2,6 +2,7 @@ mod auth;
 mod config;
 mod db;
 mod handlers;
+mod models;
 mod response;
 mod serve_flists;
 
@@ -72,12 +73,14 @@ async fn app() -> Result<()> {
         .await
         .context("failed to parse config file")?;
 
-    let db = Arc::new(db::MapDB::new(&config.users.clone()));
+    let db: Arc<db::DBType> = Arc::new(db::DBType::MapDB(db::map::MapDB::new(
+        &config.users.clone(),
+    )));
 
     let app_state = Arc::new(config::AppState {
         jobs_state: Mutex::new(HashMap::new()),
         flists_progress: Mutex::new(HashMap::new()),
-        db,
+        db: db,
         config,
     });
 
@@ -87,27 +90,27 @@ async fn app() -> Result<()> {
         .allow_headers([AUTHORIZATION, ACCEPT, CONTENT_TYPE]);
 
     let v1_routes = Router::new()
-        .route("/v1/api", get(handlers::health_check_handler))
-        .route("/v1/api/signin", post(auth::sign_in_handler))
+        .route("/api/v1", get(handlers::health_check_handler))
+        .route("/api/v1/signin", post(auth::sign_in_handler))
         .route(
-            "/v1/api/fl",
+            "/api/v1/fl",
             post(handlers::create_flist_handler).layer(middleware::from_fn_with_state(
                 app_state.clone(),
                 auth::authorize,
             )),
         )
         .route(
-            "/v1/api/fl/:job_id",
+            "/api/v1/fl/:job_id",
             get(handlers::get_flist_state_handler).layer(middleware::from_fn_with_state(
                 app_state.clone(),
                 auth::authorize,
             )),
         )
         .route(
-            "/v1/api/fl/preview/:flist_path",
+            "/api/v1/fl/preview/:flist_path",
             get(handlers::preview_flist_handler),
         )
-        .route("/v1/api/fl", get(handlers::list_flists_handler))
+        .route("/api/v1/fl", get(handlers::list_flists_handler))
         .route("/*path", get(serve_flists::serve_flists));
 
     let app = Router::new()

@@ -14,6 +14,7 @@ use utoipa::ToSchema;
 
 use crate::{
     config,
+    db::DB,
     response::{ResponseError, ResponseResult},
 };
 
@@ -50,7 +51,7 @@ pub async fn sign_in_handler(
     State(state): State<Arc<config::AppState>>,
     Json(user_data): Json<SignInBody>,
 ) -> impl IntoResponse {
-    let user = match state.db.get_user_by_username(&user_data.username) {
+    let user = match state.db.get_user_by_username(&user_data.username).await {
         Some(user) => user,
         None => {
             return Err(ResponseError::Unauthorized(
@@ -140,7 +141,11 @@ pub async fn authorize(
         }
     };
 
-    let current_user = match state.db.get_user_by_username(&token_data.claims.username) {
+    let current_user = match state
+        .db
+        .get_user_by_username(&token_data.claims.username)
+        .await
+    {
         Some(user) => user,
         None => {
             return Err(ResponseError::Unauthorized(

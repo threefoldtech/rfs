@@ -8,10 +8,7 @@ use std::{
 };
 use utoipa::ToSchema;
 
-use crate::{
-    db::{User, DB},
-    handlers,
-};
+use crate::{db::DBType, handlers, models::User};
 
 #[derive(Debug, ToSchema, Serialize, Clone)]
 pub struct Job {
@@ -22,7 +19,7 @@ pub struct Job {
 pub struct AppState {
     pub jobs_state: Mutex<HashMap<String, handlers::FlistState>>,
     pub flists_progress: Mutex<HashMap<PathBuf, f32>>,
-    pub db: Arc<dyn DB>,
+    pub db: Arc<DBType>,
     pub config: Config,
 }
 

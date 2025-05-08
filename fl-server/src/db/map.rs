@@ -1,17 +1,8 @@
 use std::collections::HashMap;
-
-use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct User {
-    pub username: String,
-    pub password: String,
-}
-
-pub trait DB: Send + Sync {
-    fn get_user_by_username(&self, username: &str) -> Option<User>;
-}
+use super::DB;
+use crate::models::User;
 
 #[derive(Debug, ToSchema)]
 pub struct MapDB {
@@ -30,7 +21,7 @@ impl MapDB {
 }
 
 impl DB for MapDB {
-    fn get_user_by_username(&self, username: &str) -> Option<User> {
+    async fn get_user_by_username(&self, username: &str) -> Option<User> {
         self.users.get(username).cloned()
     }
 }
