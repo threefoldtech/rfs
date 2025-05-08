@@ -1,4 +1,5 @@
 mod auth;
+mod block_handlers;
 mod config;
 mod db;
 mod handlers;
@@ -12,7 +13,7 @@ use axum::{
     http::StatusCode,
     middleware,
     response::IntoResponse,
-    routing::{get, post},
+    routing::{get, head, post},
     BoxError, Router,
 };
 use clap::{ArgAction, Parser};
@@ -31,6 +32,7 @@ use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
 use tower_http::{cors::Any, trace::TraceLayer};
 
+use block_handlers::BlockApi;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
@@ -73,9 +75,16 @@ async fn app() -> Result<()> {
         .await
         .context("failed to parse config file")?;
 
-    let db: Arc<db::DBType> = Arc::new(db::DBType::MapDB(db::map::MapDB::new(
-        &config.users.clone(),
-    )));
+    // Initialize the database based on configuration
+    let db: Arc<db::DBType> = if let Some(sqlite_path) = &config.sqlite_path {
+        log::info!("Using SQLite database at: {}", sqlite_path);
+        Arc::new(db::DBType::SqlDB(db::sqlite::SqlDB::new(sqlite_path)))
+    } else {
+        log::info!("Using in-memory MapDB database");
+        Arc::new(db::DBType::MapDB(db::map::MapDB::new(
+            &config.users.clone(),
+        )))
+    };
 
     let app_state = Arc::new(config::AppState {
         jobs_state: Mutex::new(HashMap::new()),
@@ -111,12 +120,22 @@ async fn app() -> Result<()> {
             get(handlers::preview_flist_handler),
         )
         .route("/api/v1/fl", get(handlers::list_flists_handler))
+        .route("/api/v1/block", post(block_handlers::upload_block_handler))
+        .route(
+            "/api/v1/block/:hash",
+            get(block_handlers::get_block_handler),
+        )
+        .route(
+            "/api/v1/block/:hash",
+            head(block_handlers::check_block_handler),
+        )
         .route("/*path", get(serve_flists::serve_flists));
 
     let app = Router::new()
         .merge(
             SwaggerUi::new("/swagger-ui")
-                .url("/api-docs/openapi.json", handlers::FlistApi::openapi()),
+                .url("/api-docs/openapi.json", handlers::FlistApi::openapi())
+                .url("/api-docs/block-api.json", BlockApi::openapi()),
         )
         .merge(v1_routes)
         .layer(

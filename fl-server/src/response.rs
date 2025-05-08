@@ -82,6 +82,7 @@ pub enum ResponseResult {
     PreviewFlist(PreviewResponse),
     SignedIn(SignInResponse),
     DirTemplate(DirListTemplate),
+    BlockUploaded(String),
     Res(hyper::Response<tower_http::services::fs::ServeFileSystemResponseBody>),
 }
 
@@ -106,6 +107,14 @@ impl IntoResponse for ResponseResult {
             ResponseResult::PreviewFlist(content) => {
                 (StatusCode::OK, Json(content)).into_response()
             }
+            ResponseResult::BlockUploaded(hash) => (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "hash": hash,
+                    "message": "Block processed successfully"
+                })),
+            )
+                .into_response(),
             ResponseResult::DirTemplate(t) => match t.render() {
                 Ok(html) => Html(html).into_response(),
                 Err(err) => {

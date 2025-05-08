@@ -29,6 +29,7 @@ pub struct Config {
     pub port: u16,
     pub store_url: Vec<String>,
     pub flist_dir: String,
+    pub sqlite_path: Option<String>,
 
     pub jwt_secret: String,
     pub jwt_expire_hours: i64,

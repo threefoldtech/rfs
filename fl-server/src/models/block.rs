@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use utoipa::ToSchema;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
 pub struct Block {
     pub index: u64,    // The index of the block in the file
     pub hash: String,  // The hash of the block's content
