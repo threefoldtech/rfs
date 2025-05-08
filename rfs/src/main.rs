@@ -39,6 +39,8 @@ enum Commands {
     Config(ConfigOptions),
     /// convert a docker image to an FL
     Docker(DockerOptions),
+    /// run the fl-server
+    Server(ServerOptions),
 }
 
 #[derive(Args, Debug)]
@@ -125,6 +127,17 @@ struct ConfigOptions {
 
     #[command(subcommand)]
     command: ConfigCommands,
+}
+
+#[derive(Args, Debug)]
+struct ServerOptions {
+    /// config file path
+    #[clap(short, long)]
+    config_path: String,
+
+    /// enable debugging logs
+    #[clap(short, long, action=ArgAction::Count)]
+    debug: u8,
 }
 
 #[derive(Subcommand, Debug)]
@@ -263,6 +276,7 @@ fn main() -> Result<()> {
         Commands::Clone(opts) => clone(opts),
         Commands::Config(opts) => config(opts),
         Commands::Docker(opts) => docker(opts),
+        Commands::Server(opts) => server(opts),
     }
 }
 
@@ -320,13 +334,10 @@ fn mount(opts: MountOptions) -> Result<()> {
             daemon = daemon.stdout(out).stderr(err);
         }
 
-        match daemon.execute() {
-            daemonize::Outcome::Parent(result) => {
-                result.context("daemonize")?;
-                wait_child(target, pid_file);
-                return Ok(());
-            }
-            _ => {}
+        if let daemonize::Outcome::Parent(result) = daemon.execute() {
+            result.context("daemonize")?;
+            wait_child(target, pid_file);
+            return Ok(());
         }
     }
 
@@ -492,4 +503,42 @@ fn docker(opts: DockerOptions) -> Result<()> {
 
         Ok(())
     })
+}
+
+fn server(opts: ServerOptions) -> Result<()> {
+    use std::process::{Command, Stdio};
+
+    println!("Starting fl-server with config: {}", opts.config_path);
+
+    // Find the fl-server binary in the same directory as the mycofs binary
+    let current_exe = std::env::current_exe()?;
+    let bin_dir = current_exe
+        .parent()
+        .context("Failed to get binary directory")?;
+    let fl_server_path = bin_dir.join("fl-server");
+
+    // Build the command with proper arguments
+    let mut cmd = Command::new(fl_server_path);
+
+    // Add config path
+    cmd.arg("-c").arg(&opts.config_path);
+
+    // Add debug flags if specified
+    if opts.debug > 0 {
+        for _ in 0..opts.debug {
+            cmd.arg("-d");
+        }
+    }
+
+    // Make sure we can see the output
+    cmd.stdout(Stdio::inherit()).stderr(Stdio::inherit());
+
+    // Run the fl-server binary
+    let status = cmd.status().context("Failed to execute fl-server")?;
+
+    if !status.success() {
+        anyhow::bail!("fl-server exited with status: {}", status);
+    }
+
+    Ok(())
 }
