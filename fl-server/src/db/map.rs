@@ -3,13 +3,15 @@ use std::sync::Mutex;
 use utoipa::ToSchema;
 
 use super::DB;
-use crate::models::User;
+use crate::models::{File, User};
 use anyhow::Result;
 
 #[derive(Debug, ToSchema)]
 pub struct MapDB {
     users: HashMap<String, User>,
     blocks: Mutex<HashMap<String, Vec<u8>>>,
+    files: Mutex<HashMap<String, File>>,
+    file_blocks: Mutex<HashMap<String, Vec<(String, u64)>>>,
 }
 
 impl MapDB {
@@ -20,6 +22,8 @@ impl MapDB {
                 .map(|u| (u.username.clone(), u.to_owned()))
                 .collect(),
             blocks: Mutex::new(HashMap::new()),
+            files: Mutex::new(HashMap::new()),
+            file_blocks: Mutex::new(HashMap::new()),
         }
     }
 }
@@ -34,7 +38,13 @@ impl DB for MapDB {
         blocks.contains_key(hash)
     }
 
-    async fn store_block(&self, hash: &str, data: Vec<u8>) -> Result<bool, anyhow::Error> {
+    async fn store_block(
+        &self,
+        hash: &str,
+        data: Vec<u8>,
+        file_hash: Option<String>,
+        block_index: Option<u64>,
+    ) -> Result<bool, anyhow::Error> {
         let mut blocks = self.blocks.lock().unwrap();
 
         // Check if the block already exists
@@ -44,6 +54,14 @@ impl DB for MapDB {
 
         // Insert the new block with its data
         blocks.insert(hash.to_string(), data);
+
+        // Store file hash and block index in a separate map if provided
+        if let (Some(fh), Some(idx)) = (file_hash, block_index) {
+            // In a real implementation, we would store this information
+            // For now, we'll just log it
+            log::debug!("Block {} is part of file {} at index {}", hash, fh, idx);
+        }
+
         Ok(true) // Block was newly stored
     }
 
@@ -57,5 +75,17 @@ impl DB for MapDB {
 
         // Block not found
         Ok(None)
+    }
+
+    async fn get_file_by_hash(&self, hash: &str) -> Result<Option<File>, anyhow::Error> {
+        // In a real implementation, we would retrieve the file from a map
+        // For now, we'll just return None
+        Ok(None)
+    }
+
+    async fn get_file_blocks(&self, file_hash: &str) -> Result<Vec<(String, u64)>, anyhow::Error> {
+        // In a real implementation, we would retrieve the blocks for the file
+        // For now, we'll just return an empty vector
+        Ok(Vec::new())
     }
 }

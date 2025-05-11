@@ -2,6 +2,7 @@ mod auth;
 mod block_handlers;
 mod config;
 mod db;
+mod file_handlers;
 mod handlers;
 mod models;
 mod response;
@@ -33,6 +34,7 @@ use tower_http::cors::CorsLayer;
 use tower_http::{cors::Any, trace::TraceLayer};
 
 use block_handlers::BlockApi;
+use file_handlers::FileApi;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
@@ -129,13 +131,20 @@ async fn app() -> Result<()> {
             "/api/v1/block/:hash",
             head(block_handlers::check_block_handler),
         )
+        .route(
+            "/api/v1/files/verify",
+            post(block_handlers::verify_blocks_handler),
+        )
+        .route("/api/v1/file", post(file_handlers::upload_file_handler))
+        .route("/api/v1/file/:hash", get(file_handlers::get_file_handler))
         .route("/*path", get(serve_flists::serve_flists));
 
     let app = Router::new()
         .merge(
             SwaggerUi::new("/swagger-ui")
                 .url("/api-docs/openapi.json", handlers::FlistApi::openapi())
-                .url("/api-docs/block-api.json", BlockApi::openapi()),
+                .url("/api-docs/block-api.json", BlockApi::openapi())
+                .url("/api-docs/file-api.json", FileApi::openapi()),
         )
         .merge(v1_routes)
         .layer(
