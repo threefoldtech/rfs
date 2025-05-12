@@ -1,5 +1,6 @@
 pub mod map;
 pub mod sqlite;
+mod storage;
 use crate::models::{File, User};
 
 pub trait DB: Send + Sync {
@@ -7,19 +8,22 @@ pub trait DB: Send + Sync {
     async fn get_user_by_username(&self, username: &str) -> Option<User>;
 
     // Block methods
-    async fn block_exists(&self, hash: &str) -> bool;
+    async fn block_exists(&self, file_hash: &str, block_index: u64, block_hash: &str) -> bool;
     async fn store_block(
         &self,
-        hash: &str,
+        block_hash: &str,
         data: Vec<u8>,
-        file_hash: Option<String>,
-        block_index: Option<u64>,
+        file_hash: &str,
+        block_index: u64,
     ) -> Result<bool, anyhow::Error>;
     async fn get_block(&self, hash: &str) -> Result<Option<Vec<u8>>, anyhow::Error>;
 
     // File methods
     async fn get_file_by_hash(&self, hash: &str) -> Result<Option<File>, anyhow::Error>;
-    async fn get_file_blocks(&self, file_hash: &str) -> Result<Vec<(String, u64)>, anyhow::Error>;
+    async fn get_file_blocks_ordered(
+        &self,
+        file_hash: &str,
+    ) -> Result<Vec<(String, u64)>, anyhow::Error>;
 }
 
 pub enum DBType {
@@ -37,23 +41,29 @@ impl DB for DBType {
     }
 
     // Block methods
-    async fn block_exists(&self, hash: &str) -> bool {
+    async fn block_exists(&self, file_hash: &str, block_index: u64, block_hash: &str) -> bool {
         match self {
-            DBType::MapDB(db) => db.block_exists(hash).await,
-            DBType::SqlDB(db) => db.block_exists(hash).await,
+            DBType::MapDB(db) => db.block_exists(file_hash, block_index, block_hash).await,
+            DBType::SqlDB(db) => db.block_exists(file_hash, block_index, block_hash).await,
         }
     }
 
     async fn store_block(
         &self,
-        hash: &str,
+        block_hash: &str,
         data: Vec<u8>,
-        file_hash: Option<String>,
-        block_index: Option<u64>,
+        file_hash: &str,
+        block_index: u64,
     ) -> Result<bool, anyhow::Error> {
         match self {
-            DBType::MapDB(db) => db.store_block(hash, data, file_hash, block_index).await,
-            DBType::SqlDB(db) => db.store_block(hash, data, file_hash, block_index).await,
+            DBType::MapDB(db) => {
+                db.store_block(block_hash, data, file_hash, block_index)
+                    .await
+            }
+            DBType::SqlDB(db) => {
+                db.store_block(block_hash, data, file_hash, block_index)
+                    .await
+            }
         }
     }
 
@@ -72,10 +82,13 @@ impl DB for DBType {
         }
     }
 
-    async fn get_file_blocks(&self, file_hash: &str) -> Result<Vec<(String, u64)>, anyhow::Error> {
+    async fn get_file_blocks_ordered(
+        &self,
+        file_hash: &str,
+    ) -> Result<Vec<(String, u64)>, anyhow::Error> {
         match self {
-            DBType::MapDB(db) => db.get_file_blocks(file_hash).await,
-            DBType::SqlDB(db) => db.get_file_blocks(file_hash).await,
+            DBType::MapDB(db) => db.get_file_blocks_ordered(file_hash).await,
+            DBType::SqlDB(db) => db.get_file_blocks_ordered(file_hash).await,
         }
     }
 }

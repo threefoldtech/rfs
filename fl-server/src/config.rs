@@ -36,6 +36,7 @@ pub struct Config {
     pub users: Vec<User>,
 
     pub block_size: Option<usize>, // Optional block size in bytes
+    pub storage_dir: String,       // Path to the storage directory
 }
 
 /// Parse the config file into Config struct.
@@ -51,6 +52,7 @@ pub async fn parse_config(filepath: &str) -> Result<Config> {
         .await
         .context("failed to parse store urls")?;
     fs::create_dir_all(&c.flist_dir).context("failed to create flists directory")?;
+    fs::create_dir_all(&c.storage_dir).context("failed to create storage directory")?;
 
     if c.jwt_expire_hours < 1 || c.jwt_expire_hours > 24 {
         anyhow::bail!(format!(

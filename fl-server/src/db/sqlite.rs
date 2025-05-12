@@ -1,15 +1,18 @@
-use super::DB;
+use super::{storage::Storage, DB};
 use crate::models::{File, User};
 use anyhow::Result;
-use sqlx::{query, query_as, Row, Sqlite, SqlitePool, Transaction};
+use sqlx::{query, query_as, Row, SqlitePool};
 
 #[derive(Debug)]
 pub struct SqlDB {
     pool: SqlitePool, // Use a connection pool for efficient database access
+    storage: Storage, // Directory for storing blocks
 }
 
+static SCHEMA: &str = include_str!("../../schema/schema.sql");
+
 impl SqlDB {
-    pub async fn new(database_filepath: &str) -> Self {
+    pub async fn new(database_filepath: &str, storage_dir: &str) -> Self {
         // Check if the database file exists, and create it if it doesn't
         if !std::path::Path::new(database_filepath).exists() {
             std::fs::File::create(database_filepath).expect("Failed to create database file");
@@ -23,43 +26,56 @@ impl SqlDB {
             .await
             .expect("Failed to initialize database schema");
 
-        Self { pool }
+        let storage = Storage::new(storage_dir);
+        Self { pool, storage }
     }
 
     /// Initialize the database schema
     async fn init_schema(pool: &SqlitePool) -> Result<(), anyhow::Error> {
-        // Create blocks and files tables if they don't exist
-        let schema = r#"
-        -- Table to store blocks with their hash and data
-        CREATE TABLE IF NOT EXISTS blocks (
-            hash VARCHAR(64) PRIMARY KEY,
-            data BLOB NOT NULL,
-            file_hash VARCHAR(64),
-            block_index INTEGER,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        
-        CREATE INDEX IF NOT EXISTS idx_blocks_hash ON blocks (hash);
-        CREATE INDEX IF NOT EXISTS idx_blocks_file_hash ON blocks (file_hash);
-        
-        -- Table to store file metadata
-        CREATE TABLE IF NOT EXISTS files (
-            id VARCHAR(36) PRIMARY KEY,
-            file_name VARCHAR(255) NOT NULL,
-            file_hash VARCHAR(64) NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        
-        CREATE INDEX IF NOT EXISTS idx_files_hash ON files (file_hash);
-        "#;
-
-        sqlx::query(schema)
+        sqlx::query(SCHEMA)
             .execute(pool)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to create database schema: {}", e))?;
 
         log::info!("Database schema initialized successfully");
         Ok(())
+    }
+
+    async fn get_filename_by_hash(&self, file_hash: &str) -> Result<Option<String>, anyhow::Error> {
+        let result = query("SELECT file_name FROM metadata WHERE file_hash = ? LIMIT 1")
+            .bind(file_hash)
+            .fetch_optional(&self.pool)
+            .await;
+
+        match result {
+            Ok(Some(row)) => Ok(Some(row.get::<String, _>(0))),
+            Ok(None) => Ok(None), // File does not exist
+            Err(err) => {
+                log::error!("Failed to retrieve filename: {}", err);
+                Err(anyhow::anyhow!("Failed to retrieve filename: {}", err))
+            }
+        }
+    }
+
+    async fn metadata_exists(&self, file_hash: &str, block_index: u64, block_hash: &str) -> bool {
+        let result = query(
+            "SELECT COUNT(*) as count FROM metadata WHERE file_hash = ? AND block_index = ? AND block_hash = ?",
+        )
+        .bind(file_hash)
+        .bind(block_index as i64)
+        .bind(block_hash)
+        .fetch_one(&self.pool);
+
+        match result.await {
+            Ok(row) => {
+                let count: i64 = row.get(0);
+                count > 0
+            }
+            Err(err) => {
+                log::error!("Error checking if metadata exists: {}", err);
+                false
+            }
+        }
     }
 }
 
@@ -76,107 +92,132 @@ impl DB for SqlDB {
         }
     }
 
-    async fn block_exists(&self, hash: &str) -> bool {
-        let result = query("SELECT COUNT(*) as count FROM blocks WHERE hash = ?")
-            .bind(hash)
-            .fetch_one(&self.pool);
+    async fn block_exists(&self, file_hash: &str, block_index: u64, block_hash: &str) -> bool {
+        // Check if the block already exists in storage
+        let block_exists = self.storage.block_exists(block_hash);
 
-        match result.await {
-            Ok(row) => {
-                let count: i64 = row.get(0);
-                count > 0
-            }
-            Err(err) => {
-                log::error!("Error checking if block exists: {}", err);
-                false
-            }
+        // Check if the metadata already exists in the database
+        let metadata_exists = self
+            .metadata_exists(file_hash, block_index, block_hash)
+            .await;
+
+        // If both block and metadata exist, no need to store again
+        if block_exists && (metadata_exists || file_hash.is_empty()) {
+            return true;
         }
+
+        false // Block does not exist
     }
 
     async fn store_block(
         &self,
-        hash: &str,
+        block_hash: &str,
         data: Vec<u8>,
-        file_hash: Option<String>,
-        block_index: Option<u64>,
+        file_hash: &str,
+        block_index: u64,
     ) -> Result<bool, anyhow::Error> {
-        // First check if the block already exists
-        let exists = self.block_exists(hash).await;
+        // Check if the block already exists in storage
+        let block_exists = self.storage.block_exists(block_hash);
 
-        if exists {
-            return Ok(false); // Block already exists, not newly stored
+        // Check if the metadata already exists in the database
+        let metadata_exists = self
+            .metadata_exists(file_hash, block_index, block_hash)
+            .await;
+
+        // If both block and metadata exist, no need to store again
+        if block_exists && (metadata_exists || file_hash.is_empty()) {
+            return Ok(false);
         }
 
-        // Insert the new block with the provided data
-        let result = match (file_hash, block_index) {
-            (Some(fh), Some(idx)) => {
-                query("INSERT INTO blocks (hash, data, file_hash, block_index) VALUES (?, ?, ?, ?)")
-                    .bind(hash)
-                    .bind(&data)
-                    .bind(fh)
-                    .bind(idx as i64)
-                    .execute(&self.pool)
-                    .await
-            }
-            _ => {
-                query("INSERT INTO blocks (hash, data) VALUES (?, ?)")
-                    .bind(hash)
-                    .bind(&data)
-                    .execute(&self.pool)
-                    .await
-            }
-        };
-
-        match result {
-            Ok(_) => Ok(true), // Block was newly stored
-            Err(err) => {
-                log::error!("Error storing block: {}", err);
-                Err(anyhow::anyhow!("Failed to store block: {}", err))
+        // Store metadata if it doesn't exist
+        if !metadata_exists {
+            if let Err(err) = query(
+                "INSERT INTO metadata (file_hash, block_index, block_hash, created_at) 
+             VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
+            )
+            .bind(file_hash)
+            .bind(block_index as i64)
+            .bind(block_hash)
+            .execute(&self.pool)
+            .await
+            {
+                log::error!("Error storing metadata: {}", err);
+                return Err(anyhow::anyhow!("Failed to store metadata: {}", err));
             }
         }
+
+        // Store the block data in the file system if it doesn't exist
+        if !block_exists {
+            if let Err(err) = self.storage.save_block(block_hash, &data) {
+                log::error!("Error storing block in storage: {}", err);
+                return Err(anyhow::anyhow!("Failed to store block in storage: {}", err));
+            }
+        }
+
+        Ok(true) // Indicate that the block or metadata was newly stored
     }
 
     async fn get_block(&self, hash: &str) -> Result<Option<Vec<u8>>, anyhow::Error> {
-        let result = query("SELECT data FROM blocks WHERE hash = ?")
-            .bind(hash)
-            .fetch_optional(&self.pool)
-            .await;
-
-        match result {
-            Ok(Some(row)) => {
-                let data: Vec<u8> = row.get(0);
-                Ok(Some(data))
-            }
-            Ok(None) => Ok(None), // Block not found
+        // Retrieve the block data from storage
+        match self.storage.get_block(hash) {
+            Ok(data) => Ok(Some(data)),
             Err(err) => {
-                log::error!("Error retrieving block: {}", err);
-                Err(anyhow::anyhow!("Failed to retrieve block: {}", err))
+                log::error!("Error retrieving block from storage: {}", err);
+                Err(anyhow::anyhow!(
+                    "Failed to retrieve block from storage: {}",
+                    err
+                ))
             }
         }
     }
 
     async fn get_file_by_hash(&self, hash: &str) -> Result<Option<File>, anyhow::Error> {
-        let result =
-            query_as::<_, File>("SELECT id, file_name, file_hash FROM files WHERE file_hash = ?")
-                .bind(hash)
-                .fetch_optional(&self.pool)
-                .await;
-
-        match result {
-            Ok(file) => Ok(file),
+        // Retrieve the blocks associated with the file hash
+        let blocks = match self.get_file_blocks_ordered(hash).await {
+            Ok(blocks) => blocks,
             Err(err) => {
-                log::error!("Error retrieving file: {}", err);
-                Err(anyhow::anyhow!("Failed to retrieve file: {}", err))
+                log::error!("Failed to retrieve file blocks: {}", err);
+                return Err(anyhow::anyhow!("Failed to retrieve file blocks: {}", err));
+            }
+        };
+
+        if blocks.is_empty() {
+            return Ok(None); // No blocks found, file does not exist
+        }
+
+        // Combine block data to reconstruct the file
+        let mut file_content = Vec::new();
+        for (block_hash, _) in blocks {
+            match self.storage.get_block(&block_hash) {
+                Ok(data) => file_content.extend(data),
+                Err(err) => {
+                    log::error!("Failed to retrieve block {}: {}", block_hash, err);
+                    return Err(anyhow::anyhow!(
+                        "Failed to retrieve block {}: {}",
+                        block_hash,
+                        err
+                    ));
+                }
             }
         }
+
+        // Return the reconstructed file
+        Ok(Some(File {
+            file_hash: hash.to_string(),
+            file_content,
+        }))
     }
 
-    async fn get_file_blocks(&self, file_hash: &str) -> Result<Vec<(String, u64)>, anyhow::Error> {
-        let result =
-            query("SELECT hash, block_index FROM blocks WHERE file_hash = ? ORDER BY block_index")
-                .bind(file_hash)
-                .fetch_all(&self.pool)
-                .await;
+    async fn get_file_blocks_ordered(
+        &self,
+        file_hash: &str,
+    ) -> Result<Vec<(String, u64)>, anyhow::Error> {
+        let result = query(
+            "SELECT block_hash, block_index FROM metadata WHERE file_hash = ? ORDER BY block_index",
+        )
+        .bind(file_hash)
+        .fetch_all(&self.pool)
+        .await;
 
         match result {
             Ok(rows) => {
@@ -187,7 +228,7 @@ impl DB for SqlDB {
                         let block_index: i64 = row.get(1);
                         (block_hash, block_index as u64)
                     })
-                    .collect();
+                    .collect::<Vec<(String, u64)>>();
 
                 Ok(blocks)
             }

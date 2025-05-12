@@ -11,17 +11,6 @@ pub struct Block {
 }
 
 impl Block {
-    /// Creates a new block with the given index, data, and hash.
-    pub fn new(index: u64, data: Vec<u8>, hash: String) -> Self {
-        let size = data.len();
-        Self {
-            index,
-            hash,
-            data,
-            size,
-        }
-    }
-
     /// Calculates the hash of the block's data using SHA-256.
     pub fn calculate_hash(data: &[u8]) -> String {
         let mut hasher = Sha256::new();

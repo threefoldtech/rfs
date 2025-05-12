@@ -1,4 +1,10 @@
-use axum::{body::Bytes, extract::State, http::StatusCode, response::IntoResponse, Json};
+use axum::{
+    body::Bytes,
+    extract::{Query, State},
+    http::StatusCode,
+    response::IntoResponse,
+    Json,
+};
 use axum_macros::debug_handler;
 use std::sync::Arc;
 
@@ -13,13 +19,22 @@ use utoipa::{OpenApi, ToSchema};
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(upload_block_handler, get_block_handler, check_block_handler, verify_blocks_handler),
-    components(schemas(Block, VerifyBlocksRequest, VerifyBlocksResponse)),
+    paths(upload_block_handler, get_block_handler, check_block_handler, verify_blocks_handler, get_blocks_by_hash_handler),
+    components(schemas(Block, VerifyBlocksRequest, VerifyBlocksResponse, BlocksResponse)),
     tags(
         (name = "blocks", description = "Block management API")
     )
 )]
 pub struct BlockApi;
+
+/// Query parameters for uploading a block
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct UploadBlockParams {
+    /// File hash associated with the block
+    pub file_hash: String,
+    /// Block index within the file
+    pub idx: u64,
+}
 
 /// Upload a block to the server.
 /// If the block already exists, the server will return a 200 OK response.
@@ -28,6 +43,10 @@ pub struct BlockApi;
     post,
     path = "/api/v1/block",
     request_body(content = Vec<u8>, description = "Block data to upload", content_type = "application/octet-stream"),
+    params(
+        ("file_hash" = String, Query, description = "File hash associated with the block"),
+        ("idx" = u64, Query, description = "Block index within the file")
+    ),
     responses(
         (status = 200, description = "Block already exists", body = String),
         (status = 201, description = "Block created successfully", body = String),
@@ -38,16 +57,21 @@ pub struct BlockApi;
 #[debug_handler]
 pub async fn upload_block_handler(
     State(state): State<Arc<AppState>>,
+    Query(params): Query<UploadBlockParams>,
     body: Bytes,
 ) -> Result<(StatusCode, ResponseResult), ResponseError> {
-    // Convert the request body to a byte vector
+    // Convert the body bytes to Vec<u8>
     let data = body.to_vec();
 
     // Calculate the hash of the block data
     let hash = Block::calculate_hash(&data);
 
-    // Store the block data in the database (not associated with any file)
-    match state.db.store_block(&hash, data, None, None).await {
+    // Store the block data in the database
+    match state
+        .db
+        .store_block(&hash, data, &params.file_hash, params.idx)
+        .await
+    {
         Ok(is_new) => {
             if is_new {
                 // Block is new, return 201 Created
@@ -120,7 +144,7 @@ pub async fn check_block_handler(
     axum::extract::Path(hash): axum::extract::Path<String>,
 ) -> Result<impl IntoResponse, ResponseError> {
     // Retrieve the block from the database
-    match state.db.block_exists(&hash).await {
+    match state.db.block_exists("", 0, &hash).await {
         true => {
             // Block found
             Ok(StatusCode::OK)
@@ -137,9 +161,19 @@ pub async fn check_block_handler(
 
 /// Request to verify if multiple blocks exist on the server
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct VerifyBlock {
+    /// Block hash to verify
+    pub block_hash: String,
+    /// File hash associated with the block
+    pub file_hash: String,
+    /// Block index within the file
+    pub block_index: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct VerifyBlocksRequest {
-    /// List of block hashes to verify
-    pub blocks: Vec<String>,
+    /// List of blocks to verify
+    pub blocks: Vec<VerifyBlock>,
 }
 
 /// Response with list of missing blocks
@@ -168,13 +202,83 @@ pub async fn verify_blocks_handler(
 ) -> Result<impl IntoResponse, ResponseError> {
     let mut missing = Vec::new();
 
-    // Check each hash in the request
+    // Check each block in the request
     for block in request.blocks {
-        if !state.db.block_exists(&block).await {
-            missing.push(block);
+        if !state
+            .db
+            .block_exists(&block.file_hash, block.block_index, &block.block_hash)
+            .await
+        {
+            missing.push(block.block_hash);
         }
     }
 
     // Return the list of missing blocks
-    Ok((StatusCode::OK, Json(VerifyBlocksResponse { missing })))
+    Ok((
+        StatusCode::OK,
+        Json(VerifyBlocksResponse {
+            missing, // Include missing blocks in the response
+        }),
+    ))
+}
+
+/// Response for blocks by hash endpoint
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct BlocksResponse {
+    /// List of blocks with their indices
+    pub blocks: Vec<(String, u64)>,
+}
+
+/// Retrieve blocks by hash (file hash or block hash).
+/// If the hash is a file hash, returns all blocks with their block index related to that file.
+/// If the hash is a block hash, returns the block itself.
+#[utoipa::path(
+    get,
+    path = "/api/v1/blocks/{hash}",
+    responses(
+        (status = 200, description = "Blocks found", body = BlocksResponse),
+        (status = 404, description = "Hash not found"),
+        (status = 500, description = "Internal server error"),
+    ),
+    params(
+        ("hash" = String, Path, description = "File hash or block hash")
+    )
+)]
+#[debug_handler]
+pub async fn get_blocks_by_hash_handler(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Path(hash): axum::extract::Path<String>,
+) -> Result<impl IntoResponse, ResponseError> {
+    // First, try to get file blocks by hash
+    match state.db.get_file_blocks_ordered(&hash).await {
+        Ok(blocks) if !blocks.is_empty() => {
+            // This is a file hash, return all blocks with their indices
+            Ok((StatusCode::OK, Json(BlocksResponse { blocks })))
+        }
+        Ok(_) | Err(_) => {
+            // Not a file hash or error occurred, try as block hash
+            match state.db.get_block(&hash).await {
+                Ok(Some(_)) => {
+                    // This is a block hash, return just this block with index 0
+                    Ok((
+                        StatusCode::OK,
+                        Json(BlocksResponse {
+                            blocks: vec![(hash.clone(), 0)],
+                        }),
+                    ))
+                }
+                Ok(None) => {
+                    // Neither file nor block found
+                    Err(ResponseError::NotFound(format!(
+                        "No file or block with hash '{}' found",
+                        hash
+                    )))
+                }
+                Err(err) => {
+                    log::error!("Failed to retrieve block: {}", err);
+                    Err(ResponseError::InternalServerError)
+                }
+            }
+        }
+    }
 }

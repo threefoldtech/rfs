@@ -33,34 +33,36 @@ impl DB for MapDB {
         self.users.get(username).cloned()
     }
 
-    async fn block_exists(&self, hash: &str) -> bool {
+    async fn block_exists(&self, file_hash: &str, block_index: u64, block_hash: &str) -> bool {
         let blocks = self.blocks.lock().unwrap();
-        blocks.contains_key(hash)
+        blocks.contains_key(block_hash)
     }
 
     async fn store_block(
         &self,
-        hash: &str,
+        block_hash: &str,
         data: Vec<u8>,
-        file_hash: Option<String>,
-        block_index: Option<u64>,
+        file_hash: &str,
+        block_index: u64,
     ) -> Result<bool, anyhow::Error> {
         let mut blocks = self.blocks.lock().unwrap();
 
         // Check if the block already exists
-        if blocks.contains_key(hash) {
+        if blocks.contains_key(block_hash) {
             return Ok(false); // Block already exists, not newly stored
         }
 
         // Insert the new block with its data
-        blocks.insert(hash.to_string(), data);
+        blocks.insert(block_hash.to_string(), data);
 
         // Store file hash and block index in a separate map if provided
-        if let (Some(fh), Some(idx)) = (file_hash, block_index) {
-            // In a real implementation, we would store this information
-            // For now, we'll just log it
-            log::debug!("Block {} is part of file {} at index {}", hash, fh, idx);
-        }
+        // TODO:
+        log::debug!(
+            "Block {} is part of file {} at index {}",
+            block_hash,
+            file_hash,
+            block_index
+        );
 
         Ok(true) // Block was newly stored
     }
@@ -89,7 +91,10 @@ impl DB for MapDB {
         Ok(None)
     }
 
-    async fn get_file_blocks(&self, file_hash: &str) -> Result<Vec<(String, u64)>, anyhow::Error> {
+    async fn get_file_blocks_ordered(
+        &self,
+        file_hash: &str,
+    ) -> Result<Vec<(String, u64)>, anyhow::Error> {
         let file_blocks = self.file_blocks.lock().unwrap();
 
         // Retrieve the blocks associated with the file hash

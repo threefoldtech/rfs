@@ -13,8 +13,18 @@ const BLOCK_SIZE: usize = 1024 * 1024; // 1MB blocks, same as server
 const PARALLEL_UPLOAD: usize = 20; // Number of blocks to upload in parallel
 
 #[derive(Debug, Serialize, Deserialize)]
+struct VerifyBlock {
+    /// Block hash to verify
+    pub block_hash: String,
+    /// File hash associated with the block
+    pub file_hash: String,
+    /// Block index within the file
+    pub block_index: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 struct VerifyBlocksRequest {
-    blocks: Vec<String>,
+    blocks: Vec<VerifyBlock>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -26,7 +36,7 @@ struct VerifyBlocksResponse {
 async fn verify_blocks_with_server(
     client: &Client,
     server_url: String,
-    blocks: Vec<String>,
+    blocks: Vec<VerifyBlock>,
 ) -> Result<Vec<String>> {
     let verify_url = format!("{}/api/v1/block/verify", server_url);
     let verify_request = VerifyBlocksRequest { blocks };
@@ -62,6 +72,8 @@ async fn upload_block(
     server_url: String,
     hash: String,
     data: Vec<u8>,
+    file_hash: String,
+    idx: u64,
     semaphore: Arc<Semaphore>,
 ) -> Result<()> {
     let upload_block_url = format!("{}/api/v1/block", server_url);
@@ -71,8 +83,11 @@ async fn upload_block(
 
     info!("Uploading block: {}", hash);
 
+    // Send the data directly as bytes with query parameters
     let response = client
         .post(&upload_block_url)
+        .header("Content-Type", "application/octet-stream")
+        .query(&[("file_hash", &file_hash), ("idx", &idx.to_string())])
         .body(data)
         .send()
         .await
@@ -122,6 +137,15 @@ async fn split_file_into_blocks(
     Ok((blocks, block_data))
 }
 
+/// Calculates the hash of the entire file by combining the hashes of all blocks
+fn calculate_file_hash(blocks: &[String]) -> String {
+    let mut hasher = Sha256::new();
+    for block_hash in blocks {
+        hasher.update(block_hash.as_bytes());
+    }
+    format!("{:x}", hasher.finalize())
+}
+
 /// Uploads a file to the server, splitting it into blocks and only uploading missing blocks
 pub async fn upload<P: AsRef<Path>>(
     file_path: P,
@@ -130,10 +154,6 @@ pub async fn upload<P: AsRef<Path>>(
 ) -> Result<()> {
     let block_size = block_size.unwrap_or(BLOCK_SIZE); // Use provided block size or default
     let file_path = file_path.as_ref();
-    let file_name = file_path
-        .file_name()
-        .context("Invalid file path")?
-        .to_string_lossy();
 
     info!("Uploading file: {}", file_path.display());
     info!("Using block size: {} bytes", block_size);
@@ -151,8 +171,24 @@ pub async fn upload<P: AsRef<Path>>(
     let (blocks, block_data) = split_file_into_blocks(file_path, block_size).await?;
     info!("File split into {} blocks", blocks.len());
 
+    // Calculate the file hash by combining all block hashes
+    let file_hash = calculate_file_hash(&blocks);
+    info!("Calculated file hash: {}", file_hash);
+
+    // Prepare blocks with metadata for verification
+    let blocks_with_metadata: Vec<VerifyBlock> = blocks
+        .iter()
+        .enumerate()
+        .map(|(idx, hash)| VerifyBlock {
+            block_hash: hash.clone(),
+            file_hash: file_hash.clone(),
+            block_index: idx as u64,
+        })
+        .collect();
+
     // Verify which blocks are missing on the server
-    let missing_blocks = verify_blocks_with_server(&client, server_url.clone(), blocks).await?;
+    let missing_blocks =
+        verify_blocks_with_server(&client, server_url.clone(), blocks_with_metadata).await?;
     info!(
         "{} of {} blocks are missing and need to be uploaded",
         missing_blocks.len(),
@@ -169,21 +205,25 @@ pub async fn upload<P: AsRef<Path>>(
     // Create a vector to hold all upload tasks
     let mut upload_tasks = Vec::new();
 
-    for (hash, data) in block_data {
-        if Arc::clone(&missing_blocks).contains(&hash) {
+    for (idx, (hash, data)) in block_data.into_iter().enumerate() {
+        if missing_blocks.iter().any(|block| block == &hash) {
             let hash_clone = hash.clone();
             let server_url_clone = server_url.clone();
             let client_clone = Arc::clone(&client);
             let semaphore_clone = Arc::clone(&semaphore);
+            let file_hash_clone = file_hash.clone();
 
             // Create a task for each block upload
-            let task = tokio::spawn(upload_block(
-                client_clone,
-                server_url_clone,
-                hash_clone,
-                data,
-                semaphore_clone,
-            ));
+            let task: tokio::task::JoinHandle<std::result::Result<(), anyhow::Error>> =
+                tokio::spawn(upload_block(
+                    client_clone,
+                    server_url_clone,
+                    hash_clone,
+                    data,
+                    file_hash_clone,
+                    idx as u64,
+                    semaphore_clone,
+                ));
 
             upload_tasks.push(task);
         }
@@ -206,6 +246,6 @@ pub async fn upload<P: AsRef<Path>>(
         }
     }
 
-    info!("File upload complete: {}", file_name);
+    info!("File upload complete");
     Ok(())
 }

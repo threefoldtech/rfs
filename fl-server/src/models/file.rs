@@ -1,22 +1,28 @@
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use sqlx::FromRow;
 use utoipa::ToSchema;
 
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize, ToSchema)]
 pub struct File {
-    pub id: i64,           // Auto-incrementing identifier for the file
-    pub file_name: String, // Name of the file
-    pub file_hash: String, // Hash of the file content
+    pub file_hash: String,     // Hash of the file content
+    pub file_content: Vec<u8>, // Content of the file
 }
 
 impl File {
-    /// Creates a new file with the given file name and file hash.
-    /// The id will be assigned by the database.
-    pub fn new(file_name: String, file_hash: String) -> Self {
+    /// Calculates the hash of the block's data using SHA-256.
+    pub fn calculate_hash(data: &[u8]) -> String {
+        let mut hasher = Sha256::new();
+        hasher.update(data);
+        format!("{:x}", hasher.finalize())
+    }
+
+    /// Creates a new File instance by calculating the hash of the content.
+    pub fn new(file_content: Vec<u8>) -> Self {
+        let file_hash = Self::calculate_hash(&file_content);
         Self {
-            id: 0, // This will be replaced by the database
-            file_name,
             file_hash,
+            file_content,
         }
     }
 }
