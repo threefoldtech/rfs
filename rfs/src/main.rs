@@ -10,7 +10,7 @@ use clap::{ArgAction, Args, Parser, Subcommand};
 
 use rfs::fungi;
 use rfs::store::{self};
-use rfs::{cache, config};
+use rfs::{cache, config, upload};
 
 mod fs;
 /// mount flists
@@ -41,6 +41,8 @@ enum Commands {
     Docker(DockerOptions),
     /// run the fl-server
     Server(ServerOptions),
+    /// upload a file to a server, splitting it into blocks
+    Upload(UploadOptions),
 }
 
 #[derive(Args, Debug)]
@@ -198,6 +200,20 @@ struct StoreDeleteOptions {
 }
 
 #[derive(Args, Debug)]
+struct UploadOptions {
+    /// path to the file to upload
+    file: String,
+
+    /// server URL (e.g., http://localhost:8080)
+    #[clap(short, long)]
+    server: String,
+
+    /// block size for splitting the file
+    #[clap(short, long, default_value_t = 1024*1024)] // 1MB
+    block_size: usize,
+}
+
+#[derive(Args, Debug)]
 struct DockerOptions {
     /// name of the docker image to be converted to flist
     #[clap(short, long, required = true)]
@@ -277,6 +293,7 @@ fn main() -> Result<()> {
         Commands::Config(opts) => config(opts),
         Commands::Docker(opts) => docker(opts),
         Commands::Server(opts) => server(opts),
+        Commands::Upload(opts) => upload_file(opts),
     }
 }
 
@@ -541,4 +558,17 @@ fn server(opts: ServerOptions) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn upload_file(opts: UploadOptions) -> Result<()> {
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .thread_stack_size(16 * 1024 * 1024) // Use a larger stack size
+        .enable_all()
+        .build()
+        .unwrap();
+
+    rt.block_on(async move {
+        upload(&opts.file, opts.server, Some(opts.block_size)).await?;
+        Ok(())
+    })
 }

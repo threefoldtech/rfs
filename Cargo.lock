@@ -2675,6 +2675,7 @@ dependencies = [
  "rust-s3",
  "serde",
  "serde_json",
+ "sha2",
  "simple_logger",
  "snap",
  "sqlx",

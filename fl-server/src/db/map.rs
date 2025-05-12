@@ -78,14 +78,26 @@ impl DB for MapDB {
     }
 
     async fn get_file_by_hash(&self, hash: &str) -> Result<Option<File>, anyhow::Error> {
-        // In a real implementation, we would retrieve the file from a map
-        // For now, we'll just return None
+        let files = self.files.lock().unwrap();
+
+        // Check if the file exists and return it if found
+        if let Some(file) = files.get(hash) {
+            return Ok(Some(file.clone()));
+        }
+
+        // File not found
         Ok(None)
     }
 
     async fn get_file_blocks(&self, file_hash: &str) -> Result<Vec<(String, u64)>, anyhow::Error> {
-        // In a real implementation, we would retrieve the blocks for the file
-        // For now, we'll just return an empty vector
+        let file_blocks = self.file_blocks.lock().unwrap();
+
+        // Retrieve the blocks associated with the file hash
+        if let Some(blocks) = file_blocks.get(file_hash) {
+            return Ok(blocks.clone());
+        }
+
+        // No blocks found for the file
         Ok(Vec::new())
     }
 }

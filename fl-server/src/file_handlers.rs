@@ -1,4 +1,4 @@
-use axum::{body::Bytes, extract::State, http::StatusCode, response::IntoResponse, Json};
+use axum::{body::Bytes, extract::State, http::StatusCode, response::IntoResponse};
 use axum_macros::debug_handler;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
@@ -80,7 +80,10 @@ pub async fn upload_file_handler(
     );
 
     // Store each block with a reference to the file
-    for (i, chunk) in data.chunks(BLOCK_SIZE).enumerate() {
+    for (i, chunk) in data
+        .chunks(state.config.block_size.unwrap_or(BLOCK_SIZE))
+        .enumerate()
+    {
         let block_hash = Block::calculate_hash(chunk);
 
         // Store each block in the database with file hash and block index

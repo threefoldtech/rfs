@@ -102,7 +102,7 @@ pub async fn get_block_handler(
     }
 }
 
-/// Retrieve a block by its hash.
+/// Checks a block by its hash.
 #[utoipa::path(
     head,
     path = "/api/v1/block/{hash}",
@@ -153,7 +153,7 @@ pub struct VerifyBlocksResponse {
 /// Returns a list of missing blocks.
 #[utoipa::path(
     post,
-    path = "/api/v1/files/verify",
+    path = "/api/v1/block/verify",
     request_body(content = VerifyBlocksRequest, description = "List of block hashes to verify", content_type = "application/json"),
     responses(
         (status = 200, description = "Verification completed", body = VerifyBlocksResponse),

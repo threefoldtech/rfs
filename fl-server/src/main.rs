@@ -80,7 +80,7 @@ async fn app() -> Result<()> {
     // Initialize the database based on configuration
     let db: Arc<db::DBType> = if let Some(sqlite_path) = &config.sqlite_path {
         log::info!("Using SQLite database at: {}", sqlite_path);
-        Arc::new(db::DBType::SqlDB(db::sqlite::SqlDB::new(sqlite_path)))
+        Arc::new(db::DBType::SqlDB(db::sqlite::SqlDB::new(sqlite_path).await))
     } else {
         log::info!("Using in-memory MapDB database");
         Arc::new(db::DBType::MapDB(db::map::MapDB::new(
@@ -132,7 +132,7 @@ async fn app() -> Result<()> {
             head(block_handlers::check_block_handler),
         )
         .route(
-            "/api/v1/files/verify",
+            "/api/v1/block/verify",
             post(block_handlers::verify_blocks_handler),
         )
         .route("/api/v1/file", post(file_handlers::upload_file_handler))

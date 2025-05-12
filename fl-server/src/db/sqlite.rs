@@ -9,19 +9,19 @@ pub struct SqlDB {
 }
 
 impl SqlDB {
-    pub fn new(database_filepath: &str) -> Self {
+    pub async fn new(database_filepath: &str) -> Self {
+        // Check if the database file exists, and create it if it doesn't
+        if !std::path::Path::new(database_filepath).exists() {
+            std::fs::File::create(database_filepath).expect("Failed to create database file");
+        }
+
         let pool = SqlitePool::connect_lazy(database_filepath)
             .expect("Failed to create database connection pool");
 
-        // Create a runtime to execute the initialization
-        let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
-
         // Initialize the database schema
-        rt.block_on(async {
-            Self::init_schema(&pool)
-                .await
-                .expect("Failed to initialize database schema");
-        });
+        Self::init_schema(&pool)
+            .await
+            .expect("Failed to initialize database schema");
 
         Self { pool }
     }
