@@ -144,7 +144,8 @@ impl DB for SqlDB {
     async fn get_block(&self, hash: &str) -> Result<Option<Vec<u8>>, anyhow::Error> {
         // Retrieve the block data from storage
         match self.storage.get_block(hash) {
-            Ok(data) => Ok(Some(data)),
+            Ok(Some(data)) => Ok(Some(data)),
+            Ok(None) => Ok(None),
             Err(err) => {
                 log::error!("Error retrieving block from storage: {}", err);
                 Err(anyhow::anyhow!(
@@ -173,7 +174,11 @@ impl DB for SqlDB {
         let mut file_content = Vec::new();
         for (block_hash, _) in blocks {
             match self.storage.get_block(&block_hash) {
-                Ok(data) => file_content.extend(data),
+                Ok(Some(data)) => file_content.extend(data),
+                Ok(None) => {
+                    log::error!("Block {} not found", block_hash);
+                    return Err(anyhow::anyhow!("Block {} not found", block_hash));
+                }
                 Err(err) => {
                     log::error!("Failed to retrieve block {}: {}", block_hash, err);
                     return Err(anyhow::anyhow!(

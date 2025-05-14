@@ -15,9 +15,11 @@ pub mod config;
 mod docker;
 pub use docker::DockerImageToFlist;
 mod upload;
-pub use upload::upload;
+pub use upload::*;
 mod download;
 pub use download::download;
+mod exist;
+pub use exist::*;
 mod server_api;
 
 const PARALLEL_UPLOAD: usize = 20; // number of files we can upload in parallel

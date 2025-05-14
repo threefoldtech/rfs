@@ -16,7 +16,6 @@ pub async fn download<P: AsRef<Path>>(hash: &str, file_name: P, server_url: Stri
     info!("Downloading blocks for hash: {}", hash);
     info!("Saving to: {}", file_name.display());
 
-    // Sort the blocks by block index
     let blocks = server_api::get_blocks_by_hash(hash, server_url.clone()).await?;
 
     if blocks.is_empty() {

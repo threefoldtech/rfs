@@ -25,9 +25,13 @@ impl Storage {
         file.write_all(content)
     }
 
-    pub fn get_block(&self, hash: &str) -> io::Result<Vec<u8>> {
+    pub fn get_block(&self, hash: &str) -> io::Result<Option<Vec<u8>>> {
         let block_path = self.base_dir.join(&hash[..4]).join(hash);
-        fs::read(block_path)
+        if block_path.exists() {
+            Ok(Some(fs::read(block_path)?))
+        } else {
+            Ok(None)
+        }
     }
 
     pub fn block_exists(&self, hash: &str) -> bool {
@@ -57,7 +61,7 @@ mod tests {
         // Get block
         storage.save_block(hash, content).unwrap();
         let retrieved_content = storage.get_block(hash).unwrap();
-        assert_eq!(retrieved_content, content);
+        assert_eq!(retrieved_content.unwrap(), content);
 
         // Clean up
         fs::remove_dir_all("test_storage").unwrap();

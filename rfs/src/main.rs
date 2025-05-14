@@ -10,7 +10,7 @@ use clap::{ArgAction, Args, Parser, Subcommand};
 
 use rfs::fungi;
 use rfs::store::{self};
-use rfs::{cache, config, download, upload};
+use rfs::{cache, config, download, exists, exists_by_hash, upload};
 
 mod fs;
 /// mount flists
@@ -43,6 +43,8 @@ enum Commands {
     Server(ServerOptions),
     /// upload a file to a server, splitting it into blocks
     Upload(UploadOptions),
+    /// check a file to a server, splitting it into blocks
+    Exists(ExistsOptions),
     /// download a file from a server using its hash
     Download(DownloadOptions),
 }
@@ -230,6 +232,20 @@ struct DownloadOptions {
 }
 
 #[derive(Args, Debug)]
+struct ExistsOptions {
+    /// path to the file or hash to check
+    file_or_hash: String,
+
+    /// server URL (e.g., http://localhost:8080)
+    #[clap(short, long)]
+    server: String,
+
+    /// block size for splitting the file (only used if a file is provided)
+    #[clap(short, long, default_value_t = 1024*1024)] // 1MB
+    block_size: usize,
+}
+
+#[derive(Args, Debug)]
 struct DockerOptions {
     /// name of the docker image to be converted to flist
     #[clap(short, long, required = true)]
@@ -311,6 +327,7 @@ fn main() -> Result<()> {
         Commands::Server(opts) => server(opts),
         Commands::Upload(opts) => upload_file(opts),
         Commands::Download(opts) => download_file(opts),
+        Commands::Exists(opts) => hash_or_file_exists(opts),
     }
 }
 
@@ -588,6 +605,29 @@ fn upload_file(opts: UploadOptions) -> Result<()> {
         upload(&opts.file, opts.server, Some(opts.block_size))
             .await
             .context("Failed to upload file")?;
+        Ok(())
+    })
+}
+
+fn hash_or_file_exists(opts: ExistsOptions) -> Result<()> {
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .thread_stack_size(16 * 1024 * 1024) // Use a larger stack size
+        .enable_all()
+        .build()
+        .unwrap();
+
+    rt.block_on(async move {
+        if std::path::Path::new(&opts.file_or_hash).exists() {
+            // If it's a file, check its existence by splitting into blocks
+            exists(&opts.file_or_hash, opts.server, Some(opts.block_size))
+                .await
+                .context("Failed to check file")?;
+        } else {
+            // If it's a hash, directly check its existence on the server
+            exists_by_hash(opts.file_or_hash, opts.server)
+                .await
+                .context("Failed to check hash")?;
+        }
         Ok(())
     })
 }

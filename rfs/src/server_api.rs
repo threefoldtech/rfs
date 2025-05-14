@@ -180,3 +180,24 @@ pub async fn upload_block(
     info!("Successfully uploaded block: {}", hash);
     Ok(())
 }
+
+/// Checks if a block exists on the server by its hash.
+pub async fn check_block(server_url: &str, hash: &str) -> Result<bool> {
+    let url = format!("{}/api/v1/block/{}", server_url, hash);
+
+    let client = Client::new();
+    let response = client
+        .head(&url)
+        .send()
+        .await
+        .context("Failed to send request to check block")?;
+
+    match response.status() {
+        reqwest::StatusCode::OK => Ok(true),         // Block exists
+        reqwest::StatusCode::NOT_FOUND => Ok(false), // Block does not exist
+        _ => Err(anyhow::anyhow!(
+            "Unexpected response from server: {}",
+            response.status()
+        )),
+    }
+}

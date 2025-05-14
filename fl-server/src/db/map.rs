@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::sync::Mutex;
 use utoipa::ToSchema;
 
 use super::DB;
@@ -34,28 +33,28 @@ impl DB for MapDB {
 
     async fn store_block(
         &self,
-        block_hash: &str,
-        data: Vec<u8>,
-        file_hash: &str,
-        block_index: u64,
+        _block_hash: &str,
+        _data: Vec<u8>,
+        _file_hash: &str,
+        _block_index: u64,
     ) -> Result<bool, anyhow::Error> {
         // TODO: Implement block storage logic
         Ok(true) // Placeholder return value
     }
 
-    async fn get_block(&self, hash: &str) -> Result<Option<Vec<u8>>, anyhow::Error> {
+    async fn get_block(&self, _hash: &str) -> Result<Option<Vec<u8>>, anyhow::Error> {
         // TODO:
         Ok(None)
     }
 
-    async fn get_file_by_hash(&self, hash: &str) -> Result<Option<File>, anyhow::Error> {
+    async fn get_file_by_hash(&self, _hash: &str) -> Result<Option<File>, anyhow::Error> {
         // TODO:
         Ok(None)
     }
 
     async fn get_file_blocks_ordered(
         &self,
-        file_hash: &str,
+        _file_hash: &str,
     ) -> Result<Vec<(String, u64)>, anyhow::Error> {
         // TODO:
         Ok(Vec::new())

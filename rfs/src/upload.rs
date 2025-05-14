@@ -10,11 +10,11 @@ use tokio::sync::Semaphore;
 
 use crate::server_api;
 
-const BLOCK_SIZE: usize = 1024 * 1024; // 1MB blocks, same as server
+pub const BLOCK_SIZE: usize = 1024 * 1024; // 1MB blocks, same as server
 const PARALLEL_UPLOAD: usize = 20; // Number of blocks to upload in parallel
 
 /// Splits the file into blocks and calculates their hashes
-async fn split_file_into_blocks(
+pub async fn split_file_into_blocks(
     file_path: &Path,
     block_size: usize,
 ) -> Result<(Vec<String>, Vec<(String, Vec<u8>)>)> {
@@ -45,7 +45,7 @@ async fn split_file_into_blocks(
 }
 
 /// Calculates the hash of the entire file by combining the hashes of all blocks
-fn calculate_file_hash(blocks: &[String]) -> String {
+pub fn calculate_file_hash(blocks: &[String]) -> String {
     let mut hasher = Sha256::new();
     for block_hash in blocks {
         hasher.update(block_hash.as_bytes());
