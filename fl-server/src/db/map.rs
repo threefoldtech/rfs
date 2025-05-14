@@ -9,9 +9,6 @@ use anyhow::Result;
 #[derive(Debug, ToSchema)]
 pub struct MapDB {
     users: HashMap<String, User>,
-    blocks: Mutex<HashMap<String, Vec<u8>>>,
-    files: Mutex<HashMap<String, File>>,
-    file_blocks: Mutex<HashMap<String, Vec<(String, u64)>>>,
 }
 
 impl MapDB {
@@ -21,9 +18,6 @@ impl MapDB {
                 .iter()
                 .map(|u| (u.username.clone(), u.to_owned()))
                 .collect(),
-            blocks: Mutex::new(HashMap::new()),
-            files: Mutex::new(HashMap::new()),
-            file_blocks: Mutex::new(HashMap::new()),
         }
     }
 }
@@ -34,8 +28,8 @@ impl DB for MapDB {
     }
 
     async fn block_exists(&self, file_hash: &str, block_index: u64, block_hash: &str) -> bool {
-        let blocks = self.blocks.lock().unwrap();
-        blocks.contains_key(block_hash)
+        // TODO:
+        true
     }
 
     async fn store_block(
@@ -45,49 +39,17 @@ impl DB for MapDB {
         file_hash: &str,
         block_index: u64,
     ) -> Result<bool, anyhow::Error> {
-        let mut blocks = self.blocks.lock().unwrap();
-
-        // Check if the block already exists
-        if blocks.contains_key(block_hash) {
-            return Ok(false); // Block already exists, not newly stored
-        }
-
-        // Insert the new block with its data
-        blocks.insert(block_hash.to_string(), data);
-
-        // Store file hash and block index in a separate map if provided
-        // TODO:
-        log::debug!(
-            "Block {} is part of file {} at index {}",
-            block_hash,
-            file_hash,
-            block_index
-        );
-
-        Ok(true) // Block was newly stored
+        // TODO: Implement block storage logic
+        Ok(true) // Placeholder return value
     }
 
     async fn get_block(&self, hash: &str) -> Result<Option<Vec<u8>>, anyhow::Error> {
-        let blocks = self.blocks.lock().unwrap();
-
-        // Check if the block exists and return its data if found
-        if let Some(data) = blocks.get(hash) {
-            return Ok(Some(data.clone()));
-        }
-
-        // Block not found
+        // TODO:
         Ok(None)
     }
 
     async fn get_file_by_hash(&self, hash: &str) -> Result<Option<File>, anyhow::Error> {
-        let files = self.files.lock().unwrap();
-
-        // Check if the file exists and return it if found
-        if let Some(file) = files.get(hash) {
-            return Ok(Some(file.clone()));
-        }
-
-        // File not found
+        // TODO:
         Ok(None)
     }
 
@@ -95,14 +57,7 @@ impl DB for MapDB {
         &self,
         file_hash: &str,
     ) -> Result<Vec<(String, u64)>, anyhow::Error> {
-        let file_blocks = self.file_blocks.lock().unwrap();
-
-        // Retrieve the blocks associated with the file hash
-        if let Some(blocks) = file_blocks.get(file_hash) {
-            return Ok(blocks.clone());
-        }
-
-        // No blocks found for the file
+        // TODO:
         Ok(Vec::new())
     }
 }

@@ -41,22 +41,6 @@ impl SqlDB {
         Ok(())
     }
 
-    async fn get_filename_by_hash(&self, file_hash: &str) -> Result<Option<String>, anyhow::Error> {
-        let result = query("SELECT file_name FROM metadata WHERE file_hash = ? LIMIT 1")
-            .bind(file_hash)
-            .fetch_optional(&self.pool)
-            .await;
-
-        match result {
-            Ok(Some(row)) => Ok(Some(row.get::<String, _>(0))),
-            Ok(None) => Ok(None), // File does not exist
-            Err(err) => {
-                log::error!("Failed to retrieve filename: {}", err);
-                Err(anyhow::anyhow!("Failed to retrieve filename: {}", err))
-            }
-        }
-    }
-
     async fn metadata_exists(&self, file_hash: &str, block_index: u64, block_hash: &str) -> bool {
         let result = query(
             "SELECT COUNT(*) as count FROM metadata WHERE file_hash = ? AND block_index = ? AND block_hash = ?",

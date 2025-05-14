@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
 use futures::future::join_all;
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::Path;
 use std::sync::Arc;
@@ -9,102 +8,10 @@ use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 use tokio::sync::Semaphore;
 
+use crate::server_api;
+
 const BLOCK_SIZE: usize = 1024 * 1024; // 1MB blocks, same as server
 const PARALLEL_UPLOAD: usize = 20; // Number of blocks to upload in parallel
-
-#[derive(Debug, Serialize, Deserialize)]
-struct VerifyBlock {
-    /// Block hash to verify
-    pub block_hash: String,
-    /// File hash associated with the block
-    pub file_hash: String,
-    /// Block index within the file
-    pub block_index: u64,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct VerifyBlocksRequest {
-    blocks: Vec<VerifyBlock>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct VerifyBlocksResponse {
-    missing: Vec<String>,
-}
-
-/// Verifies which blocks are missing on the server
-async fn verify_blocks_with_server(
-    client: &Client,
-    server_url: String,
-    blocks: Vec<VerifyBlock>,
-) -> Result<Vec<String>> {
-    let verify_url = format!("{}/api/v1/block/verify", server_url);
-    let verify_request = VerifyBlocksRequest { blocks };
-
-    info!("Verifying blocks with server: {}", verify_url);
-
-    let response = client
-        .post(&verify_url)
-        .json(&verify_request)
-        .send()
-        .await
-        .context("Failed to verify blocks with server")?;
-
-    if !response.status().is_success() {
-        return Err(anyhow::anyhow!(
-            "Server returned error: {} - {}",
-            response.status(),
-            response.text().await?
-        ));
-    }
-
-    let verify_response: VerifyBlocksResponse = response
-        .json()
-        .await
-        .context("Failed to parse server response")?;
-
-    Ok(verify_response.missing)
-}
-
-/// Uploads a single block to the server
-async fn upload_block(
-    client: Arc<Client>,
-    server_url: String,
-    hash: String,
-    data: Vec<u8>,
-    file_hash: String,
-    idx: u64,
-    semaphore: Arc<Semaphore>,
-) -> Result<()> {
-    let upload_block_url = format!("{}/api/v1/block", server_url);
-
-    // Acquire a permit from the semaphore
-    let _permit = semaphore.acquire().await.unwrap();
-
-    info!("Uploading block: {}", hash);
-
-    // Send the data directly as bytes with query parameters
-    let response = client
-        .post(&upload_block_url)
-        .header("Content-Type", "application/octet-stream")
-        .query(&[("file_hash", &file_hash), ("idx", &idx.to_string())])
-        .body(data)
-        .send()
-        .await
-        .context("Failed to upload block")?;
-
-    if !response.status().is_success() {
-        return Err(anyhow::anyhow!(
-            "Failed to upload block {}: {} - {}",
-            hash,
-            response.status(),
-            response.text().await?
-        ));
-    }
-
-    info!("Successfully uploaded block: {}", hash);
-    Ok(())
-}
 
 /// Splits the file into blocks and calculates their hashes
 async fn split_file_into_blocks(
@@ -176,10 +83,10 @@ pub async fn upload<P: AsRef<Path>>(
     info!("Calculated file hash: {}", file_hash);
 
     // Prepare blocks with metadata for verification
-    let blocks_with_metadata: Vec<VerifyBlock> = blocks
+    let blocks_with_metadata: Vec<server_api::VerifyBlock> = blocks
         .iter()
         .enumerate()
-        .map(|(idx, hash)| VerifyBlock {
+        .map(|(idx, hash)| server_api::VerifyBlock {
             block_hash: hash.clone(),
             file_hash: file_hash.clone(),
             block_index: idx as u64,
@@ -188,7 +95,8 @@ pub async fn upload<P: AsRef<Path>>(
 
     // Verify which blocks are missing on the server
     let missing_blocks =
-        verify_blocks_with_server(&client, server_url.clone(), blocks_with_metadata).await?;
+        server_api::verify_blocks_with_server(&client, server_url.clone(), blocks_with_metadata)
+            .await?;
     info!(
         "{} of {} blocks are missing and need to be uploaded",
         missing_blocks.len(),
@@ -215,7 +123,7 @@ pub async fn upload<P: AsRef<Path>>(
 
             // Create a task for each block upload
             let task: tokio::task::JoinHandle<std::result::Result<(), anyhow::Error>> =
-                tokio::spawn(upload_block(
+                tokio::spawn(server_api::upload_block(
                     client_clone,
                     server_url_clone,
                     hash_clone,

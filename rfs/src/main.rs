@@ -10,7 +10,7 @@ use clap::{ArgAction, Args, Parser, Subcommand};
 
 use rfs::fungi;
 use rfs::store::{self};
-use rfs::{cache, config, upload};
+use rfs::{cache, config, download, upload};
 
 mod fs;
 /// mount flists
@@ -43,6 +43,8 @@ enum Commands {
     Server(ServerOptions),
     /// upload a file to a server, splitting it into blocks
     Upload(UploadOptions),
+    /// download a file from a server using its hash
+    Download(DownloadOptions),
 }
 
 #[derive(Args, Debug)]
@@ -214,6 +216,20 @@ struct UploadOptions {
 }
 
 #[derive(Args, Debug)]
+struct DownloadOptions {
+    /// hash of the file to download
+    hash: String,
+
+    /// name to save the downloaded file as
+    #[clap(short, long)]
+    output: String,
+
+    /// server URL (e.g., http://localhost:8080)
+    #[clap(short, long)]
+    server: String,
+}
+
+#[derive(Args, Debug)]
 struct DockerOptions {
     /// name of the docker image to be converted to flist
     #[clap(short, long, required = true)]
@@ -294,6 +310,7 @@ fn main() -> Result<()> {
         Commands::Docker(opts) => docker(opts),
         Commands::Server(opts) => server(opts),
         Commands::Upload(opts) => upload_file(opts),
+        Commands::Download(opts) => download_file(opts),
     }
 }
 
@@ -568,7 +585,24 @@ fn upload_file(opts: UploadOptions) -> Result<()> {
         .unwrap();
 
     rt.block_on(async move {
-        upload(&opts.file, opts.server, Some(opts.block_size)).await?;
+        upload(&opts.file, opts.server, Some(opts.block_size))
+            .await
+            .context("Failed to upload file")?;
+        Ok(())
+    })
+}
+
+fn download_file(opts: DownloadOptions) -> Result<()> {
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .thread_stack_size(16 * 1024 * 1024) // Use a larger stack size
+        .enable_all()
+        .build()
+        .unwrap();
+
+    rt.block_on(async move {
+        download(&opts.hash, &opts.output, opts.server)
+            .await
+            .context("Failed to download file")?;
         Ok(())
     })
 }
