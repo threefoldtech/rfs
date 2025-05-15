@@ -26,7 +26,7 @@ impl DB for MapDB {
         self.users.get(username).cloned()
     }
 
-    async fn block_exists(&self, file_hash: &str, block_index: u64, block_hash: &str) -> bool {
+    async fn block_exists(&self, _file_hash: &str, _block_index: u64, _block_hash: &str) -> bool {
         // TODO:
         true
     }

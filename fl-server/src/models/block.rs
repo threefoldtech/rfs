@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use utoipa::ToSchema;
 
 #[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
@@ -13,8 +12,7 @@ pub struct Block {
 impl Block {
     /// Calculates the hash of the block's data using SHA-256.
     pub fn calculate_hash(data: &[u8]) -> String {
-        let mut hasher = Sha256::new();
-        hasher.update(data);
-        format!("{:x}", hasher.finalize())
+        let hash = blake2b_simd::Params::new().hash_length(32).hash(data);
+        hex::encode(hash.as_bytes())
     }
 }

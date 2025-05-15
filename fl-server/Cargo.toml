@@ -52,3 +52,5 @@ sha256 = "1.5.0"
 async-trait = "0.1.53"
 sha2 = "0.10"
 sqlx = { version = "0.7.4", features = [ "runtime-tokio-rustls", "sqlite" ] }
+blake2b_simd = "0.5"
+hex = "0.4.3"
