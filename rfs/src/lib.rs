@@ -17,7 +17,7 @@ pub use docker::DockerImageToFlist;
 mod upload;
 pub use upload::*;
 mod download;
-pub use download::download;
+pub use download::*;
 mod exist;
 pub use exist::*;
 mod server_api;

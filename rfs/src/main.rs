@@ -10,7 +10,7 @@ use clap::{ArgAction, Args, Parser, Subcommand};
 
 use rfs::fungi;
 use rfs::store::{self};
-use rfs::{cache, config, download, exists, exists_by_hash, upload};
+use rfs::{cache, config, download, download_dir, exists, exists_by_hash, upload, upload_dir};
 
 mod fs;
 /// mount flists
@@ -41,12 +41,18 @@ enum Commands {
     Docker(DockerOptions),
     /// run the fl-server
     Server(ServerOptions),
-    /// upload a file to a server, splitting it into blocks
-    Upload(UploadOptions),
+    /// upload a file to a server
+    Upload(UploadFileOptions),
+    /// upload a directory to a server
+    UploadDir(UploadDirOptions),
     /// check a file to a server, splitting it into blocks
     Exists(ExistsOptions),
     /// download a file from a server using its hash
     Download(DownloadOptions),
+    /// download a directory from a server using its flist hash
+    DownloadDir(DownloadDirOptions),
+    /// create an flist from a directory
+    FlistCreate(FlistCreateOptions),
 }
 
 #[derive(Args, Debug)]
@@ -204,17 +210,39 @@ struct StoreDeleteOptions {
 }
 
 #[derive(Args, Debug)]
-struct UploadOptions {
+struct UploadFileOptions {
     /// path to the file to upload
-    file: String,
+    path: String,
 
     /// server URL (e.g., http://localhost:8080)
     #[clap(short, long)]
     server: String,
 
     /// block size for splitting the file
-    #[clap(short, long, default_value_t = 1024*1024)] // 1MB
+    #[clap(short, long, default_value_t = 1024 * 1024)] // 1MB
     block_size: usize,
+}
+
+#[derive(Args, Debug)]
+struct UploadDirOptions {
+    /// path to the directory to upload
+    path: String,
+
+    /// server URL (e.g., http://localhost:8080)
+    #[clap(short, long)]
+    server: String,
+
+    /// block size for splitting the files
+    #[clap(short, long, default_value_t = 1024 * 1024)] // 1MB
+    block_size: usize,
+
+    /// create and upload flist file
+    #[clap(long)]
+    create_flist: bool,
+
+    /// path to output the flist file
+    #[clap(long)]
+    flist_output: Option<String>,
 }
 
 #[derive(Args, Debug)]
@@ -223,6 +251,20 @@ struct DownloadOptions {
     hash: String,
 
     /// name to save the downloaded file as
+    #[clap(short, long)]
+    output: String,
+
+    /// server URL (e.g., http://localhost:8080)
+    #[clap(short, long)]
+    server: String,
+}
+
+#[derive(Args, Debug)]
+struct DownloadDirOptions {
+    /// hash of the flist to download
+    hash: String,
+
+    /// directory to save the downloaded files to
     #[clap(short, long)]
     output: String,
 
@@ -241,7 +283,7 @@ struct ExistsOptions {
     server: String,
 
     /// block size for splitting the file (only used if a file is provided)
-    #[clap(short, long, default_value_t = 1024*1024)] // 1MB
+    #[clap(short, long, default_value_t = 1024 * 1024)] // 1MB
     block_size: usize,
 }
 
@@ -286,6 +328,24 @@ struct DockerOptions {
     registry_token: Option<String>,
 }
 
+#[derive(Args, Debug)]
+struct FlistCreateOptions {
+    /// path to the directory to create the flist from
+    directory: String,
+
+    /// path to output the flist file
+    #[clap(short, long)]
+    output: String,
+
+    /// server URL (e.g., http://localhost:8080)
+    #[clap(short, long)]
+    server: String,
+
+    /// block size for splitting the files
+    #[clap(short, long, default_value_t = 1024 * 1024)] // 1MB
+    block_size: usize,
+}
+
 /// Parse a single key-value pair
 fn parse_key_val<T, U>(s: &str) -> Result<(T, U), Box<dyn Error + Send + Sync + 'static>>
 where
@@ -326,8 +386,11 @@ fn main() -> Result<()> {
         Commands::Docker(opts) => docker(opts),
         Commands::Server(opts) => server(opts),
         Commands::Upload(opts) => upload_file(opts),
+        Commands::UploadDir(opts) => upload_directory(opts),
         Commands::Download(opts) => download_file(opts),
+        Commands::DownloadDir(opts) => download_directory(opts),
         Commands::Exists(opts) => hash_or_file_exists(opts),
+        Commands::FlistCreate(opts) => create_flist(opts),
     }
 }
 
@@ -594,7 +657,7 @@ fn server(opts: ServerOptions) -> Result<()> {
     Ok(())
 }
 
-fn upload_file(opts: UploadOptions) -> Result<()> {
+fn upload_file(opts: UploadFileOptions) -> Result<()> {
     let rt = tokio::runtime::Builder::new_multi_thread()
         .thread_stack_size(16 * 1024 * 1024) // Use a larger stack size
         .enable_all()
@@ -602,9 +665,67 @@ fn upload_file(opts: UploadOptions) -> Result<()> {
         .unwrap();
 
     rt.block_on(async move {
-        upload(&opts.file, opts.server, Some(opts.block_size))
+        let path = std::path::Path::new(&opts.path);
+
+        if !path.is_file() {
+            return Err(anyhow::anyhow!("Not a valid file: {}", opts.path));
+        }
+
+        // Upload a single file
+        upload(&opts.path, opts.server, Some(opts.block_size))
             .await
             .context("Failed to upload file")?;
+
+        Ok(())
+    })
+}
+
+fn upload_directory(opts: UploadDirOptions) -> Result<()> {
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .thread_stack_size(32 * 1024 * 1024) // Increased stack size to prevent overflow
+        .enable_all()
+        .build()
+        .unwrap();
+
+    rt.block_on(async move {
+        let path = std::path::Path::new(&opts.path);
+
+        if !path.is_dir() {
+            return Err(anyhow::anyhow!("Not a valid directory: {}", opts.path));
+        }
+
+        // Upload a directory
+        upload_dir(
+            &opts.path,
+            opts.server,
+            Some(opts.block_size),
+            opts.create_flist,
+            opts.flist_output.as_deref(),
+        )
+        .await
+        .context("Failed to upload directory")?;
+
+        Ok(())
+    })
+}
+
+fn create_flist(opts: FlistCreateOptions) -> Result<()> {
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .thread_stack_size(16 * 1024 * 1024) // Use a larger stack size
+        .enable_all()
+        .build()
+        .unwrap();
+
+    rt.block_on(async move {
+        upload_dir(
+            &opts.directory,
+            opts.server,
+            Some(opts.block_size),
+            true,
+            Some(&opts.output),
+        )
+        .await
+        .context("Failed to upload directory")?;
         Ok(())
     })
 }
@@ -643,6 +764,21 @@ fn download_file(opts: DownloadOptions) -> Result<()> {
         download(&opts.hash, &opts.output, opts.server)
             .await
             .context("Failed to download file")?;
+        Ok(())
+    })
+}
+
+fn download_directory(opts: DownloadDirOptions) -> Result<()> {
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .thread_stack_size(16 * 1024 * 1024) // Use a larger stack size
+        .enable_all()
+        .build()
+        .unwrap();
+
+    rt.block_on(async move {
+        download_dir(&opts.hash, &opts.output, opts.server)
+            .await
+            .context("Failed to download directory")?;
         Ok(())
     })
 }

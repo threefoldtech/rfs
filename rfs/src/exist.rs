@@ -17,7 +17,7 @@ pub async fn exists<P: AsRef<Path>>(
     let file_path = file_path.as_ref();
 
     info!("Checking file: {}", file_path.display());
-    info!("Using block size: {} bytes", block_size);
+    debug!("Using block size: {} bytes", block_size);
 
     // Read the file size
     let file_size = File::open(file_path).await?.metadata().await?.len();
@@ -50,18 +50,23 @@ pub async fn exists<P: AsRef<Path>>(
     });
 
     // Run all futures concurrently
-    let results = futures::future::join_all(futures).await;
+    let results: Vec<bool> = futures::future::join_all(futures).await;
+    let mut file_exists = true;
 
     // Process results
     for block_exists in results {
         match block_exists {
-            true => {
-                info!("File exists on server");
-            }
+            true => {}
             false => {
-                info!("File does not exist on server");
+                file_exists = false;
             }
         }
+    }
+
+    if file_exists {
+        info!("File exists on server");
+    } else {
+        info!("File does not exist on server");
     }
 
     Ok(())

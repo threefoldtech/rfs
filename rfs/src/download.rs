@@ -6,6 +6,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::sync::Semaphore;
 
 use crate::server_api;
+use crate::{cache, fungi, store};
 
 const PARALLEL_DOWNLOAD: usize = 20; // Number of blocks to download in parallel
 
@@ -99,5 +100,32 @@ pub async fn download<P: AsRef<Path>>(hash: &str, file_name: P, server_url: Stri
 
     info!("File downloaded successfully to {:?}", file_name);
 
+    Ok(())
+}
+
+/// Downloads a directory by processing all files listed in its flist using the flist hash
+pub async fn download_dir<P: AsRef<Path>>(
+    flist_hash: &str,
+    output_dir: P,
+    server_url: String,
+) -> Result<()> {
+    let output_dir = output_dir.as_ref();
+
+    info!("Downloading directory from flist with hash: {}", flist_hash);
+    info!("Saving files to: {}", output_dir.display());
+
+    // Download the flist file using its hash
+    let temp_path = std::env::temp_dir().join(format!("{}.fl", flist_hash));
+    download(flist_hash, &temp_path, server_url.clone()).await?;
+
+    let meta = fungi::Reader::new(temp_path)
+        .await
+        .context("failed to initialize metadata database")?;
+
+    let router = store::get_router(&meta).await?;
+    let cache = cache::Cache::new("/tmp/cache", router);
+    crate::unpack(&meta, &cache, output_dir, false).await?;
+
+    info!("Directory download complete");
     Ok(())
 }

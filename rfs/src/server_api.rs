@@ -2,7 +2,6 @@ use anyhow::{Context, Result};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tokio::sync::Semaphore;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VerifyBlock {
@@ -149,12 +148,8 @@ pub async fn upload_block(
     data: Vec<u8>,
     file_hash: String,
     idx: u64,
-    semaphore: Arc<Semaphore>,
 ) -> Result<()> {
     let upload_block_url = format!("{}/api/v1/block", server_url);
-
-    // Acquire a permit from the semaphore
-    let _permit = semaphore.acquire().await.unwrap();
 
     info!("Uploading block: {}", hash);
 
@@ -177,7 +172,13 @@ pub async fn upload_block(
         ));
     }
 
-    info!("Successfully uploaded block: {}", hash);
+    if response.status() == 200 {
+        info!("Block {} already exists on server", hash);
+    }
+    if response.status() == 201 {
+        info!("Successfully uploaded block: {}", hash);
+    }
+
     Ok(())
 }
 

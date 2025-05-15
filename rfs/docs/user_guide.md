@@ -1,0 +1,280 @@
+# RFS User Guide
+
+This document provides an overview of the commands available in the RFS application and their usage.
+
+---
+
+## Commands
+
+### 1. **Mount**
+
+Mount an FL (Flist) to a target directory.
+
+**Usage:**
+
+```bash
+rfs mount --meta <path_to_flist> --cache <cache_directory> [--daemon] [--log <log_file>] <target>
+```
+
+**Options:**
+
+- `--meta`: Path to the metadata file (flist).
+- `--cache`: Directory used as a cache for downloaded file chunks (default: `/tmp/cache`).
+- `--daemon`: Run the process in the background.
+- `--log`: Log file (only used with daemon mode).
+- `<target>`: Target mount point.
+
+---
+
+### 2. **Pack**
+
+Create an FL and upload blocks to the provided storage.
+
+**Usage:**
+
+```bash
+rfs pack --meta <path_to_flist> --store <store_url>... [--no-strip-password] <target_directory>
+```
+
+**Options:**
+
+- `--meta`: Path to the metadata file (flist).
+- `--store`: Store URL(s) in the format `[xx-xx=]<url>`. Multiple stores can be specified.
+- `--no-strip-password`: Disable automatic password stripping from the store URL.
+- `<target_directory>`: Directory to upload.
+
+---
+
+### 3. **Unpack**
+
+Download the content of an FL to a specified location.
+
+**Usage:**
+
+```bash
+rfs unpack --meta <path_to_flist> --cache <cache_directory> [--preserve-ownership] <target_directory>
+```
+
+**Options:**
+
+- `--meta`: Path to the metadata file (flist).
+- `--cache`: Directory used as a cache for downloaded file chunks (default: `/tmp/cache`).
+- `--preserve-ownership`: Preserve file ownership from the FL (requires sudo).
+- `<target_directory>`: Directory to unpack the content.
+
+---
+
+### 4. **Clone**
+
+Copy data from the stores of an FL to another store.
+
+**Usage:**
+
+```bash
+rfs clone --meta <path_to_flist> --store <store_url>... --cache <cache_directory>
+```
+
+**Options:**
+
+- `--meta`: Path to the metadata file (flist).
+- `--store`: Store URL(s) in the format `[xx-xx=]<url>`. Multiple stores can be specified.
+- `--cache`: Directory used as a cache for downloaded file chunks (default: `/tmp/cache`).
+
+---
+
+### 5. **Config**
+
+List or modify FL metadata and stores.
+
+**Usage:**
+
+```bash
+rfs config --meta <path_to_flist> <subcommand>
+```
+
+**Subcommands:**
+
+- `tag list`: List all tags.
+- `tag add --tag <key=value>`: Add a tag.
+- `tag delete --key <key>`: Delete a tag.
+- `store list`: List all stores.
+- `store add --store <store_url>`: Add a store.
+- `store delete --store <store_url>`: Delete a store.
+
+---
+
+### 6. **Docker**
+
+Convert a Docker image to an FL.
+
+**Usage:**
+
+```bash
+rfs docker --image-name <image_name> --store <store_url>... [--username <username>] [--password <password>] [--auth <auth>] [--email <email>] [--server-address <server_address>] [--identity-token <token>] [--registry-token <token>]
+```
+
+**Options:**
+
+- `--image-name`: Name of the Docker image to convert.
+- `--store`: Store URL(s) in the format `[xx-xx=]<url>`. Multiple stores can be specified.
+- Additional options for Docker credentials (e.g., `--username`, `--password`, etc.).
+
+---
+
+### 7. **Server**
+
+Run the FL server.
+
+**Usage:**
+
+```bash
+rfs server --config-path <config_file> [--debug]
+```
+
+**Options:**
+
+- `--config-path`: Path to the server configuration file.
+- `--debug`: Enable debugging logs.
+
+---
+
+### 8. **Upload**
+
+Upload a file to a server.
+
+**Usage:**
+
+```bash
+rfs upload <file_path> --server <server_url> [--block-size <size>]
+```
+
+**Options:**
+
+- `<file_path>`: Path to the file to upload.
+- `--server`: Server URL (e.g., `http://localhost:8080`).
+- `--block-size`: Block size for splitting the file (default: 1MB).
+
+---
+
+### 9. **UploadDir**
+
+Upload a directory to a server.
+
+**Usage:**
+
+```bash
+rfs upload-dir <directory_path> --server <server_url> [--block-size <size>] [--create-flist] [--flist-output <output_path>]
+```
+
+**Options:**
+
+- `<directory_path>`: Path to the directory to upload.
+- `--server`: Server URL (e.g., `http://localhost:8080`).
+- `--block-size`: Block size for splitting the files (default: 1MB).
+- `--create-flist`: Create and upload an FL file.
+- `--flist-output`: Path to output the FL file.
+
+---
+
+### 10. **Download**
+
+Download a file from a server using its hash.
+
+**Usage:**
+
+```bash
+rfs download  <file_hash> --output <output_file> --server <server_url>
+```
+
+**Options:**
+
+- `<file_hash>`: Hash of the file to download.
+- `--output`: Name to save the downloaded file as.
+- `--server`: Server URL (e.g., `http://localhost:8080`).
+
+---
+
+### 11. **DownloadDir**
+
+Download a directory from a server using its FL hash.
+
+**Usage:**
+
+```bash
+rfs download-dir <flist_hash> --output <output_directory> --server <server_url>
+```
+
+**Options:**
+
+- `<flist_hash>`: Hash of the FL to download.
+- `--output`: Directory to save the downloaded files to.
+- `--server`: Server URL (e.g., `http://localhost:8080`).
+
+---
+
+### 12. **Exists**
+
+Check if a file or hash exists on the server.
+
+**Usage:**
+
+```bash
+rfs exists <file_or_hash> --server <server_url> [--block-size <size>]
+```
+
+**Options:**
+
+- `<file_or_hash>`: Path to the file or hash to check.
+- `--server`: Server URL (e.g., `http://localhost:8080`).
+- `--block-size`: Block size for splitting the file (default: 1MB).
+
+---
+
+### 13. **flist create**
+
+Creates an flist from a directory.
+
+**Usage:**
+
+```bash
+rfs flist create <directory> --output /path/to/output.flist --server http://localhost:8080 --block-size 1048576
+```
+
+**Options:**
+
+- `<directory>`: Path to the directory to create the flist from.
+- `--output`: Path to save the generated flist file.
+- `--server`: Server URL (e.g., <http://localhost:8080>).
+- `--block-size`: Block size for splitting the files (default: 1MB).
+
+---
+
+### Examples
+
+1. **Upload a File**:
+
+   ```bash
+   rfs upload big_file.txt --server http://localhost:8080
+   ```
+
+2. **Download a Directory**:
+
+   ```bash
+   rfs download-dir abc123 --output ./mydir --server http://localhost:8080
+   ```
+
+3. **Pack a Directory**:
+
+   ```bash
+   rfs pack --meta myflist.fl --store http://store.url --target ./mydir
+   ```
+
+4. **Unpack an FL**:
+
+   ```bash
+   rfs unpack --meta myflist.fl --cache /tmp/cache --target ./output
+   ```
+
+---
+
+For more details, refer to the documentation or use the `--help` flag with any command.

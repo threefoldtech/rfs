@@ -2,16 +2,23 @@ use anyhow::{Context, Result};
 use futures::future::join_all;
 use reqwest::Client;
 use sha2::{Digest, Sha256};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 use tokio::sync::Semaphore;
 
+use crate::fungi;
 use crate::server_api;
+use crate::store;
 
 pub const BLOCK_SIZE: usize = 1024 * 1024; // 1MB blocks, same as server
 const PARALLEL_UPLOAD: usize = 20; // Number of blocks to upload in parallel
+
+pub fn calculate_hash(data: &[u8]) -> String {
+    let hash = blake2b_simd::Params::new().hash_length(32).hash(data);
+    hex::encode(hash.as_bytes())
+}
 
 /// Splits the file into blocks and calculates their hashes
 pub async fn split_file_into_blocks(
@@ -33,9 +40,7 @@ pub async fn split_file_into_blocks(
         buffer.truncate(bytes_read);
 
         // Calculate hash for this block
-        let mut hasher = Sha256::new();
-        hasher.update(&buffer);
-        let hash = format!("{:x}", hasher.finalize());
+        let hash = calculate_hash(&buffer);
 
         blocks.push(hash.clone());
         block_data.push((hash, buffer));
@@ -54,16 +59,17 @@ pub fn calculate_file_hash(blocks: &[String]) -> String {
 }
 
 /// Uploads a file to the server, splitting it into blocks and only uploading missing blocks
+/// Returns the hash of the uploaded file
 pub async fn upload<P: AsRef<Path>>(
     file_path: P,
     server_url: String,
     block_size: Option<usize>,
-) -> Result<()> {
+) -> Result<String> {
     let block_size = block_size.unwrap_or(BLOCK_SIZE); // Use provided block size or default
     let file_path = file_path.as_ref();
 
     info!("Uploading file: {}", file_path.display());
-    info!("Using block size: {} bytes", block_size);
+    debug!("Using block size: {} bytes", block_size);
 
     // Create HTTP client
     let client = Client::new();
@@ -118,8 +124,10 @@ pub async fn upload<P: AsRef<Path>>(
             let hash_clone = hash.clone();
             let server_url_clone = server_url.clone();
             let client_clone = Arc::clone(&client);
-            let semaphore_clone = Arc::clone(&semaphore);
             let file_hash_clone = file_hash.clone();
+
+            // Acquire a permit from the semaphore
+            let _permit = semaphore.acquire().await.unwrap();
 
             // Create a task for each block upload
             let task: tokio::task::JoinHandle<std::result::Result<(), anyhow::Error>> =
@@ -130,7 +138,6 @@ pub async fn upload<P: AsRef<Path>>(
                     data,
                     file_hash_clone,
                     idx as u64,
-                    semaphore_clone,
                 ));
 
             upload_tasks.push(task);
@@ -155,5 +162,108 @@ pub async fn upload<P: AsRef<Path>>(
     }
 
     info!("File upload complete");
+    Ok(file_hash)
+}
+
+/// Uploads a directory to the server, processing all files recursively
+pub async fn upload_dir<P: AsRef<Path>>(
+    dir_path: P,
+    server_url: String,
+    block_size: Option<usize>,
+    create_flist: bool,
+    flist_output: Option<&str>,
+) -> Result<()> {
+    let dir_path = dir_path.as_ref().to_path_buf();
+
+    info!("Uploading directory: {}", dir_path.display());
+    debug!(
+        "Using block size: {} bytes",
+        block_size.unwrap_or(BLOCK_SIZE)
+    );
+
+    // Collect all files in the directory recursively
+    let mut file_paths = Vec::new();
+    collect_files(&dir_path, &mut file_paths).context("Failed to read directory")?;
+
+    info!("Found {} files to upload", file_paths.len());
+
+    if !create_flist {
+        // Upload each file
+        for file_path in file_paths {
+            upload(&file_path, server_url.clone(), block_size).await?;
+        }
+
+        info!("Directory upload complete");
+        return Ok(());
+    }
+
+    // Create and handle flist if requested
+    info!("Creating flist for the uploaded directory");
+
+    // Create a temporary flist file if no output path is specified
+    let flist_path = match flist_output {
+        Some(path) => PathBuf::from(path),
+        None => {
+            let temp_dir = std::env::temp_dir();
+            temp_dir.join(format!(
+                "{}.fl",
+                dir_path.file_name().unwrap_or_default().to_string_lossy()
+            ))
+        }
+    };
+
+    // Create the flist
+    let writer = fungi::Writer::new(&flist_path, true)
+        .await
+        .context("Failed to create flist file")?;
+
+    // Create a store for the server
+    let store = store::parse_router(&[format!(
+        "{}://{}",
+        store::server::SCHEME,
+        server_url.clone()
+    )])
+    .await
+    .context("Failed to create store")?;
+
+    // Pack the directory into the flist iteratively to avoid stack overflow
+    let result =
+        tokio::task::spawn_blocking(move || crate::pack(writer, store, dir_path, false, None))
+            .await
+            .context("Failed to join spawned task")?;
+
+    result.await.context("Failed to create flist")?;
+
+    info!("Flist created at: {}", flist_path.display());
+
+    // Upload the flist file if it was created
+    if flist_path.exists() {
+        info!("Uploading flist file");
+        let flist_hash = upload(&flist_path, server_url, block_size)
+            .await
+            .context("Failed to upload flist file")?;
+
+        info!("Flist uploaded successfully. Hash: {}", flist_hash);
+    }
+
+    Ok(())
+}
+
+fn collect_files(dir_path: &Path, file_paths: &mut Vec<PathBuf>) -> std::io::Result<()> {
+    let mut stack = vec![dir_path.to_path_buf()];
+
+    while let Some(current_path) = stack.pop() {
+        for entry in std::fs::read_dir(&current_path)? {
+            let entry = entry?;
+            let path = entry.path();
+
+            if path.is_file() {
+                file_paths.push(path);
+            } else if path.is_dir() {
+                stack.push(path);
+            }
+        }
+    }
+
     Ok(())
 }
