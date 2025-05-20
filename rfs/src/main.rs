@@ -10,7 +10,10 @@ use clap::{ArgAction, Args, Parser, Subcommand};
 
 use rfs::fungi;
 use rfs::store::{self};
-use rfs::{cache, config, download, download_dir, exists, exists_by_hash, upload, upload_dir};
+use rfs::{
+    cache, config, download, download_dir, exists, exists_by_hash, publish_website, upload,
+    upload_dir,
+};
 
 mod fs;
 /// mount flists
@@ -53,6 +56,22 @@ enum Commands {
     DownloadDir(DownloadDirOptions),
     /// create an flist from a directory
     FlistCreate(FlistCreateOptions),
+    /// Publish a website
+    WebsitePublish(WebsitePublishOptions),
+}
+
+#[derive(Args, Debug)]
+struct WebsitePublishOptions {
+    /// Path to the website directory
+    path: String,
+
+    /// Server URL (e.g., http://localhost:8080)
+    #[clap(short, long, default_value_t = String::from("http://localhost:8080"))]
+    server: String,
+
+    /// Block size for splitting the files
+    #[clap(short, long, default_value_t = 1024 * 1024)] // 1MB
+    block_size: usize,
 }
 
 #[derive(Args, Debug)]
@@ -215,7 +234,7 @@ struct UploadFileOptions {
     path: String,
 
     /// server URL (e.g., http://localhost:8080)
-    #[clap(short, long)]
+    #[clap(short, long, default_value_t = String::from("http://localhost:8080"))]
     server: String,
 
     /// block size for splitting the file
@@ -229,7 +248,7 @@ struct UploadDirOptions {
     path: String,
 
     /// server URL (e.g., http://localhost:8080)
-    #[clap(short, long)]
+    #[clap(short, long, default_value_t = String::from("http://localhost:8080"))]
     server: String,
 
     /// block size for splitting the files
@@ -255,7 +274,7 @@ struct DownloadOptions {
     output: String,
 
     /// server URL (e.g., http://localhost:8080)
-    #[clap(short, long)]
+    #[clap(short, long, default_value_t = String::from("http://localhost:8080"))]
     server: String,
 }
 
@@ -269,7 +288,7 @@ struct DownloadDirOptions {
     output: String,
 
     /// server URL (e.g., http://localhost:8080)
-    #[clap(short, long)]
+    #[clap(short, long, default_value_t = String::from("http://localhost:8080"))]
     server: String,
 }
 
@@ -279,7 +298,7 @@ struct ExistsOptions {
     file_or_hash: String,
 
     /// server URL (e.g., http://localhost:8080)
-    #[clap(short, long)]
+    #[clap(short, long, default_value_t = String::from("http://localhost:8080"))]
     server: String,
 
     /// block size for splitting the file (only used if a file is provided)
@@ -338,7 +357,7 @@ struct FlistCreateOptions {
     output: String,
 
     /// server URL (e.g., http://localhost:8080)
-    #[clap(short, long)]
+    #[clap(short, long, default_value_t = String::from("http://localhost:8080"))]
     server: String,
 
     /// block size for splitting the files
@@ -391,6 +410,7 @@ fn main() -> Result<()> {
         Commands::DownloadDir(opts) => download_directory(opts),
         Commands::Exists(opts) => hash_or_file_exists(opts),
         Commands::FlistCreate(opts) => create_flist(opts),
+        Commands::WebsitePublish(opts) => publish_website_command(opts),
     }
 }
 
@@ -779,6 +799,21 @@ fn download_directory(opts: DownloadDirOptions) -> Result<()> {
         download_dir(&opts.hash, &opts.output, opts.server)
             .await
             .context("Failed to download directory")?;
+        Ok(())
+    })
+}
+
+fn publish_website_command(opts: WebsitePublishOptions) -> Result<()> {
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .thread_stack_size(16 * 1024 * 1024)
+        .enable_all()
+        .build()
+        .unwrap();
+
+    rt.block_on(async move {
+        publish_website(&opts.path, opts.server, Some(opts.block_size))
+            .await
+            .context("Failed to publish website")?;
         Ok(())
     })
 }

@@ -7,10 +7,12 @@ mod handlers;
 mod models;
 mod response;
 mod serve_flists;
+mod website_handlers;
 
 use anyhow::{Context, Result};
 use axum::{
     error_handling::HandleErrorLayer,
+    extract::{Path, State},
     http::StatusCode,
     middleware,
     response::IntoResponse,
@@ -18,6 +20,7 @@ use axum::{
     BoxError, Router,
 };
 use clap::{ArgAction, Parser};
+use config::AppState;
 use hyper::{
     header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE},
     Method,
@@ -37,6 +40,7 @@ use block_handlers::BlockApi;
 use file_handlers::FileApi;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
+use website_handlers::WebsiteApi;
 
 #[derive(Parser, Debug)]
 #[clap(name ="fl-server", author, version = env!("GIT_VERSION"), about, long_about = None)]
@@ -93,7 +97,7 @@ async fn app() -> Result<()> {
     let app_state = Arc::new(config::AppState {
         jobs_state: Mutex::new(HashMap::new()),
         flists_progress: Mutex::new(HashMap::new()),
-        db: db,
+        db,
         config,
     });
 
@@ -143,6 +147,19 @@ async fn app() -> Result<()> {
         )
         .route("/api/v1/file", post(file_handlers::upload_file_handler))
         .route("/api/v1/file/:hash", get(file_handlers::get_file_handler))
+        .route(
+            "/website/:website_hash/*path",
+            get(website_handlers::serve_website_handler),
+        )
+        .route(
+            "/website/:website_hash/",
+            get(
+                |state: State<Arc<AppState>>, path: Path<String>| async move {
+                    website_handlers::serve_website_handler(state, Path((path.0, "".to_string())))
+                        .await
+                },
+            ),
+        )
         .route("/*path", get(serve_flists::serve_flists));
 
     let app = Router::new()
@@ -150,7 +167,8 @@ async fn app() -> Result<()> {
             SwaggerUi::new("/swagger-ui")
                 .url("/api-docs/openapi.json", handlers::FlistApi::openapi())
                 .url("/api-docs/block-api.json", BlockApi::openapi())
-                .url("/api-docs/file-api.json", FileApi::openapi()),
+                .url("/api-docs/file-api.json", FileApi::openapi())
+                .url("/api-docs/website-api.json", WebsiteApi::openapi()),
         )
         .merge(v1_routes)
         .layer(

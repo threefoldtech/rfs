@@ -59,12 +59,10 @@ pub async fn download<P: AsRef<Path>>(hash: &str, file_name: P, server_url: Stri
                 info!("Downloading block {} (index: {})", block_hash, block_index);
 
                 // Download the block
-                let result = server_api::download_block(&block_hash, &server_url)
+                server_api::download_block(&block_hash, &server_url)
                     .await
                     .map(|content| (i, content))
-                    .map_err(|e| (i, e));
-
-                result
+                    .map_err(|e| (i, e))
             }
         })
         .buffer_unordered(PARALLEL_DOWNLOAD)

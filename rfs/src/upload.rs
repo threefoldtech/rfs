@@ -189,7 +189,7 @@ pub async fn upload_dir<P: AsRef<Path>>(
 
     if !create_flist {
         // Upload each file
-        for file_path in file_paths {
+        for file_path in file_paths.clone() {
             upload(&file_path, server_url.clone(), block_size).await?;
         }
 
@@ -239,7 +239,7 @@ pub async fn upload_dir<P: AsRef<Path>>(
     // Upload the flist file if it was created
     if flist_path.exists() {
         info!("Uploading flist file");
-        let flist_hash = upload(&flist_path, server_url, block_size)
+        let flist_hash = upload(&flist_path, server_url.clone(), block_size)
             .await
             .context("Failed to upload flist file")?;
 
@@ -263,6 +263,84 @@ fn collect_files(dir_path: &Path, file_paths: &mut Vec<PathBuf>) -> std::io::Res
                 stack.push(path);
             }
         }
+    }
+
+    Ok(())
+}
+
+pub async fn publish_website<P: AsRef<Path>>(
+    dir_path: P,
+    server_url: String,
+    block_size: Option<usize>,
+) -> Result<()> {
+    let dir_path = dir_path.as_ref().to_path_buf();
+
+    debug!("Uploading directory: {}", dir_path.display());
+    debug!(
+        "Using block size: {} bytes",
+        block_size.unwrap_or(BLOCK_SIZE)
+    );
+
+    // Collect all files in the directory recursively
+    let mut file_paths = Vec::new();
+    collect_files(&dir_path, &mut file_paths).context("Failed to read directory")?;
+
+    debug!("Found {} files to upload", file_paths.len());
+
+    // Create and handle flist if requested
+    debug!("Creating flist for the uploaded directory");
+
+    // Create a temporary flist file
+    let temp_dir = std::env::temp_dir();
+    let flist_path = temp_dir.join(format!(
+        "{}.fl",
+        dir_path.file_name().unwrap_or_default().to_string_lossy()
+    ));
+
+    // Create the flist
+    let writer = fungi::Writer::new(&flist_path, true)
+        .await
+        .context("Failed to create flist file")?;
+
+    // Create a store for the server
+    let store = store::parse_router(&[format!(
+        "{}://{}",
+        store::server::SCHEME,
+        server_url.clone()
+    )])
+    .await
+    .context("Failed to create store")?;
+
+    // Temporarily disable logs for the upload function
+    let original_level = log::max_level();
+    log::set_max_level(log::LevelFilter::Off);
+
+    // Pack the directory into the flist iteratively to avoid stack overflow
+    let result =
+        tokio::task::spawn_blocking(move || crate::pack(writer, store, dir_path, false, None))
+            .await
+            .context("Failed to join spawned task")?;
+
+    result.await.context("Failed to create flist")?;
+
+    debug!("Flist created at: {}", flist_path.display());
+
+    // Upload the flist file if it was created
+    if flist_path.exists() {
+        debug!("Uploading flist file");
+
+        let flist_hash = upload(&flist_path, server_url.clone(), block_size)
+            .await
+            .context("Failed to upload flist file")?;
+
+        // Restore the original log level
+        log::set_max_level(original_level);
+
+        debug!("Flist uploaded successfully. Hash: {}", flist_hash);
+
+        info!("Website published successfully");
+        info!("Website hash: {}", flist_hash);
+        info!("Website URL: {}/website/{}/", server_url, flist_hash);
     }
 
     Ok(())

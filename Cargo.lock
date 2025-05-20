@@ -1050,6 +1050,7 @@ checksum = "8fcfdc7a0362c9f4444381a9e697c79d435fe65b52a37466fc2c1184cee9edc6"
 name = "fl-server"
 version = "0.1.0"
 dependencies = [
+ "aes-gcm",
  "anyhow",
  "askama",
  "async-trait",
@@ -1077,8 +1078,10 @@ dependencies = [
  "sha2",
  "sha256",
  "simple_logger",
+ "snap",
  "sqlx",
  "tempdir",
+ "tempfile",
  "thiserror",
  "time",
  "tokio",

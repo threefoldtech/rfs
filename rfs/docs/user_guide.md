@@ -249,15 +249,37 @@ rfs flist create <directory> --output /path/to/output.flist --server http://loca
 
 ---
 
+### 14. **Website Publish**
+
+Publish a website directory to the server.
+
+**Usage:**
+
+```bash
+rfs website-publish <directory_path> --server <server_url> [--block-size <size>]
+```
+
+**Options:**
+
+- `<directory_path>`: Path to the website directory to publish.
+- `--server`: Server URL (e.g., `http://localhost:8080`).
+- `--block-size`: Block size for splitting the files (default: 1MB).
+
+---
+
 ### Examples
 
 1. **Upload a File**:
 
+   Upload a file to the server with a custom block size:
+
    ```bash
-   rfs upload big_file.txt --server http://localhost:8080
+   rfs upload big_file.txt --server http://localhost:8080 --block-size 2097152
    ```
 
 2. **Download a Directory**:
+
+   Download a directory from the server using its FL hash:
 
    ```bash
    rfs download-dir abc123 --output ./mydir --server http://localhost:8080
@@ -265,15 +287,91 @@ rfs flist create <directory> --output /path/to/output.flist --server http://loca
 
 3. **Pack a Directory**:
 
+   Create an FL from a directory and upload it to a specific store:
+
    ```bash
    rfs pack --meta myflist.fl --store http://store.url --target ./mydir
    ```
 
 4. **Unpack an FL**:
 
+   Unpack the contents of an FL to a target directory while preserving file ownership:
+
    ```bash
-   rfs unpack --meta myflist.fl --cache /tmp/cache --target ./output
+   rfs unpack --meta myflist.fl --cache /tmp/cache --preserve-ownership --target ./output
    ```
+
+5. **Convert a Docker Image to an FL**:
+
+   Convert a Docker image to an FL and upload it to a store with authentication:
+
+   ```bash
+   rfs docker --image-name redis --store server://http://localhost:4000 --username myuser --password mypass
+   ```
+
+6. **Publish a Website**:
+
+   Publish a website directory to the server:
+
+   ```bash
+   rfs website-publish ./website --server http://localhost:8080
+   ```
+
+7. **Check if a File Exists**:
+
+   Verify if a file exists on the server using its hash:
+
+   ```bash
+   rfs exists myfilehash --server http://localhost:8080
+   ```
+
+8. **Create an FL from a Directory**:
+
+   Create an FL from a directory and save it to a specific output path:
+
+   ```bash
+   rfs flist create ./mydir --output ./mydir.flist --server http://localhost:8080
+   ```
+
+9. **Run the FL Server**:
+
+   Start the FL server with a specific configuration file:
+
+   ```bash
+   rfs server --config-path ./config.yaml --debug
+   ```
+
+10. **List FL Metadata Tags**:
+
+    List all tags in an FL metadata file:
+
+    ```bash
+    rfs config --meta myflist.fl tag list
+    ```
+
+11. **Add a Tag to FL Metadata**:
+
+    Add a custom tag to an FL metadata file:
+
+    ```bash
+    rfs config --meta myflist.fl tag add --tag key=value
+    ```
+
+12. **Delete a Tag from FL Metadata**:
+
+    Remove a specific tag from an FL metadata file:
+
+    ```bash
+    rfs config --meta myflist.fl tag delete --key key
+    ```
+
+13. **Clone an FL to Another Store**:
+
+    Clone the data of an FL to another store:
+
+    ```bash
+    rfs clone --meta myflist.fl --store http://newstore.url --cache /tmp/cache
+    ```
 
 ---
 
