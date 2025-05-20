@@ -20,6 +20,8 @@ mod download;
 pub use download::*;
 mod exist;
 pub use exist::*;
+mod sync;
+pub use sync::*;
 mod server_api;
 
 const PARALLEL_UPLOAD: usize = 20; // number of files we can upload in parallel

@@ -11,8 +11,8 @@ use clap::{ArgAction, Args, Parser, Subcommand};
 use rfs::fungi;
 use rfs::store::{self};
 use rfs::{
-    cache, config, download, download_dir, exists, exists_by_hash, publish_website, upload,
-    upload_dir,
+    cache, config, download, download_dir, exists, exists_by_hash, publish_website, sync_by_hash,
+    upload, upload_dir,
 };
 
 mod fs;
@@ -58,6 +58,26 @@ enum Commands {
     FlistCreate(FlistCreateOptions),
     /// Publish a website
     WebsitePublish(WebsitePublishOptions),
+    /// Sync files or blocks between two servers
+    Sync(SyncOptions),
+}
+
+#[derive(Args, Debug)]
+struct SyncOptions {
+    /// Hash of the file or block to sync
+    hash: String,
+
+    /// Source server URL (e.g., http://localhost:8080)
+    #[clap(short, long, default_value_t = String::from("http://localhost:8080"))]
+    source: String,
+
+    /// Destination server URL (e.g., http://localhost:8081)
+    #[clap(short, long, default_value_t = String::from("http://localhost:8081"))]
+    destination: String,
+
+    /// Block size for splitting files (only used if a file/directory is provided)
+    #[clap(short, long, default_value_t = 1024 * 1024)] // 1MB
+    block_size: usize,
 }
 
 #[derive(Args, Debug)]
@@ -411,6 +431,7 @@ fn main() -> Result<()> {
         Commands::Exists(opts) => hash_or_file_exists(opts),
         Commands::FlistCreate(opts) => create_flist(opts),
         Commands::WebsitePublish(opts) => publish_website_command(opts),
+        Commands::Sync(opts) => sync_command(opts),
     }
 }
 
@@ -799,6 +820,24 @@ fn download_directory(opts: DownloadDirOptions) -> Result<()> {
         download_dir(&opts.hash, &opts.output, opts.server)
             .await
             .context("Failed to download directory")?;
+        Ok(())
+    })
+}
+
+fn sync_command(opts: SyncOptions) -> Result<()> {
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .thread_stack_size(16 * 1024 * 1024)
+        .enable_all()
+        .build()
+        .unwrap();
+
+    rt.block_on(async move {
+        // Sync by hash between two servers
+        sync_by_hash(&opts.hash, &opts.source, &opts.destination)
+            .await
+            .context("Failed to sync between servers")?;
+
+        info!("Sync completed successfully");
         Ok(())
     })
 }
