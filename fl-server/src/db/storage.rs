@@ -38,6 +38,32 @@ impl Storage {
         let block_path = self.base_dir.join(&hash[..4]).join(hash);
         block_path.exists()
     }
+
+    pub fn list_blocks(&self) -> io::Result<Vec<String>> {
+        let mut block_hashes = Vec::new();
+
+        // Walk through the storage directory
+        for entry in fs::read_dir(&self.base_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_dir() {
+                // Each subdirectory represents the first 4 characters of the hash
+                for block_entry in fs::read_dir(path)? {
+                    let block_entry = block_entry?;
+                    let block_path = block_entry.path();
+                    if block_path.is_file() {
+                        if let Some(file_name) = block_path.file_name() {
+                            if let Some(hash) = file_name.to_str() {
+                                block_hashes.push(hash.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(block_hashes)
+    }
 }
 
 #[cfg(test)]

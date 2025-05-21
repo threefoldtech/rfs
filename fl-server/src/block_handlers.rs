@@ -19,8 +19,8 @@ use utoipa::{OpenApi, ToSchema};
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(upload_block_handler, get_block_handler, check_block_handler, verify_blocks_handler, get_blocks_by_hash_handler),
-    components(schemas(Block, VerifyBlocksRequest, VerifyBlocksResponse, BlocksResponse)),
+    paths(upload_block_handler, get_block_handler, check_block_handler, verify_blocks_handler, get_blocks_by_hash_handler, list_blocks_handler),
+    components(schemas(Block, VerifyBlocksRequest, VerifyBlocksResponse, BlocksResponse, ListBlocksParams, ListBlocksResponse)),
     tags(
         (name = "blocks", description = "Block management API")
     )
@@ -279,6 +279,69 @@ pub async fn get_blocks_by_hash_handler(
                     Err(ResponseError::InternalServerError)
                 }
             }
+        }
+    }
+}
+
+/// Query parameters for listing blocks
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct ListBlocksParams {
+    /// Page number (1-indexed)
+    #[schema(default = 1, minimum = 1)]
+    pub page: Option<u32>,
+    /// Number of items per page
+    #[schema(default = 50, minimum = 1, maximum = 100)]
+    pub per_page: Option<u32>,
+}
+
+/// Response for listing blocks
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct ListBlocksResponse {
+    /// List of block hashes
+    pub blocks: Vec<String>,
+    /// Total number of blocks
+    pub total: u64,
+    /// Current page number
+    pub page: u32,
+    /// Number of items per page
+    pub per_page: u32,
+}
+
+/// List all block hashes in the server with pagination
+#[utoipa::path(
+    get,
+    path = "/api/v1/blocks",
+    params(
+        ("page" = Option<u32>, Query, description = "Page number (1-indexed)"),
+        ("per_page" = Option<u32>, Query, description = "Number of items per page")
+    ),
+    responses(
+        (status = 200, description = "List of block hashes", body = ListBlocksResponse),
+        (status = 400, description = "Bad request"),
+        (status = 500, description = "Internal server error"),
+    )
+)]
+#[debug_handler]
+pub async fn list_blocks_handler(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<ListBlocksParams>,
+) -> Result<impl IntoResponse, ResponseError> {
+    let page = params.page.unwrap_or(1);
+    let per_page = params.per_page.unwrap_or(50).min(100);
+
+    match state.db.list_blocks(page, per_page).await {
+        Ok((blocks, total)) => {
+            let response = ListBlocksResponse {
+                blocks,
+                total,
+                page,
+                per_page,
+            };
+            Ok((StatusCode::OK, Json(response)))
+        }
+        Err(err) => {
+            log::error!("Failed to list blocks: {}", err);
+            Err(ResponseError::InternalServerError)
         }
     }
 }

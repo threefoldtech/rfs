@@ -227,4 +227,32 @@ impl DB for SqlDB {
             }
         }
     }
+
+    async fn list_blocks(
+        &self,
+        page: u32,
+        per_page: u32,
+    ) -> Result<(Vec<String>, u64), anyhow::Error> {
+        let blocks = match self.storage.list_blocks() {
+            Ok(blocks) => blocks,
+            Err(err) => {
+                log::error!("Error listing blocks: {}", err);
+                return Err(anyhow::anyhow!("Failed to list blocks: {}", err));
+            }
+        };
+
+        let total = blocks.len() as u64;
+        let start = page
+            .checked_sub(1)
+            .and_then(|p| p.checked_mul(per_page))
+            .ok_or_else(|| anyhow::anyhow!("Page or per_page value caused overflow"))?
+            as usize;
+        let end = (start + per_page as usize).min(total as usize);
+        let page_blocks = blocks
+            .into_iter()
+            .skip(start)
+            .take(end.saturating_sub(start))
+            .collect();
+        Ok((page_blocks, total))
+    }
 }

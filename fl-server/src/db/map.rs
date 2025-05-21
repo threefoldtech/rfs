@@ -59,4 +59,13 @@ impl DB for MapDB {
         // TODO:
         Ok(Vec::new())
     }
+
+    async fn list_blocks(
+        &self,
+        _page: u32,
+        _per_page: u32,
+    ) -> Result<(Vec<String>, u64), anyhow::Error> {
+        // TODO:
+        Ok((Vec::new(), 0))
+    }
 }

@@ -150,11 +150,7 @@ pub async fn upload<P: AsRef<Path>>(
     // Check for any errors in the upload tasks
     for result in results {
         match result {
-            Ok(task_result) => {
-                if let Err(e) = task_result {
-                    return Err(e);
-                }
-            }
+            Ok(task_result) => task_result?,
             Err(e) => {
                 return Err(anyhow::anyhow!("Upload task failed: {}", e));
             }

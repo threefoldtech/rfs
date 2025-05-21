@@ -29,6 +29,15 @@ struct BlocksResponse {
     blocks: Vec<(String, u64)>,
 }
 
+/// Response for listing blocks
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ListBlocksResponse {
+    pub blocks: Vec<String>,
+    pub total: u64,
+    pub page: u32,
+    pub per_page: u32,
+}
+
 /// Downloads blocks associated with a hash (file hash or block hash)
 /// Returns a vector of (block_hash, block_index) pairs
 pub async fn get_blocks_by_hash(hash: &str, server_url: String) -> Result<Vec<(String, u64)>> {
@@ -201,4 +210,44 @@ pub async fn check_block(server_url: &str, hash: &str) -> Result<bool> {
             response.status()
         )),
     }
+}
+
+/// Lists blocks available on the server with pagination.
+/// Returns a vector of (block_hash, block_index) pairs.
+pub async fn list_blocks(
+    server_url: &str,
+    page_size: usize,
+    page: usize,
+) -> Result<(Vec<String>, u64)> {
+    let blocks_url = format!(
+        "{}/api/v1/blocks?page={}&page_size={}",
+        server_url, page, page_size
+    );
+
+    // Create HTTP client
+    let client = Client::new();
+
+    // Send GET request to get blocks for the current page
+    let response = client
+        .get(&blocks_url)
+        .send()
+        .await
+        .context("Failed to list blocks from server")?;
+
+    // Check if the request was successful
+    if !response.status().is_success() {
+        return Err(anyhow::anyhow!(
+            "Server returned error: {} - {}",
+            response.status(),
+            response.text().await?
+        ));
+    }
+
+    // Parse the response
+    let blocks_response: ListBlocksResponse = response
+        .json()
+        .await
+        .context("Failed to parse blocks response")?;
+
+    Ok((blocks_response.blocks, blocks_response.total))
 }

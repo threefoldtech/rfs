@@ -24,6 +24,11 @@ pub trait DB: Send + Sync {
         &self,
         file_hash: &str,
     ) -> Result<Vec<(String, u64)>, anyhow::Error>;
+    async fn list_blocks(
+        &self,
+        page: u32,
+        per_page: u32,
+    ) -> Result<(Vec<String>, u64), anyhow::Error>;
 }
 
 pub enum DBType {
@@ -89,6 +94,17 @@ impl DB for DBType {
         match self {
             DBType::MapDB(db) => db.get_file_blocks_ordered(file_hash).await,
             DBType::SqlDB(db) => db.get_file_blocks_ordered(file_hash).await,
+        }
+    }
+
+    async fn list_blocks(
+        &self,
+        page: u32,
+        per_page: u32,
+    ) -> Result<(Vec<String>, u64), anyhow::Error> {
+        match self {
+            DBType::MapDB(db) => db.list_blocks(page, per_page).await,
+            DBType::SqlDB(db) => db.list_blocks(page, per_page).await,
         }
     }
 }

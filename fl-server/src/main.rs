@@ -145,6 +145,7 @@ async fn app() -> Result<()> {
             "/api/v1/blocks/:hash",
             get(block_handlers::get_blocks_by_hash_handler),
         )
+        .route("/api/v1/blocks", get(block_handlers::list_blocks_handler))
         .route("/api/v1/file", post(file_handlers::upload_file_handler))
         .route("/api/v1/file/:hash", get(file_handlers::get_file_handler))
         .route(

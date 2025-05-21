@@ -11,8 +11,8 @@ use clap::{ArgAction, Args, Parser, Subcommand};
 use rfs::fungi;
 use rfs::store::{self};
 use rfs::{
-    cache, config, download, download_dir, exists, exists_by_hash, publish_website, sync_by_hash,
-    upload, upload_dir,
+    cache, config, download, download_dir, exists, exists_by_hash, publish_website, sync, upload,
+    upload_dir,
 };
 
 mod fs;
@@ -65,7 +65,8 @@ enum Commands {
 #[derive(Args, Debug)]
 struct SyncOptions {
     /// Hash of the file or block to sync
-    hash: String,
+    #[clap(short, long)]
+    hash: Option<String>,
 
     /// Source server URL (e.g., http://localhost:8080)
     #[clap(short, long, default_value_t = String::from("http://localhost:8080"))]
@@ -832,12 +833,9 @@ fn sync_command(opts: SyncOptions) -> Result<()> {
         .unwrap();
 
     rt.block_on(async move {
-        // Sync by hash between two servers
-        sync_by_hash(&opts.hash, &opts.source, &opts.destination)
+        sync(opts.hash.as_deref(), &opts.source, &opts.destination)
             .await
             .context("Failed to sync between servers")?;
-
-        info!("Sync completed successfully");
         Ok(())
     })
 }
