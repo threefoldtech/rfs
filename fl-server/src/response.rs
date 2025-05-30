@@ -13,6 +13,7 @@ use utoipa::ToSchema;
 use crate::{
     auth::SignInResponse,
     config::Job,
+    file_handlers::FileUploadResponse,
     handlers::{FlistState, PreviewResponse},
 };
 
@@ -82,6 +83,8 @@ pub enum ResponseResult {
     PreviewFlist(PreviewResponse),
     SignedIn(SignInResponse),
     DirTemplate(DirListTemplate),
+    BlockUploaded(String),
+    FileUploaded(FileUploadResponse),
     Res(hyper::Response<tower_http::services::fs::ServeFileSystemResponseBody>),
 }
 
@@ -105,6 +108,17 @@ impl IntoResponse for ResponseResult {
             ResponseResult::Flists(flists) => (StatusCode::OK, Json(flists)).into_response(),
             ResponseResult::PreviewFlist(content) => {
                 (StatusCode::OK, Json(content)).into_response()
+            }
+            ResponseResult::BlockUploaded(hash) => (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "hash": hash,
+                    "message": "Block processed successfully"
+                })),
+            )
+                .into_response(),
+            ResponseResult::FileUploaded(response) => {
+                (StatusCode::CREATED, Json(response)).into_response()
             }
             ResponseResult::DirTemplate(t) => match t.render() {
                 Ok(html) => Html(html).into_response(),

@@ -14,6 +14,15 @@ pub use clone::clone;
 pub mod config;
 mod docker;
 pub use docker::DockerImageToFlist;
+mod upload;
+pub use upload::*;
+mod download;
+pub use download::*;
+mod exist;
+pub use exist::*;
+mod sync;
+pub use sync::*;
+mod server_api;
 
 const PARALLEL_UPLOAD: usize = 20; // number of files we can upload in parallel
 const PARALLEL_DOWNLOAD: usize = 20; // number of files we can download in parallel

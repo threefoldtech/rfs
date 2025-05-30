@@ -4,3 +4,5 @@ result
 .direnv/
 fl-server/flists
 fl-server/config.toml
+*.db
+storage/

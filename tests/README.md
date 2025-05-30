@@ -29,7 +29,7 @@ make clean
 
 ## Test Files
 
-- `e2e_tests.sh`: End-to-end tests for all RFS commands
+- `e2e_tests.sh` and `e2e_tests_updated.sh`: End-to-end tests for all RFS commands
 - `performance_tests.sh`: Performance tests focusing on parallel upload/download
 - `docker_test.rs`: Integration test for the Docker functionality
 - `parallel_download_test.rs`: Integration test for parallel download feature
@@ -44,7 +44,8 @@ make clean
 
 ## Notes
 
-- The end-to-end tests create temporary directories in `/tmp/rfs-e2e-tests`
+- The end-to-end tests create temporary directories in `/tmp/rfs-e2e-tests`, also automatically start local servers on port 8080 and 8081 for testing and shut them down after tests complete
 - The performance tests create temporary directories in `/tmp/rfs-performance-tests`
+- The upload/download tests create temporary directories in `/tmp/rfs-upload-download-tests`
 - Some tests require sudo access (mount tests)
 - Docker tests will be skipped if Docker is not available

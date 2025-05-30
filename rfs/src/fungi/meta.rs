@@ -225,6 +225,15 @@ impl Reader {
         Ok(Self { pool })
     }
 
+    pub async fn root_inode(&self) -> Result<Inode> {
+        let inode: Inode = sqlx::query_as(r#"select inode.*, extra.data
+                                                    from inode left join extra on inode.ino = extra.ino
+                                                    where inode.parent = 0 limit 1;"#)
+                    .fetch_one(&self.pool).await?;
+
+        Ok(inode)
+    }
+
     pub async fn inode(&self, ino: Ino) -> Result<Inode> {
         let inode: Inode = sqlx::query_as(r#"select inode.*, extra.data
                                                     from inode left join extra on inode.ino = extra.ino
