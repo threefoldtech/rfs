@@ -128,7 +128,9 @@ pub async fn authorize(
         Some(t) => t.to_string(),
         None => {
             log::error!("failed to get token string");
-            return Err(ResponseError::InternalServerError);
+            return Err(ResponseError::Unauthorized(
+                "Authorization token is not provided".to_string(),
+            ));
         }
     };
 

@@ -12,7 +12,7 @@ pub struct SqlDB {
 static SCHEMA: &str = include_str!("../../schema/schema.sql");
 
 impl SqlDB {
-    pub async fn new(database_filepath: &str, storage_dir: &str) -> Self {
+    pub async fn new(database_filepath: &str, storage_dir: &str, users: &[User]) -> Self {
         // Check if the database file exists, and create it if it doesn't
         if !std::path::Path::new(database_filepath).exists() {
             std::fs::File::create(database_filepath).expect("Failed to create database file");
@@ -27,6 +27,13 @@ impl SqlDB {
             .expect("Failed to initialize database schema");
 
         let storage = Storage::new(storage_dir);
+
+        for user in users {
+            if let Err(err) = Self::insert_user(&pool, user).await {
+                log::error!("Failed to insert user '{}': {}", user.username, err);
+            }
+        }
+
         Self { pool, storage }
     }
 
@@ -60,6 +67,19 @@ impl SqlDB {
                 false
             }
         }
+    }
+
+    pub async fn insert_user(pool: &SqlitePool, user: &User) -> Result<(), anyhow::Error> {
+        query(
+            "INSERT OR IGNORE INTO users (username, password, created_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
+        )
+        .bind(&user.username)
+        .bind(&user.password)
+        .execute(pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to insert user: {}", e))?;
+
+        Ok(())
     }
 }
 

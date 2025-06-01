@@ -157,6 +157,7 @@ pub async fn upload_block(
     data: Vec<u8>,
     file_hash: String,
     idx: u64,
+    token: String,
 ) -> Result<()> {
     let upload_block_url = format!("{}/api/v1/block", server_url);
 
@@ -166,6 +167,7 @@ pub async fn upload_block(
     let response = client
         .post(&upload_block_url)
         .header("Content-Type", "application/octet-stream")
+        .header("Authorization", format!("Bearer {}", token)) // Add Authorization header
         .query(&[("file_hash", &file_hash), ("idx", &idx.to_string())])
         .body(data)
         .send()

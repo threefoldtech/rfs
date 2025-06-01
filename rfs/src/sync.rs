@@ -10,15 +10,25 @@ const PARALLEL_OPERATIONS: usize = 20;
 const DEFAULT_PAGE_SIZE: usize = 50;
 
 /// Syncs a file or block between two servers using its hash
-pub async fn sync(hash: Option<&str>, source_server: &str, dest_server: &str) -> Result<()> {
+pub async fn sync(
+    hash: Option<&str>,
+    source_server: &str,
+    dest_server: &str,
+    token: &str,
+) -> Result<()> {
     if hash.is_some() {
-        return sync_blocks(hash.unwrap(), source_server, dest_server).await;
+        return sync_blocks(hash.unwrap(), source_server, dest_server, token).await;
     }
-    sync_all_blocks(source_server, dest_server, Some(DEFAULT_PAGE_SIZE)).await
+    sync_all_blocks(source_server, dest_server, Some(DEFAULT_PAGE_SIZE), token).await
 }
 
 /// Syncs all blocks of a file between two servers
-async fn sync_blocks(file_hash: &str, source_server: &str, dest_server: &str) -> Result<()> {
+async fn sync_blocks(
+    file_hash: &str,
+    source_server: &str,
+    dest_server: &str,
+    token: &str,
+) -> Result<()> {
     // Get all blocks for the file from source server
     info!("Getting blocks for file hash: {}", file_hash);
     let blocks = server_api::get_blocks_by_hash(file_hash, source_server.to_string()).await?;
@@ -83,6 +93,7 @@ async fn sync_blocks(file_hash: &str, source_server: &str, dest_server: &str) ->
             let block_idx = *block_idx;
             let permit = semaphore.clone();
             let client = client.clone();
+            let token = token.to_string();
 
             futures::future::ready(Some(async move {
                 // Acquire a permit from the semaphore
@@ -104,6 +115,7 @@ async fn sync_blocks(file_hash: &str, source_server: &str, dest_server: &str) ->
                             content.to_vec(),
                             file_hash,
                             block_idx,
+                            token.clone(),
                         )
                         .await
                         .map_err(|e| (block_hash.clone(), e))
@@ -138,6 +150,7 @@ pub async fn sync_all_blocks(
     source_server: &str,
     dest_server: &str,
     page_size: Option<usize>,
+    token: &str,
 ) -> Result<()> {
     info!("Starting full block sync between servers");
     info!("Source server: {}", source_server);
@@ -184,6 +197,7 @@ pub async fn sync_all_blocks(
                 let dest_server = dest_server.to_string();
                 let permit = semaphore.clone();
                 let client = client.clone();
+                let token = token.to_string();
 
                 async move {
                     // Acquire a permit from the semaphore
@@ -214,8 +228,9 @@ pub async fn sync_all_blocks(
                                         dest_server,
                                         block_hash.clone(),
                                         content.to_vec(),
-                                        "".to_string(), // file_hash placeholder
-                                        0,              // block_index placeholder
+                                        "".to_string(),
+                                        0,
+                                        token.clone(),
                                     )
                                     .await
                                     .map_err(|e| (block_hash.clone(), e))

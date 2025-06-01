@@ -85,7 +85,7 @@ async fn app() -> Result<()> {
     let db: Arc<db::DBType> = if let Some(sqlite_path) = &config.sqlite_path {
         log::info!("Using SQLite database at: {}", sqlite_path);
         Arc::new(db::DBType::SqlDB(
-            db::sqlite::SqlDB::new(sqlite_path, &config.storage_dir).await,
+            db::sqlite::SqlDB::new(sqlite_path, &config.storage_dir, &config.users.clone()).await,
         ))
     } else {
         log::info!("Using in-memory MapDB database");
@@ -128,7 +128,13 @@ async fn app() -> Result<()> {
             get(handlers::preview_flist_handler),
         )
         .route("/api/v1/fl", get(handlers::list_flists_handler))
-        .route("/api/v1/block", post(block_handlers::upload_block_handler))
+        .route(
+            "/api/v1/block",
+            post(block_handlers::upload_block_handler).layer(middleware::from_fn_with_state(
+                app_state.clone(),
+                auth::authorize,
+            )),
+        )
         .route(
             "/api/v1/block/:hash",
             get(block_handlers::get_block_handler),
@@ -146,7 +152,13 @@ async fn app() -> Result<()> {
             get(block_handlers::get_blocks_by_hash_handler),
         )
         .route("/api/v1/blocks", get(block_handlers::list_blocks_handler))
-        .route("/api/v1/file", post(file_handlers::upload_file_handler))
+        .route(
+            "/api/v1/file",
+            post(file_handlers::upload_file_handler).layer(middleware::from_fn_with_state(
+                app_state.clone(),
+                auth::authorize,
+            )),
+        )
         .route("/api/v1/file/:hash", get(file_handlers::get_file_handler))
         .route(
             "/website/:website_hash/*path",

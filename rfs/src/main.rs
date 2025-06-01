@@ -79,6 +79,10 @@ struct SyncOptions {
     /// Block size for splitting files (only used if a file/directory is provided)
     #[clap(short, long, default_value_t = 1024 * 1024)] // 1MB
     block_size: usize,
+
+    /// authentication token for the server
+    #[clap(long, default_value_t = std::env::var("RFS_TOKEN").unwrap_or_default())]
+    token: String,
 }
 
 #[derive(Args, Debug)]
@@ -93,6 +97,10 @@ struct WebsitePublishOptions {
     /// Block size for splitting the files
     #[clap(short, long, default_value_t = 1024 * 1024)] // 1MB
     block_size: usize,
+
+    /// authentication token for the server
+    #[clap(long, default_value_t = std::env::var("RFS_TOKEN").unwrap_or_default())]
+    token: String,
 }
 
 #[derive(Args, Debug)]
@@ -261,6 +269,10 @@ struct UploadFileOptions {
     /// block size for splitting the file
     #[clap(short, long, default_value_t = 1024 * 1024)] // 1MB
     block_size: usize,
+
+    /// authentication token for the server
+    #[clap(long, default_value_t = std::env::var("RFS_TOKEN").unwrap_or_default())]
+    token: String,
 }
 
 #[derive(Args, Debug)]
@@ -283,6 +295,10 @@ struct UploadDirOptions {
     /// path to output the flist file
     #[clap(long)]
     flist_output: Option<String>,
+
+    /// authentication token for the server
+    #[clap(long, default_value_t = std::env::var("RFS_TOKEN").unwrap_or_default())]
+    token: String,
 }
 
 #[derive(Args, Debug)]
@@ -384,6 +400,10 @@ struct FlistCreateOptions {
     /// block size for splitting the files
     #[clap(short, long, default_value_t = 1024 * 1024)] // 1MB
     block_size: usize,
+
+    /// authentication token for the server
+    #[clap(long, default_value_t = std::env::var("RFS_TOKEN").unwrap_or_default())]
+    token: String,
 }
 
 /// Parse a single key-value pair
@@ -714,7 +734,7 @@ fn upload_file(opts: UploadFileOptions) -> Result<()> {
         }
 
         // Upload a single file
-        upload(&opts.path, opts.server, Some(opts.block_size))
+        upload(&opts.path, opts.server, Some(opts.block_size), &opts.token)
             .await
             .context("Failed to upload file")?;
 
@@ -741,6 +761,7 @@ fn upload_directory(opts: UploadDirOptions) -> Result<()> {
             &opts.path,
             opts.server,
             Some(opts.block_size),
+            &opts.token,
             opts.create_flist,
             opts.flist_output.as_deref(),
         )
@@ -763,6 +784,7 @@ fn create_flist(opts: FlistCreateOptions) -> Result<()> {
             &opts.directory,
             opts.server,
             Some(opts.block_size),
+            &opts.token,
             true,
             Some(&opts.output),
         )
@@ -833,9 +855,14 @@ fn sync_command(opts: SyncOptions) -> Result<()> {
         .unwrap();
 
     rt.block_on(async move {
-        sync(opts.hash.as_deref(), &opts.source, &opts.destination)
-            .await
-            .context("Failed to sync between servers")?;
+        sync(
+            opts.hash.as_deref(),
+            &opts.source,
+            &opts.destination,
+            &opts.token,
+        )
+        .await
+        .context("Failed to sync between servers")?;
         Ok(())
     })
 }
@@ -848,7 +875,7 @@ fn publish_website_command(opts: WebsitePublishOptions) -> Result<()> {
         .unwrap();
 
     rt.block_on(async move {
-        publish_website(&opts.path, opts.server, Some(opts.block_size))
+        publish_website(&opts.path, opts.server, Some(opts.block_size), &opts.token)
             .await
             .context("Failed to publish website")?;
         Ok(())
