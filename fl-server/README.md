@@ -31,6 +31,10 @@ flist_dir="A directory to save each user flists, required, example: 'flists'"
 jwt_secret="secret for jwt, required, example: 'secret'"
 jwt_expire_hours="Life time for jwt token in hours, required, example: 5, validation: between [1, 24]"
 
+sqlite_path="path of database file, example: 'fl-server.db'"
+storage_dir="path of server storage directory for blocks, example: 'storage'"
+block_size=
+
 [[users]] # list of authorized user in the server
 username = "user1"
 password = "password1"

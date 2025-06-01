@@ -66,6 +66,10 @@ pub async fn upload<P: AsRef<Path>>(
     block_size: Option<usize>,
     token: &str,
 ) -> Result<String> {
+    if token.is_empty() {
+        return Err(anyhow::anyhow!("Authentication token is required. Use --token option or set RFS_TOKEN environment variable."));
+    }
+
     let block_size = block_size.unwrap_or(BLOCK_SIZE); // Use provided block size or default
     let file_path = file_path.as_ref();
 
@@ -173,6 +177,10 @@ pub async fn upload_dir<P: AsRef<Path>>(
     create_flist: bool,
     flist_output: Option<&str>,
 ) -> Result<()> {
+    if token.is_empty() {
+        return Err(anyhow::anyhow!("Authentication token is required. Use --token option or set RFS_TOKEN environment variable."));
+    }
+
     let dir_path = dir_path.as_ref().to_path_buf();
 
     info!("Uploading directory: {}", dir_path.display());
@@ -276,6 +284,10 @@ pub async fn publish_website<P: AsRef<Path>>(
     block_size: Option<usize>,
     token: &str,
 ) -> Result<()> {
+    if token.is_empty() {
+        return Err(anyhow::anyhow!("Authentication token is required. Use --token option or set RFS_TOKEN environment variable."));
+    }
+
     let dir_path = dir_path.as_ref().to_path_buf();
 
     debug!("Uploading directory: {}", dir_path.display());
@@ -348,4 +360,13 @@ pub async fn publish_website<P: AsRef<Path>>(
     }
 
     Ok(())
+}
+
+pub async fn get_token_from_server(
+    server_url: &str,
+    username: &str,
+    password: &str,
+) -> Result<String> {
+    let client = reqwest::Client::new();
+    server_api::signin(&client, server_url, username, password).await
 }

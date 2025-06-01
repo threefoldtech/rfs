@@ -11,8 +11,8 @@ use clap::{ArgAction, Args, Parser, Subcommand};
 use rfs::fungi;
 use rfs::store::{self};
 use rfs::{
-    cache, config, download, download_dir, exists, exists_by_hash, publish_website, sync, upload,
-    upload_dir,
+    cache, config, download, download_dir, exists, exists_by_hash, get_token_from_server,
+    publish_website, sync, upload, upload_dir,
 };
 
 mod fs;
@@ -60,6 +60,8 @@ enum Commands {
     WebsitePublish(WebsitePublishOptions),
     /// Sync files or blocks between two servers
     Sync(SyncOptions),
+    /// retrieve a token using username and password
+    Token(TokenOptions),
 }
 
 #[derive(Args, Debug)]
@@ -406,6 +408,21 @@ struct FlistCreateOptions {
     token: String,
 }
 
+#[derive(Args, Debug)]
+struct TokenOptions {
+    /// username for authentication
+    #[clap(short, long)]
+    username: String,
+
+    /// password for authentication
+    #[clap(short, long)]
+    password: String,
+
+    /// server URL (e.g., http://localhost:8080)
+    #[clap(short, long, default_value_t = String::from("http://localhost:8080"))]
+    server: String,
+}
+
 /// Parse a single key-value pair
 fn parse_key_val<T, U>(s: &str) -> Result<(T, U), Box<dyn Error + Send + Sync + 'static>>
 where
@@ -453,7 +470,24 @@ fn main() -> Result<()> {
         Commands::FlistCreate(opts) => create_flist(opts),
         Commands::WebsitePublish(opts) => publish_website_command(opts),
         Commands::Sync(opts) => sync_command(opts),
+        Commands::Token(opts) => get_token(opts),
     }
+}
+
+fn get_token(opts: TokenOptions) -> Result<()> {
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .thread_stack_size(16 * 1024 * 1024)
+        .enable_all()
+        .build()
+        .unwrap();
+
+    rt.block_on(async move {
+        let token = get_token_from_server(&opts.server, &opts.username, &opts.password)
+            .await
+            .context("Failed to retrieve token")?;
+        println!("Token: {}", token);
+        Ok(())
+    })
 }
 
 fn pack(opts: PackOptions) -> Result<()> {

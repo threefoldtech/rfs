@@ -38,6 +38,11 @@ pub struct ListBlocksResponse {
     pub per_page: u32,
 }
 
+#[derive(Deserialize)]
+pub struct SigninResponse {
+    pub access_token: String,
+}
+
 /// Downloads blocks associated with a hash (file hash or block hash)
 /// Returns a vector of (block_hash, block_index) pairs
 pub async fn get_blocks_by_hash(hash: &str, server_url: String) -> Result<Vec<(String, u64)>> {
@@ -252,4 +257,29 @@ pub async fn list_blocks(
         .context("Failed to parse blocks response")?;
 
     Ok((blocks_response.blocks, blocks_response.total))
+}
+
+pub async fn signin(
+    client: &Client,
+    server_url: &str,
+    username: &str,
+    password: &str,
+) -> Result<String> {
+    let response = client
+        .post(format!("{}/api/v1/signin", server_url))
+        .json(&serde_json::json!({
+            "username": username,
+            "password": password,
+        }))
+        .send()
+        .await
+        .context("Failed to send request to signin endpoint")?;
+
+    if response.status().is_success() {
+        let signin_response: SigninResponse =
+            response.json().await.context("Failed to parse response")?;
+        Ok(signin_response.access_token)
+    } else {
+        anyhow::bail!("Failed to retrieve token: {}", response.status());
+    }
 }

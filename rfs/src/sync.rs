@@ -16,6 +16,10 @@ pub async fn sync(
     dest_server: &str,
     token: &str,
 ) -> Result<()> {
+    if token.is_empty() {
+        return Err(anyhow::anyhow!("Authentication token is required. Use --token option or set RFS_TOKEN environment variable."));
+    }
+
     if hash.is_some() {
         return sync_blocks(hash.unwrap(), source_server, dest_server, token).await;
     }
