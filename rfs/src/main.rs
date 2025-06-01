@@ -12,8 +12,8 @@ use clap::{ArgAction, Args, Parser, Subcommand};
 use rfs::fungi;
 use rfs::store::{self};
 use rfs::{
-    cache, config, download, download_dir, exists, exists_by_hash, publish_website, sync, upload,
-    upload_dir, tree_visitor::TreeVisitor,
+    cache, config, download, download_dir, exists, exists_by_hash, publish_website, sync,
+    tree_visitor::TreeVisitor, upload, upload_dir,
 };
 
 mod fs;
@@ -83,7 +83,7 @@ enum FlistCommands {
 struct FlistInspectionOptions {
     /// flist path or hash
     target: String,
-    
+
     /// server URL for hash-based operations
     #[clap(long)]
     server_url: Option<String>,
@@ -519,30 +519,33 @@ async fn flist_tree(opts: FlistTreeOptions) -> Result<()> {
     if opts.server_url.is_some() {
         let server_url = opts.server_url.unwrap();
         let temp_flist = format!("/tmp/flist_{}.fl", &opts.target);
-        
+
         download(&opts.target, &temp_flist, server_url)
             .await
             .context("Failed to download flist from server")?;
-        
+
         let meta = fungi::Reader::new(&temp_flist)
             .await
             .context("failed to initialize metadata database from downloaded flist")?;
-        
+
         let mut visitor = TreeVisitor::new();
         meta.walk(&mut visitor).await?;
-        
+
         if let Err(e) = tokio::fs::remove_file(&temp_flist).await {
-            warn!("Failed to clean up temporary flist file {}: {}", temp_flist, e);
+            warn!(
+                "Failed to clean up temporary flist file {}: {}",
+                temp_flist, e
+            );
         }
     } else {
         let meta = fungi::Reader::new(&opts.target)
             .await
             .context("failed to initialize metadata database")?;
-        
+
         let mut visitor = TreeVisitor::new();
         meta.walk(&mut visitor).await?;
     }
-    
+
     Ok(())
 }
 
@@ -550,31 +553,34 @@ async fn flist_inspect(opts: FlistInspectOptions) -> Result<()> {
     if opts.server_url.is_some() {
         let server_url = opts.server_url.unwrap();
         let temp_flist = format!("/tmp/flist_{}.fl", &opts.target);
-        
+
         download(&opts.target, &temp_flist, server_url)
             .await
             .context("Failed to download flist from server")?;
-        
+
         let meta = fungi::Reader::new(&temp_flist)
             .await
             .context("failed to initialize metadata database from downloaded flist")?;
-        
+
         let mut visitor = rfs::flist_inspector::InspectVisitor::new();
         meta.walk(&mut visitor).await?;
-        
+
         if let Err(e) = tokio::fs::remove_file(&temp_flist).await {
-            warn!("Failed to clean up temporary flist file {}: {}", temp_flist, e);
+            warn!(
+                "Failed to clean up temporary flist file {}: {}",
+                temp_flist, e
+            );
         }
     } else {
         let meta = fungi::Reader::new(&opts.target)
             .await
             .context("failed to initialize metadata database")?;
-        
+
         let mut visitor = rfs::flist_inspector::InspectVisitor::new();
         meta.walk(&mut visitor).await?;
         visitor.print_summary(&opts.target);
     }
-    
+
     Ok(())
 }
 

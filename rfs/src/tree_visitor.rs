@@ -9,7 +9,7 @@ impl TreeVisitor {
     pub fn new() -> Self {
         Self {}
     }
-    
+
     fn print_entry(&self, path: &Path, node: &Inode) {
         // Calculate depth from the path
         let depth = path.components().count().saturating_sub(1);
@@ -20,12 +20,13 @@ impl TreeVisitor {
             FileType::Link => "🔗",
             _ => "❓",
         };
-        
+
         // Get just the filename
-        let name = path.file_name()
+        let name = path
+            .file_name()
             .map(|n| n.to_string_lossy())
             .unwrap_or_else(|| path.to_string_lossy());
-        
+
         println!("{}{} {}", indent, file_type, name);
     }
 }

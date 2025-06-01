@@ -10,11 +10,11 @@ pub struct InspectVisitor {
 
 impl InspectVisitor {
     pub fn new() -> Self {
-        Self { 
-            file_count: 0, 
-            dir_count: 0, 
-            link_count: 0, 
-            total_size: 0 
+        Self {
+            file_count: 0,
+            dir_count: 0,
+            link_count: 0,
+            total_size: 0,
         }
     }
 
@@ -51,7 +51,7 @@ impl InspectVisitor {
         println!("  Device: {}", node.rdev);
         println!("  Created: {}", node.ctime);
         println!("  Modified: {}", node.mtime);
-        
+
         if let Some(data) = &node.data {
             if node.mode.file_type() == FileType::Link {
                 if let Ok(target) = String::from_utf8(data.clone()) {
@@ -70,13 +70,13 @@ impl WalkVisitor for InspectVisitor {
     async fn visit(&mut self, path: &Path, node: &Inode) -> Result<Walk> {
         // Print metadata for each file/directory
         self.print_metadata(path, node);
-        
+
         match node.mode.file_type() {
             FileType::Dir => self.dir_count += 1,
             FileType::Regular => {
                 self.file_count += 1;
                 self.total_size += node.size;
-            },
+            }
             FileType::Link => self.link_count += 1,
             _ => {}
         }
