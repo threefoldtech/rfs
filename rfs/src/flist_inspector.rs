@@ -68,7 +68,6 @@ impl InspectVisitor {
 #[async_trait::async_trait]
 impl WalkVisitor for InspectVisitor {
     async fn visit(&mut self, path: &Path, node: &Inode) -> Result<Walk> {
-        // Print metadata for each file/directory
         self.print_metadata(path, node);
 
         match node.mode.file_type() {

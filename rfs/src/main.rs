@@ -76,7 +76,7 @@ enum FlistCommands {
     /// show tree structure of an flist
     Tree(FlistInspectionOptions),
     /// inspect an flist by path or hash
-    Inspect(FlistInspectOptions),
+    Inspect(FlistInspectionOptions),
 }
 
 #[derive(Args, Debug)]
@@ -515,7 +515,7 @@ fn flist_command(opts: FlistOptions) -> Result<()> {
     })
 }
 
-async fn flist_tree(opts: FlistTreeOptions) -> Result<()> {
+async fn flist_tree(opts: FlistInspectionOptions) -> Result<()> {
     if opts.server_url.is_some() {
         let server_url = opts.server_url.unwrap();
         let temp_flist = format!("/tmp/flist_{}.fl", &opts.target);
@@ -549,7 +549,7 @@ async fn flist_tree(opts: FlistTreeOptions) -> Result<()> {
     Ok(())
 }
 
-async fn flist_inspect(opts: FlistInspectOptions) -> Result<()> {
+async fn flist_inspect(opts: FlistInspectionOptions) -> Result<()> {
     if opts.server_url.is_some() {
         let server_url = opts.server_url.unwrap();
         let temp_flist = format!("/tmp/flist_{}.fl", &opts.target);
