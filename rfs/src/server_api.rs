@@ -43,6 +43,15 @@ pub struct SigninResponse {
     pub access_token: String,
 }
 
+/// Response for user blocks endpoint
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UserBlocksResponse {
+    /// List of blocks with their sizes
+    pub blocks: Vec<(String, u64)>,
+    /// Total number of blocks
+    pub total: u64,
+}
+
 /// Downloads blocks associated with a hash (file hash or block hash)
 /// Returns a vector of (block_hash, block_index) pairs
 pub async fn get_blocks_by_hash(hash: &str, server_url: String) -> Result<Vec<(String, u64)>> {
@@ -282,4 +291,37 @@ pub async fn signin(
     } else {
         anyhow::bail!("Failed to retrieve token: {}", response.status());
     }
+}
+
+/// Get all blocks uploaded by the authenticated user
+pub async fn get_user_blocks(server_url: &str, token: &str) -> Result<UserBlocksResponse> {
+    let url = format!("{}/api/v1/user/blocks", server_url);
+
+    // Create HTTP client
+    let client = Client::new();
+
+    // Send GET request with authorization header
+    let response = client
+        .get(&url)
+        .header("Authorization", format!("Bearer {}", token))
+        .send()
+        .await
+        .context("Failed to get user blocks from server")?;
+
+    // Check if the request was successful
+    if !response.status().is_success() {
+        return Err(anyhow::anyhow!(
+            "Server returned error: {} - {}",
+            response.status(),
+            response.text().await?
+        ));
+    }
+
+    // Parse the response
+    let blocks_response: UserBlocksResponse = response
+        .json()
+        .await
+        .context("Failed to parse user blocks response")?;
+
+    Ok(blocks_response)
 }

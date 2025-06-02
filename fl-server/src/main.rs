@@ -153,6 +153,13 @@ async fn app() -> Result<()> {
         )
         .route("/api/v1/blocks", get(block_handlers::list_blocks_handler))
         .route(
+            "/api/v1/user/blocks",
+            get(block_handlers::get_user_blocks_handler).layer(middleware::from_fn_with_state(
+                app_state.clone(),
+                auth::authorize,
+            )),
+        )
+        .route(
             "/api/v1/file",
             post(file_handlers::upload_file_handler).layer(middleware::from_fn_with_state(
                 app_state.clone(),

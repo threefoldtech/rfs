@@ -15,6 +15,7 @@ pub trait DB: Send + Sync {
         data: Vec<u8>,
         file_hash: &str,
         block_index: u64,
+        user_id: i64,
     ) -> Result<bool, anyhow::Error>;
     async fn get_block(&self, hash: &str) -> Result<Option<Vec<u8>>, anyhow::Error>;
 
@@ -29,6 +30,9 @@ pub trait DB: Send + Sync {
         page: u32,
         per_page: u32,
     ) -> Result<(Vec<String>, u64), anyhow::Error>;
+
+    // Get all blocks related to a user
+    async fn get_user_blocks(&self, user_id: i64) -> Result<Vec<(String, u64)>, anyhow::Error>;
 }
 
 pub enum DBType {
@@ -59,14 +63,15 @@ impl DB for DBType {
         data: Vec<u8>,
         file_hash: &str,
         block_index: u64,
+        user_id: i64,
     ) -> Result<bool, anyhow::Error> {
         match self {
             DBType::MapDB(db) => {
-                db.store_block(block_hash, data, file_hash, block_index)
+                db.store_block(block_hash, data, file_hash, block_index, user_id)
                     .await
             }
             DBType::SqlDB(db) => {
-                db.store_block(block_hash, data, file_hash, block_index)
+                db.store_block(block_hash, data, file_hash, block_index, user_id)
                     .await
             }
         }
@@ -105,6 +110,13 @@ impl DB for DBType {
         match self {
             DBType::MapDB(db) => db.list_blocks(page, per_page).await,
             DBType::SqlDB(db) => db.list_blocks(page, per_page).await,
+        }
+    }
+
+    async fn get_user_blocks(&self, user_id: i64) -> Result<Vec<(String, u64)>, anyhow::Error> {
+        match self {
+            DBType::MapDB(db) => db.get_user_blocks(user_id).await,
+            DBType::SqlDB(db) => db.get_user_blocks(user_id).await,
         }
     }
 }

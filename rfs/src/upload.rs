@@ -370,3 +370,36 @@ pub async fn get_token_from_server(
     let client = reqwest::Client::new();
     server_api::signin(&client, server_url, username, password).await
 }
+
+/// Track user blocks on the server
+/// Returns information about the number of blocks and their total size
+pub async fn track_blocks(server_url: &str, token: &str, show_details: bool) -> Result<()> {
+    if token.is_empty() {
+        return Err(anyhow::anyhow!("Authentication token is required. Use --token option or set RFS_TOKEN environment variable."));
+    }
+
+    let user_blocks = server_api::get_user_blocks(server_url, token)
+        .await
+        .context("Failed to get user blocks")?;
+
+    // Calculate total size
+    let total_size: u64 = user_blocks.blocks.iter().map(|(_, size)| size).sum();
+
+    println!("User Blocks Summary:");
+    println!("Total blocks: {}", user_blocks.total);
+    println!(
+        "Total size: {} bytes ({:.2} MB)",
+        total_size,
+        total_size as f64 / (1024.0 * 1024.0)
+    );
+
+    // Print individual blocks if there are any
+    if show_details && !user_blocks.blocks.is_empty() {
+        println!("\nBlock details:");
+        for (hash, size) in &user_blocks.blocks {
+            println!("  {} - {} bytes", hash, size);
+        }
+    }
+
+    Ok(())
+}

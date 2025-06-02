@@ -119,6 +119,7 @@ impl DB for SqlDB {
         data: Vec<u8>,
         file_hash: &str,
         block_index: u64,
+        user_id: i64,
     ) -> Result<bool, anyhow::Error> {
         // Check if the block already exists in storage
         let block_exists = self.storage.block_exists(block_hash);
@@ -133,15 +134,20 @@ impl DB for SqlDB {
             return Ok(false);
         }
 
+        // Calculate block size
+        let block_size = data.len() as i64;
+
         // Store metadata if it doesn't exist
         if !metadata_exists {
             if let Err(err) = query(
-                "INSERT INTO metadata (file_hash, block_index, block_hash, created_at) 
-             VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
+                "INSERT INTO metadata (file_hash, block_index, block_hash, user_id, block_size, created_at)
+             VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)",
             )
             .bind(file_hash)
             .bind(block_index as i64)
             .bind(block_hash)
+            .bind(user_id)
+            .bind(block_size)
             .execute(&self.pool)
             .await
             {
@@ -274,5 +280,33 @@ impl DB for SqlDB {
             .take(end.saturating_sub(start))
             .collect();
         Ok((page_blocks, total))
+    }
+
+    async fn get_user_blocks(&self, user_id: i64) -> Result<Vec<(String, u64)>, anyhow::Error> {
+        let result = query(
+            "SELECT block_hash, block_size FROM metadata WHERE user_id = ? ORDER BY block_index",
+        )
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await;
+
+        match result {
+            Ok(rows) => {
+                let blocks = rows
+                    .into_iter()
+                    .map(|row| {
+                        let block_hash: String = row.get(0);
+                        let block_size: i64 = row.get(1);
+                        (block_hash, block_size as u64)
+                    })
+                    .collect::<Vec<(String, u64)>>();
+
+                Ok(blocks)
+            }
+            Err(err) => {
+                log::error!("Error retrieving user blocks: {}", err);
+                Err(anyhow::anyhow!("Failed to retrieve user blocks: {}", err))
+            }
+        }
     }
 }

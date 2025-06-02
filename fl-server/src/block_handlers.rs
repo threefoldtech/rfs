@@ -9,6 +9,7 @@ use axum_macros::debug_handler;
 use std::sync::Arc;
 
 use crate::{
+    auth,
     config::AppState,
     db::DB,
     models::Block,
@@ -19,8 +20,8 @@ use utoipa::{OpenApi, ToSchema};
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(upload_block_handler, get_block_handler, check_block_handler, verify_blocks_handler, get_blocks_by_hash_handler, list_blocks_handler),
-    components(schemas(Block, VerifyBlocksRequest, VerifyBlocksResponse, BlocksResponse, ListBlocksParams, ListBlocksResponse)),
+    paths(upload_block_handler, get_block_handler, check_block_handler, verify_blocks_handler, get_blocks_by_hash_handler, list_blocks_handler, get_user_blocks_handler),
+    components(schemas(Block, VerifyBlocksRequest, VerifyBlocksResponse, BlocksResponse, ListBlocksParams, ListBlocksResponse, UserBlocksResponse)),
     tags(
         (name = "blocks", description = "Block management API")
     )
@@ -58,6 +59,7 @@ pub struct UploadBlockParams {
 pub async fn upload_block_handler(
     State(state): State<Arc<AppState>>,
     Query(params): Query<UploadBlockParams>,
+    extension: axum::extract::Extension<String>,
     body: Bytes,
 ) -> Result<(StatusCode, ResponseResult), ResponseError> {
     // Convert the body bytes to Vec<u8>
@@ -66,10 +68,14 @@ pub async fn upload_block_handler(
     // Calculate the hash of the block data
     let hash = Block::calculate_hash(&data);
 
+    // Get the username from the extension (set by the authorize middleware)
+    let username = extension.0;
+    let user_id = auth::get_user_id_from_token(&*state.db, &username).await?;
+
     // Store the block data in the database
     match state
         .db
-        .store_block(&hash, data, &params.file_hash, params.idx)
+        .store_block(&hash, data, &params.file_hash, params.idx, user_id)
         .await
     {
         Ok(is_new) => {
@@ -341,6 +347,48 @@ pub async fn list_blocks_handler(
         }
         Err(err) => {
             log::error!("Failed to list blocks: {}", err);
+            Err(ResponseError::InternalServerError)
+        }
+    }
+}
+
+/// Response for user blocks endpoint
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct UserBlocksResponse {
+    /// List of blocks with their sizes
+    pub blocks: Vec<(String, u64)>,
+    /// Total number of blocks
+    pub total: u64,
+}
+
+/// Retrieve all blocks uploaded by a specific user.
+#[utoipa::path(
+    get,
+    path = "/api/v1/user/blocks",
+    responses(
+        (status = 200, description = "Blocks found", body = UserBlocksResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error"),
+    )
+)]
+#[debug_handler]
+pub async fn get_user_blocks_handler(
+    State(state): State<Arc<AppState>>,
+    extension: axum::extract::Extension<String>,
+) -> Result<impl IntoResponse, ResponseError> {
+    // Get the username from the extension (set by the authorize middleware)
+    let username = extension.0;
+    let user_id = auth::get_user_id_from_token(&*state.db, &username).await?;
+
+    // Get all blocks related to the user
+    match state.db.get_user_blocks(user_id).await {
+        Ok(blocks) => {
+            let total = blocks.len() as u64;
+            let response = UserBlocksResponse { blocks, total };
+            Ok((StatusCode::OK, Json(response)))
+        }
+        Err(err) => {
+            log::error!("Failed to retrieve user blocks: {}", err);
             Err(ResponseError::InternalServerError)
         }
     }

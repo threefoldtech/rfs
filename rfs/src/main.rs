@@ -12,7 +12,7 @@ use rfs::fungi;
 use rfs::store::{self};
 use rfs::{
     cache, config, download, download_dir, exists, exists_by_hash, get_token_from_server,
-    publish_website, sync, upload, upload_dir,
+    publish_website, sync, track_blocks, upload, upload_dir,
 };
 
 mod fs;
@@ -62,6 +62,8 @@ enum Commands {
     Sync(SyncOptions),
     /// retrieve a token using username and password
     Token(TokenOptions),
+    /// track user blocks on the server
+    Track(TrackOptions),
 }
 
 #[derive(Args, Debug)]
@@ -423,6 +425,21 @@ struct TokenOptions {
     server: String,
 }
 
+#[derive(Args, Debug)]
+struct TrackOptions {
+    /// server URL (e.g., http://localhost:8080)
+    #[clap(short, long, default_value_t = String::from("http://localhost:8080"))]
+    server: String,
+
+    /// authentication token for the server
+    #[clap(long, default_value_t = std::env::var("RFS_TOKEN").unwrap_or_default())]
+    token: String,
+
+    /// display detailed information about each block
+    #[clap(short, long, default_value_t = false)]
+    details: bool,
+}
+
 /// Parse a single key-value pair
 fn parse_key_val<T, U>(s: &str) -> Result<(T, U), Box<dyn Error + Send + Sync + 'static>>
 where
@@ -471,6 +488,7 @@ fn main() -> Result<()> {
         Commands::WebsitePublish(opts) => publish_website_command(opts),
         Commands::Sync(opts) => sync_command(opts),
         Commands::Token(opts) => get_token(opts),
+        Commands::Track(opts) => track_command(opts),
     }
 }
 
@@ -913,5 +931,19 @@ fn publish_website_command(opts: WebsitePublishOptions) -> Result<()> {
             .await
             .context("Failed to publish website")?;
         Ok(())
+    })
+}
+
+fn track_command(opts: TrackOptions) -> Result<()> {
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .thread_stack_size(16 * 1024 * 1024)
+        .enable_all()
+        .build()
+        .unwrap();
+
+    rt.block_on(async move {
+        track_blocks(&opts.server, &opts.token, opts.details)
+            .await
+            .context("Failed to track blocks")
     })
 }

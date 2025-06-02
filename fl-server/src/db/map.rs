@@ -37,6 +37,7 @@ impl DB for MapDB {
         _data: Vec<u8>,
         _file_hash: &str,
         _block_index: u64,
+        _user_id: i64,
     ) -> Result<bool, anyhow::Error> {
         // TODO: Implement block storage logic
         Ok(true) // Placeholder return value
@@ -67,5 +68,10 @@ impl DB for MapDB {
     ) -> Result<(Vec<String>, u64), anyhow::Error> {
         // TODO:
         Ok((Vec::new(), 0))
+    }
+
+    async fn get_user_blocks(&self, _user_id: i64) -> Result<Vec<(String, u64)>, anyhow::Error> {
+        // TODO:
+        Ok(Vec::new())
     }
 }
