@@ -22,7 +22,9 @@ mod exist;
 pub use exist::*;
 mod sync;
 pub use sync::*;
+pub mod flist_inspector;
 mod server_api;
+pub mod tree_visitor;
 
 const PARALLEL_UPLOAD: usize = 20; // number of files we can upload in parallel
 const PARALLEL_DOWNLOAD: usize = 20; // number of files we can download in parallel
