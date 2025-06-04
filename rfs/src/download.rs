@@ -188,13 +188,13 @@ pub async fn print_block_downloads(
     // Collect all block details first
     let mut block_details = Vec::new();
     let mut total_downloads = 0;
-    let mut total_sizes = 0;
+    let mut bandwidth = 0;
 
     for block_hash in blocks {
         match server_api::get_block_downloads(server_url, &block_hash).await {
             Ok(downloads) => {
                 total_downloads += downloads.downloads_count;
-                total_sizes += downloads.block_size;
+                bandwidth += downloads.block_size * downloads.downloads_count;
                 block_details.push(downloads);
             }
             Err(err) => {
@@ -210,7 +210,7 @@ pub async fn print_block_downloads(
     // Print totals first
     println!("{}", "-".repeat(85));
     println!("TOTAL DOWNLOADS: {}", total_downloads);
-    println!("BANDWIDTH: {} bytes", total_downloads * total_sizes);
+    println!("BANDWIDTH: {} bytes", bandwidth);
 
     if details {
         println!("{}", "-".repeat(85));

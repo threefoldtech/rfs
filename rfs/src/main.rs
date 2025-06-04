@@ -12,7 +12,8 @@ use rfs::fungi;
 use rfs::store::{self};
 use rfs::{
     cache, config, download, download_dir, exists, exists_by_hash, get_token_from_server,
-    publish_website, sync, track, track_blocks, track_website, upload, upload_dir,
+    publish_website, sync, track, track_blocks, track_website, tree_visitor::TreeVisitor, upload,
+    upload_dir,
 };
 
 mod fs;
@@ -68,6 +69,32 @@ enum Commands {
     TrackBlocks(TrackBlocksOptions),
     /// track website downloads
     TrackWebsite(TrackWebsiteOptions),
+    /// flist inspection operations
+    Flist(FlistOptions),
+}
+
+#[derive(Args, Debug)]
+struct FlistOptions {
+    #[command(subcommand)]
+    command: FlistCommands,
+}
+
+#[derive(Subcommand, Debug)]
+enum FlistCommands {
+    /// show tree structure of an flist
+    Tree(FlistInspectionOptions),
+    /// inspect an flist by path or hash
+    Inspect(FlistInspectionOptions),
+}
+
+#[derive(Args, Debug)]
+struct FlistInspectionOptions {
+    /// flist path or hash
+    target: String,
+
+    /// server URL for hash-based operations
+    #[clap(long)]
+    server_url: Option<String>,
 }
 
 #[derive(Args, Debug)]
@@ -532,6 +559,7 @@ fn main() -> Result<()> {
         Commands::Track(opts) => track_command(opts),
         Commands::TrackBlocks(opts) => track_blocks_command(opts),
         Commands::TrackWebsite(opts) => track_website_command(opts),
+        Commands::Flist(opts) => flist_command(opts),
     }
 }
 
@@ -585,6 +613,90 @@ fn unpack(opts: UnpackOptions) -> Result<()> {
         rfs::unpack(&meta, &cache, opts.target, opts.preserve_ownership).await?;
         Ok(())
     })
+}
+
+fn flist_command(opts: FlistOptions) -> Result<()> {
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .thread_stack_size(16 * 1024 * 1024)
+        .enable_all()
+        .build()
+        .unwrap();
+
+    rt.block_on(async move {
+        match opts.command {
+            FlistCommands::Tree(opts) => flist_tree(opts).await,
+            FlistCommands::Inspect(opts) => flist_inspect(opts).await,
+        }
+    })
+}
+
+async fn flist_tree(opts: FlistInspectionOptions) -> Result<()> {
+    if opts.server_url.is_some() {
+        let server_url = opts.server_url.unwrap();
+        let temp_flist = format!("/tmp/flist_{}.fl", &opts.target);
+
+        download(&opts.target, &temp_flist, server_url)
+            .await
+            .context("Failed to download flist from server")?;
+
+        let meta = fungi::Reader::new(&temp_flist)
+            .await
+            .context("failed to initialize metadata database from downloaded flist")?;
+
+        let mut visitor = TreeVisitor::new();
+        meta.walk(&mut visitor).await?;
+
+        if let Err(e) = tokio::fs::remove_file(&temp_flist).await {
+            warn!(
+                "Failed to clean up temporary flist file {}: {}",
+                temp_flist, e
+            );
+        }
+    } else {
+        let meta = fungi::Reader::new(&opts.target)
+            .await
+            .context("failed to initialize metadata database")?;
+
+        let mut visitor = TreeVisitor::new();
+        meta.walk(&mut visitor).await?;
+    }
+
+    Ok(())
+}
+
+async fn flist_inspect(opts: FlistInspectionOptions) -> Result<()> {
+    if opts.server_url.is_some() {
+        let server_url = opts.server_url.unwrap();
+        let temp_flist = format!("/tmp/flist_{}.fl", &opts.target);
+
+        download(&opts.target, &temp_flist, server_url)
+            .await
+            .context("Failed to download flist from server")?;
+
+        let meta = fungi::Reader::new(&temp_flist)
+            .await
+            .context("failed to initialize metadata database from downloaded flist")?;
+
+        let mut visitor = rfs::flist_inspector::InspectVisitor::new();
+        meta.walk(&mut visitor).await?;
+
+        if let Err(e) = tokio::fs::remove_file(&temp_flist).await {
+            warn!(
+                "Failed to clean up temporary flist file {}: {}",
+                temp_flist, e
+            );
+        }
+    } else {
+        let meta = fungi::Reader::new(&opts.target)
+            .await
+            .context("failed to initialize metadata database")?;
+
+        let mut visitor = rfs::flist_inspector::InspectVisitor::new();
+        meta.walk(&mut visitor).await?;
+        visitor.print_summary(&opts.target);
+    }
+
+    Ok(())
 }
 
 fn mount(opts: MountOptions) -> Result<()> {

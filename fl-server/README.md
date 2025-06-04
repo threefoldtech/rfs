@@ -33,7 +33,7 @@ jwt_expire_hours="Life time for jwt token in hours, required, example: 5, valida
 
 sqlite_path="path of database file, example: 'fl-server.db'"
 storage_dir="path of server storage directory for blocks, example: 'storage'"
-block_size=
+block_size="Size of blocks in bytes used for splitting files during storage operations, optional, example: 1048576 (1MB)"
 
 [[users]] # list of authorized user in the server
 username = "user1"
