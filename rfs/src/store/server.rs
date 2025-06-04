@@ -14,6 +14,8 @@ pub struct ServerStore {
     server_url: String,
     /// HTTP client for making requests
     client: Arc<Client>,
+    /// Authentication token
+    token: Option<String>,
 }
 
 impl ServerStore {
@@ -23,6 +25,12 @@ impl ServerStore {
             return Err(Error::InvalidScheme(u.scheme().into(), SCHEME.into()));
         }
 
+        // Extract the token from the query parameters
+        let token = u
+            .query_pairs()
+            .find(|(key, _)| key == "token")
+            .map(|(_, value)| value.to_string());
+
         // Extract the actual server URL (e.g., "http://localhost:4000")
         let server_url = u
             .host_str()
@@ -31,14 +39,22 @@ impl ServerStore {
 
         let client = Arc::new(Client::new());
 
-        Ok(Self { server_url, client })
+        Ok(Self {
+            server_url,
+            client,
+            token,
+        })
     }
 
     /// Create a new ServerStore with the given server URL
-    pub fn new(server_url: String) -> Self {
+    pub fn new(server_url: String, token: Option<String>) -> Self {
         let client = Arc::new(Client::new());
 
-        Self { server_url, client }
+        Self {
+            server_url,
+            client,
+            token,
+        }
     }
 }
 
@@ -76,6 +92,7 @@ impl Store for ServerStore {
             blob.to_vec(),
             file_hash,
             idx,
+            self.token.clone().unwrap_or_default(),
         )
         .await
         .map_err(|err| Error::Other(err))?;

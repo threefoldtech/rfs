@@ -64,7 +64,12 @@ pub async fn upload<P: AsRef<Path>>(
     file_path: P,
     server_url: String,
     block_size: Option<usize>,
+    token: &str,
 ) -> Result<String> {
+    if token.is_empty() {
+        return Err(anyhow::anyhow!("Authentication token is required. Use --token option or set RFS_TOKEN environment variable."));
+    }
+
     let block_size = block_size.unwrap_or(BLOCK_SIZE); // Use provided block size or default
     let file_path = file_path.as_ref();
 
@@ -125,6 +130,7 @@ pub async fn upload<P: AsRef<Path>>(
             let server_url_clone = server_url.clone();
             let client_clone = Arc::clone(&client);
             let file_hash_clone = file_hash.clone();
+            let token_clone = token.to_string();
 
             // Acquire a permit from the semaphore
             let _permit = semaphore.acquire().await.unwrap();
@@ -138,6 +144,7 @@ pub async fn upload<P: AsRef<Path>>(
                     data,
                     file_hash_clone,
                     idx as u64,
+                    token_clone,
                 ));
 
             upload_tasks.push(task);
@@ -166,9 +173,14 @@ pub async fn upload_dir<P: AsRef<Path>>(
     dir_path: P,
     server_url: String,
     block_size: Option<usize>,
+    token: &str,
     create_flist: bool,
     flist_output: Option<&str>,
 ) -> Result<()> {
+    if token.is_empty() {
+        return Err(anyhow::anyhow!("Authentication token is required. Use --token option or set RFS_TOKEN environment variable."));
+    }
+
     let dir_path = dir_path.as_ref().to_path_buf();
 
     info!("Uploading directory: {}", dir_path.display());
@@ -186,7 +198,7 @@ pub async fn upload_dir<P: AsRef<Path>>(
     if !create_flist {
         // Upload each file
         for file_path in file_paths.clone() {
-            upload(&file_path, server_url.clone(), block_size).await?;
+            upload(&file_path, server_url.clone(), block_size, token).await?;
         }
 
         info!("Directory upload complete");
@@ -215,9 +227,10 @@ pub async fn upload_dir<P: AsRef<Path>>(
 
     // Create a store for the server
     let store = store::parse_router(&[format!(
-        "{}://{}",
+        "{}://{}?token={}",
         store::server::SCHEME,
-        server_url.clone()
+        server_url.clone(),
+        token
     )])
     .await
     .context("Failed to create store")?;
@@ -235,7 +248,7 @@ pub async fn upload_dir<P: AsRef<Path>>(
     // Upload the flist file if it was created
     if flist_path.exists() {
         info!("Uploading flist file");
-        let flist_hash = upload(&flist_path, server_url.clone(), block_size)
+        let flist_hash = upload(&flist_path, server_url.clone(), block_size, token)
             .await
             .context("Failed to upload flist file")?;
 
@@ -264,11 +277,17 @@ fn collect_files(dir_path: &Path, file_paths: &mut Vec<PathBuf>) -> std::io::Res
     Ok(())
 }
 
+/// Publishes a website by uploading its directory to the server
 pub async fn publish_website<P: AsRef<Path>>(
     dir_path: P,
     server_url: String,
     block_size: Option<usize>,
+    token: &str,
 ) -> Result<()> {
+    if token.is_empty() {
+        return Err(anyhow::anyhow!("Authentication token is required. Use --token option or set RFS_TOKEN environment variable."));
+    }
+
     let dir_path = dir_path.as_ref().to_path_buf();
 
     debug!("Uploading directory: {}", dir_path.display());
@@ -300,9 +319,10 @@ pub async fn publish_website<P: AsRef<Path>>(
 
     // Create a store for the server
     let store = store::parse_router(&[format!(
-        "{}://{}",
+        "{}://{}?token={}",
         store::server::SCHEME,
-        server_url.clone()
+        server_url.clone(),
+        token
     )])
     .await
     .context("Failed to create store")?;
@@ -325,7 +345,7 @@ pub async fn publish_website<P: AsRef<Path>>(
     if flist_path.exists() {
         debug!("Uploading flist file");
 
-        let flist_hash = upload(&flist_path, server_url.clone(), block_size)
+        let flist_hash = upload(&flist_path, server_url.clone(), block_size, token)
             .await
             .context("Failed to upload flist file")?;
 
@@ -340,4 +360,13 @@ pub async fn publish_website<P: AsRef<Path>>(
     }
 
     Ok(())
+}
+
+pub async fn get_token_from_server(
+    server_url: &str,
+    username: &str,
+    password: &str,
+) -> Result<String> {
+    let client = reqwest::Client::new();
+    server_api::signin(&client, server_url, username, password).await
 }

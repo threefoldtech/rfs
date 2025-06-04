@@ -12,8 +12,8 @@ use clap::{ArgAction, Args, Parser, Subcommand};
 use rfs::fungi;
 use rfs::store::{self};
 use rfs::{
-    cache, config, download, download_dir, exists, exists_by_hash, publish_website, sync,
-    tree_visitor::TreeVisitor, upload, upload_dir,
+    cache, config, download, download_dir, exists, exists_by_hash, get_token_from_server,
+    publish_website, sync, tree_visitor::TreeVisitor, upload, upload_dir,
 };
 
 mod fs;
@@ -61,6 +61,8 @@ enum Commands {
     WebsitePublish(WebsitePublishOptions),
     /// Sync files or blocks between two servers
     Sync(SyncOptions),
+    /// retrieve a token using username and password
+    Token(TokenOptions),
     /// flist inspection operations
     Flist(FlistOptions),
 }
@@ -106,6 +108,10 @@ struct SyncOptions {
     /// Block size for splitting files (only used if a file/directory is provided)
     #[clap(short, long, default_value_t = 1024 * 1024)] // 1MB
     block_size: usize,
+
+    /// authentication token for the server
+    #[clap(long, default_value_t = std::env::var("RFS_TOKEN").unwrap_or_default())]
+    token: String,
 }
 
 #[derive(Args, Debug)]
@@ -120,6 +126,10 @@ struct WebsitePublishOptions {
     /// Block size for splitting the files
     #[clap(short, long, default_value_t = 1024 * 1024)] // 1MB
     block_size: usize,
+
+    /// authentication token for the server
+    #[clap(long, default_value_t = std::env::var("RFS_TOKEN").unwrap_or_default())]
+    token: String,
 }
 
 #[derive(Args, Debug)]
@@ -288,6 +298,10 @@ struct UploadFileOptions {
     /// block size for splitting the file
     #[clap(short, long, default_value_t = 1024 * 1024)] // 1MB
     block_size: usize,
+
+    /// authentication token for the server
+    #[clap(long, default_value_t = std::env::var("RFS_TOKEN").unwrap_or_default())]
+    token: String,
 }
 
 #[derive(Args, Debug)]
@@ -310,6 +324,10 @@ struct UploadDirOptions {
     /// path to output the flist file
     #[clap(long)]
     flist_output: Option<String>,
+
+    /// authentication token for the server
+    #[clap(long, default_value_t = std::env::var("RFS_TOKEN").unwrap_or_default())]
+    token: String,
 }
 
 #[derive(Args, Debug)]
@@ -411,6 +429,25 @@ struct FlistCreateOptions {
     /// block size for splitting the files
     #[clap(short, long, default_value_t = 1024 * 1024)] // 1MB
     block_size: usize,
+
+    /// authentication token for the server
+    #[clap(long, default_value_t = std::env::var("RFS_TOKEN").unwrap_or_default())]
+    token: String,
+}
+
+#[derive(Args, Debug)]
+struct TokenOptions {
+    /// username for authentication
+    #[clap(short, long)]
+    username: String,
+
+    /// password for authentication
+    #[clap(short, long)]
+    password: String,
+
+    /// server URL (e.g., http://localhost:8080)
+    #[clap(short, long, default_value_t = String::from("http://localhost:8080"))]
+    server: String,
 }
 
 /// Parse a single key-value pair
@@ -460,8 +497,25 @@ fn main() -> Result<()> {
         Commands::FlistCreate(opts) => create_flist(opts),
         Commands::WebsitePublish(opts) => publish_website_command(opts),
         Commands::Sync(opts) => sync_command(opts),
+        Commands::Token(opts) => get_token(opts),
         Commands::Flist(opts) => flist_command(opts),
     }
+}
+
+fn get_token(opts: TokenOptions) -> Result<()> {
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .thread_stack_size(16 * 1024 * 1024)
+        .enable_all()
+        .build()
+        .unwrap();
+
+    rt.block_on(async move {
+        let token = get_token_from_server(&opts.server, &opts.username, &opts.password)
+            .await
+            .context("Failed to retrieve token")?;
+        println!("Token: {}", token);
+        Ok(())
+    })
 }
 
 fn pack(opts: PackOptions) -> Result<()> {
@@ -826,7 +880,7 @@ fn upload_file(opts: UploadFileOptions) -> Result<()> {
         }
 
         // Upload a single file
-        upload(&opts.path, opts.server, Some(opts.block_size))
+        upload(&opts.path, opts.server, Some(opts.block_size), &opts.token)
             .await
             .context("Failed to upload file")?;
 
@@ -853,6 +907,7 @@ fn upload_directory(opts: UploadDirOptions) -> Result<()> {
             &opts.path,
             opts.server,
             Some(opts.block_size),
+            &opts.token,
             opts.create_flist,
             opts.flist_output.as_deref(),
         )
@@ -875,6 +930,7 @@ fn create_flist(opts: FlistCreateOptions) -> Result<()> {
             &opts.directory,
             opts.server,
             Some(opts.block_size),
+            &opts.token,
             true,
             Some(&opts.output),
         )
@@ -945,9 +1001,14 @@ fn sync_command(opts: SyncOptions) -> Result<()> {
         .unwrap();
 
     rt.block_on(async move {
-        sync(opts.hash.as_deref(), &opts.source, &opts.destination)
-            .await
-            .context("Failed to sync between servers")?;
+        sync(
+            opts.hash.as_deref(),
+            &opts.source,
+            &opts.destination,
+            &opts.token,
+        )
+        .await
+        .context("Failed to sync between servers")?;
         Ok(())
     })
 }
@@ -960,7 +1021,7 @@ fn publish_website_command(opts: WebsitePublishOptions) -> Result<()> {
         .unwrap();
 
     rt.block_on(async move {
-        publish_website(&opts.path, opts.server, Some(opts.block_size))
+        publish_website(&opts.path, opts.server, Some(opts.block_size), &opts.token)
             .await
             .context("Failed to publish website")?;
         Ok(())

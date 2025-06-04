@@ -11,3 +11,14 @@ CREATE TABLE IF NOT EXISTS metadata (
 
 -- Index on file_hash for faster lookups
 CREATE INDEX IF NOT EXISTS idx_files_hash ON metadata (file_hash);
+
+-- Table to store user information
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,  -- Auto-incrementing ID for the user
+    username VARCHAR(255) NOT NULL UNIQUE, -- Unique username
+    password VARCHAR(255) NOT NULL,        -- Hashed password
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP -- When the user was added to the database
+);
+
+-- Index on username for faster lookups
+CREATE INDEX IF NOT EXISTS idx_users_username ON users (username);
