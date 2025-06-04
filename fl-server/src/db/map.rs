@@ -74,4 +74,13 @@ impl DB for MapDB {
         // TODO:
         Ok(Vec::new())
     }
+
+    async fn increment_block_downloads(&self, _hash: &str) -> Result<(), anyhow::Error> {
+        Ok(())
+    }
+
+    async fn get_block_downloads(&self, _hash: &str) -> Result<u64, anyhow::Error> {
+        // MapDB is a placeholder implementation, so we just return 0
+        Ok(0)
+    }
 }

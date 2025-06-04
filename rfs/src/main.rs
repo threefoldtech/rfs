@@ -12,7 +12,7 @@ use rfs::fungi;
 use rfs::store::{self};
 use rfs::{
     cache, config, download, download_dir, exists, exists_by_hash, get_token_from_server,
-    publish_website, sync, track_blocks, upload, upload_dir,
+    publish_website, sync, track, track_blocks, upload, upload_dir,
 };
 
 mod fs;
@@ -64,6 +64,8 @@ enum Commands {
     Token(TokenOptions),
     /// track user blocks on the server
     Track(TrackOptions),
+    /// track block downloads
+    TrackBlocks(TrackBlocksOptions),
 }
 
 #[derive(Args, Debug)]
@@ -440,6 +442,25 @@ struct TrackOptions {
     details: bool,
 }
 
+#[derive(Args, Debug)]
+struct TrackBlocksOptions {
+    /// server URL (e.g., http://localhost:8080)
+    #[clap(short, long, default_value_t = String::from("http://localhost:8080"))]
+    server: String,
+
+    /// authentication token for the server
+    #[clap(long, default_value_t = std::env::var("RFS_TOKEN").unwrap_or_default())]
+    token: String,
+
+    /// specific block hash to track
+    #[clap(short, long, conflicts_with = "all")]
+    hash: Option<String>,
+
+    /// track all blocks (default if no hash is provided)
+    #[clap(short, long, conflicts_with = "hash")]
+    all: bool,
+}
+
 /// Parse a single key-value pair
 fn parse_key_val<T, U>(s: &str) -> Result<(T, U), Box<dyn Error + Send + Sync + 'static>>
 where
@@ -489,6 +510,7 @@ fn main() -> Result<()> {
         Commands::Sync(opts) => sync_command(opts),
         Commands::Token(opts) => get_token(opts),
         Commands::Track(opts) => track_command(opts),
+        Commands::TrackBlocks(opts) => track_blocks_command(opts),
     }
 }
 
@@ -942,8 +964,25 @@ fn track_command(opts: TrackOptions) -> Result<()> {
         .unwrap();
 
     rt.block_on(async move {
-        track_blocks(&opts.server, &opts.token, opts.details)
+        track(&opts.server, &opts.token, opts.details)
             .await
             .context("Failed to track blocks")
+    })
+}
+
+fn track_blocks_command(opts: TrackBlocksOptions) -> Result<()> {
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .thread_stack_size(16 * 1024 * 1024)
+        .enable_all()
+        .build()
+        .unwrap();
+
+    rt.block_on(async move {
+        // If neither hash nor all is specified, default to all
+        let hash = if opts.all { None } else { opts.hash.as_deref() };
+
+        track_blocks(&opts.server, &opts.token, hash)
+            .await
+            .context("Failed to track block downloads")
     })
 }

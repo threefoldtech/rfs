@@ -170,7 +170,16 @@ impl DB for SqlDB {
     async fn get_block(&self, hash: &str) -> Result<Option<Vec<u8>>, anyhow::Error> {
         // Retrieve the block data from storage
         match self.storage.get_block(hash) {
-            Ok(Some(data)) => Ok(Some(data)),
+            Ok(Some(data)) => {
+                if let Err(err) = self.increment_block_downloads(&hash).await {
+                    return Err(anyhow::anyhow!(
+                        "Failed to increment download count for block {}: {}",
+                        hash,
+                        err
+                    ));
+                }
+                Ok(Some(data))
+            }
             Ok(None) => Ok(None),
             Err(err) => {
                 log::error!("Error retrieving block from storage: {}", err);
@@ -200,7 +209,16 @@ impl DB for SqlDB {
         let mut file_content = Vec::new();
         for (block_hash, _) in blocks {
             match self.storage.get_block(&block_hash) {
-                Ok(Some(data)) => file_content.extend(data),
+                Ok(Some(data)) => {
+                    if let Err(err) = self.increment_block_downloads(&block_hash).await {
+                        return Err(anyhow::anyhow!(
+                            "Failed to increment download count for block {}: {}",
+                            block_hash,
+                            err
+                        ));
+                    }
+                    file_content.extend(data)
+                }
                 Ok(None) => {
                     log::error!("Block {} not found", block_hash);
                     return Err(anyhow::anyhow!("Block {} not found", block_hash));
@@ -306,6 +324,46 @@ impl DB for SqlDB {
             Err(err) => {
                 log::error!("Error retrieving user blocks: {}", err);
                 Err(anyhow::anyhow!("Failed to retrieve user blocks: {}", err))
+            }
+        }
+    }
+
+    async fn increment_block_downloads(&self, hash: &str) -> Result<(), anyhow::Error> {
+        let result =
+            query("UPDATE metadata SET downloads_count = downloads_count + 1 WHERE block_hash = ?")
+                .bind(hash)
+                .execute(&self.pool)
+                .await;
+
+        match result {
+            Ok(_) => Ok(()),
+            Err(err) => {
+                log::error!("Error incrementing block downloads count: {}", err);
+                Err(anyhow::anyhow!(
+                    "Failed to increment block downloads count: {}",
+                    err
+                ))
+            }
+        }
+    }
+
+    async fn get_block_downloads(&self, hash: &str) -> Result<u64, anyhow::Error> {
+        let result = query("SELECT downloads_count FROM metadata WHERE block_hash = ?")
+            .bind(hash)
+            .fetch_one(&self.pool)
+            .await;
+
+        match result {
+            Ok(row) => {
+                let count: i64 = row.get(0);
+                Ok(count as u64)
+            }
+            Err(err) => {
+                log::error!("Error retrieving block downloads count: {}", err);
+                Err(anyhow::anyhow!(
+                    "Failed to retrieve block downloads count: {}",
+                    err
+                ))
             }
         }
     }

@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS metadata (
     block_hash VARCHAR(64),         -- SHA-256 hash of the block data (64 characters for hex representation)
     user_id INTEGER,               -- ID of the user who uploaded the block
     block_size INTEGER,            -- Size of the block in bytes
+    downloads_count INTEGER DEFAULT 0, -- Number of times the block has been downloaded
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,  -- When the file was added to the database
     FOREIGN KEY (user_id) REFERENCES users(id)  -- Foreign key constraint to users table
 );

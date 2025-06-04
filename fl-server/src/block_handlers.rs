@@ -20,8 +20,8 @@ use utoipa::{OpenApi, ToSchema};
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(upload_block_handler, get_block_handler, check_block_handler, verify_blocks_handler, get_blocks_by_hash_handler, list_blocks_handler, get_user_blocks_handler),
-    components(schemas(Block, VerifyBlocksRequest, VerifyBlocksResponse, BlocksResponse, ListBlocksParams, ListBlocksResponse, UserBlocksResponse)),
+    paths(upload_block_handler, get_block_handler, check_block_handler, verify_blocks_handler, get_blocks_by_hash_handler, list_blocks_handler, get_user_blocks_handler, get_block_downloads_handler),
+    components(schemas(Block, VerifyBlocksRequest, VerifyBlocksResponse, BlocksResponse, ListBlocksParams, ListBlocksResponse, UserBlocksResponse, BlockDownloadsResponse)),
     tags(
         (name = "blocks", description = "Block management API")
     )
@@ -359,6 +359,8 @@ pub struct UserBlocksResponse {
     pub blocks: Vec<(String, u64)>,
     /// Total number of blocks
     pub total: u64,
+    /// Total number of all blocks
+    pub all_blocks: u64,
 }
 
 /// Retrieve all blocks uploaded by a specific user.
@@ -380,15 +382,78 @@ pub async fn get_user_blocks_handler(
     let username = extension.0;
     let user_id = auth::get_user_id_from_token(&*state.db, &username).await?;
 
+    let all_blocks = match state.db.list_blocks(1, 1).await {
+        Ok((_, total)) => total,
+        Err(err) => {
+            log::error!("Failed to list blocks: {}", err);
+            0
+        }
+    };
+
     // Get all blocks related to the user
     match state.db.get_user_blocks(user_id).await {
         Ok(blocks) => {
             let total = blocks.len() as u64;
-            let response = UserBlocksResponse { blocks, total };
+            let response = UserBlocksResponse {
+                blocks,
+                total,
+                all_blocks,
+            };
             Ok((StatusCode::OK, Json(response)))
         }
         Err(err) => {
             log::error!("Failed to retrieve user blocks: {}", err);
+            Err(ResponseError::InternalServerError)
+        }
+    }
+}
+
+/// Response for block downloads endpoint
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct BlockDownloadsResponse {
+    /// Block hash
+    pub block_hash: String,
+    /// Number of times the block has been downloaded
+    pub downloads_count: u64,
+}
+
+/// Retrieve the number of times a block has been downloaded.
+#[utoipa::path(
+    get,
+    path = "/api/v1/block/{hash}/downloads",
+    responses(
+        (status = 200, description = "Download count retrieved successfully", body = BlockDownloadsResponse),
+        (status = 404, description = "Block not found"),
+        (status = 500, description = "Internal server error"),
+    ),
+    params(
+        ("hash" = String, Path, description = "Block hash")
+    )
+)]
+#[debug_handler]
+pub async fn get_block_downloads_handler(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Path(hash): axum::extract::Path<String>,
+) -> Result<impl IntoResponse, ResponseError> {
+    // Check if the block exists
+    if !state.db.block_exists("", 0, &hash).await {
+        return Err(ResponseError::NotFound(format!(
+            "Block with hash '{}' not found",
+            hash
+        )));
+    }
+
+    // Get the download count
+    match state.db.get_block_downloads(&hash).await {
+        Ok(count) => {
+            let response = BlockDownloadsResponse {
+                block_hash: hash,
+                downloads_count: count,
+            };
+            Ok((StatusCode::OK, Json(response)))
+        }
+        Err(err) => {
+            log::error!("Failed to retrieve block download count: {}", err);
             Err(ResponseError::InternalServerError)
         }
     }

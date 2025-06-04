@@ -18,6 +18,8 @@ pub trait DB: Send + Sync {
         user_id: i64,
     ) -> Result<bool, anyhow::Error>;
     async fn get_block(&self, hash: &str) -> Result<Option<Vec<u8>>, anyhow::Error>;
+    async fn increment_block_downloads(&self, hash: &str) -> Result<(), anyhow::Error>;
+    async fn get_block_downloads(&self, hash: &str) -> Result<u64, anyhow::Error>;
 
     // File methods
     async fn get_file_by_hash(&self, hash: &str) -> Result<Option<File>, anyhow::Error>;
@@ -81,6 +83,20 @@ impl DB for DBType {
         match self {
             DBType::MapDB(db) => db.get_block(hash).await,
             DBType::SqlDB(db) => db.get_block(hash).await,
+        }
+    }
+
+    async fn increment_block_downloads(&self, hash: &str) -> Result<(), anyhow::Error> {
+        match self {
+            DBType::MapDB(db) => db.increment_block_downloads(hash).await,
+            DBType::SqlDB(db) => db.increment_block_downloads(hash).await,
+        }
+    }
+
+    async fn get_block_downloads(&self, hash: &str) -> Result<u64, anyhow::Error> {
+        match self {
+            DBType::MapDB(db) => db.get_block_downloads(hash).await,
+            DBType::SqlDB(db) => db.get_block_downloads(hash).await,
         }
     }
 

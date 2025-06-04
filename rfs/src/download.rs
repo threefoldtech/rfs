@@ -127,3 +127,63 @@ pub async fn download_dir<P: AsRef<Path>>(
     info!("Directory download complete");
     Ok(())
 }
+
+/// Track blocks uploaded by the user and their download counts
+/// If hash is provided, only track that specific block
+/// Otherwise, track all user blocks
+pub async fn track_blocks(server_url: &str, token: &str, hash: Option<&str>) -> Result<()> {
+    if let Some(block_hash) = hash {
+        match server_api::get_block_downloads(server_url, block_hash).await {
+            Ok(downloads) => {
+                println!("\nBLOCK DETAILS:");
+                println!("{:<64} {:<10}", "BLOCK HASH", "DOWNLOADS");
+                println!("{}", "-".repeat(75));
+                println!(
+                    "{:<64} {:<10}",
+                    downloads.block_hash, downloads.downloads_count
+                );
+            }
+            Err(err) => {
+                return Err(anyhow::anyhow!(
+                    "Failed to get download count for block {}: {}",
+                    block_hash,
+                    err
+                ));
+            }
+        }
+
+        return Ok(());
+    }
+
+    // Track all user blocks
+    let user_blocks = server_api::get_user_blocks(server_url, token).await?;
+
+    println!(
+        "User has {} blocks out of {} total blocks on the server",
+        user_blocks.total, user_blocks.all_blocks
+    );
+
+    println!("\n{:<64} {:<10}", "BLOCK HASH", "DOWNLOADS");
+    println!("{}", "-".repeat(75));
+
+    // TODO: many blocks?
+    for (block_hash, _) in user_blocks.blocks.iter() {
+        match server_api::get_block_downloads(server_url, block_hash).await {
+            Ok(downloads) => {
+                println!(
+                    "{:<64} {:<10}",
+                    downloads.block_hash, downloads.downloads_count
+                );
+            }
+            Err(err) => {
+                return Err(anyhow::anyhow!(
+                    "Failed to get download count for block {}: {}",
+                    block_hash,
+                    err
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}

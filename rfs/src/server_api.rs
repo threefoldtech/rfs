@@ -50,6 +50,17 @@ pub struct UserBlocksResponse {
     pub blocks: Vec<(String, u64)>,
     /// Total number of blocks
     pub total: u64,
+    /// Total number of all blocks
+    pub all_blocks: u64,
+}
+
+/// Response for block downloads endpoint
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BlockDownloadsResponse {
+    /// Block hash
+    pub block_hash: String,
+    /// Number of times the block has been downloaded
+    pub downloads_count: u64,
 }
 
 /// Downloads blocks associated with a hash (file hash or block hash)
@@ -324,4 +335,35 @@ pub async fn get_user_blocks(server_url: &str, token: &str) -> Result<UserBlocks
         .context("Failed to parse user blocks response")?;
 
     Ok(blocks_response)
+}
+
+/// Get the download count for a specific block
+pub async fn get_block_downloads(server_url: &str, hash: &str) -> Result<BlockDownloadsResponse> {
+    let url = format!("{}/api/v1/block/{}/downloads", server_url, hash);
+
+    // Create HTTP client
+    let client = Client::new();
+
+    // Send GET request
+    let response = client
+        .get(&url)
+        .send()
+        .await
+        .context("Failed to get block downloads from server")?;
+
+    // Check if the request was successful
+    if !response.status().is_success() {
+        return Err(anyhow::anyhow!(
+            "Server returned error: {}",
+            response.status(),
+        ));
+    }
+
+    // Parse the response
+    let downloads_response: BlockDownloadsResponse = response
+        .json()
+        .await
+        .context("Failed to parse block downloads response")?;
+
+    Ok(downloads_response)
 }

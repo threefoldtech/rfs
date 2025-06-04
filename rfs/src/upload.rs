@@ -373,7 +373,7 @@ pub async fn get_token_from_server(
 
 /// Track user blocks on the server
 /// Returns information about the number of blocks and their total size
-pub async fn track_blocks(server_url: &str, token: &str, show_details: bool) -> Result<()> {
+pub async fn track(server_url: &str, token: &str, show_details: bool) -> Result<()> {
     if token.is_empty() {
         return Err(anyhow::anyhow!("Authentication token is required. Use --token option or set RFS_TOKEN environment variable."));
     }
@@ -386,6 +386,10 @@ pub async fn track_blocks(server_url: &str, token: &str, show_details: bool) -> 
     let total_size: u64 = user_blocks.blocks.iter().map(|(_, size)| size).sum();
 
     println!("User Blocks Summary:");
+    println!(
+        "Usage percentage: {}%",
+        (user_blocks.total as f64 / user_blocks.all_blocks as f64) * 100.0
+    );
     println!("Total blocks: {}", user_blocks.total);
     println!(
         "Total size: {} bytes ({:.2} MB)",
