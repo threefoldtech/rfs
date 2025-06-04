@@ -347,8 +347,8 @@ impl DB for SqlDB {
         }
     }
 
-    async fn get_block_downloads(&self, hash: &str) -> Result<u64, anyhow::Error> {
-        let result = query("SELECT downloads_count FROM metadata WHERE block_hash = ?")
+    async fn get_block_downloads(&self, hash: &str) -> Result<(u64, u64), anyhow::Error> {
+        let result = query("SELECT downloads_count, block_size FROM metadata WHERE block_hash = ?")
             .bind(hash)
             .fetch_one(&self.pool)
             .await;
@@ -356,12 +356,13 @@ impl DB for SqlDB {
         match result {
             Ok(row) => {
                 let count: i64 = row.get(0);
-                Ok(count as u64)
+                let size: i64 = row.get(1);
+                Ok((count as u64, size as u64))
             }
             Err(err) => {
-                log::error!("Error retrieving block downloads count: {}", err);
+                log::error!("Error retrieving block downloads count and size: {}", err);
                 Err(anyhow::anyhow!(
-                    "Failed to retrieve block downloads count: {}",
+                    "Failed to retrieve block downloads count and size: {}",
                     err
                 ))
             }

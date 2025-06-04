@@ -12,7 +12,7 @@ use rfs::fungi;
 use rfs::store::{self};
 use rfs::{
     cache, config, download, download_dir, exists, exists_by_hash, get_token_from_server,
-    publish_website, sync, track, track_blocks, upload, upload_dir,
+    publish_website, sync, track, track_blocks, track_website, upload, upload_dir,
 };
 
 mod fs;
@@ -66,6 +66,8 @@ enum Commands {
     Track(TrackOptions),
     /// track block downloads
     TrackBlocks(TrackBlocksOptions),
+    /// track website downloads
+    TrackWebsite(TrackWebsiteOptions),
 }
 
 #[derive(Args, Debug)]
@@ -449,7 +451,7 @@ struct TrackBlocksOptions {
     server: String,
 
     /// authentication token for the server
-    #[clap(long, default_value_t = std::env::var("RFS_TOKEN").unwrap_or_default())]
+    #[clap(long, conflicts_with = "hash", default_value_t = std::env::var("RFS_TOKEN").unwrap_or_default())]
     token: String,
 
     /// specific block hash to track
@@ -459,6 +461,24 @@ struct TrackBlocksOptions {
     /// track all blocks (default if no hash is provided)
     #[clap(short, long, conflicts_with = "hash")]
     all: bool,
+
+    /// display detailed information about each block
+    #[clap(short, long, conflicts_with = "hash", default_value_t = false)]
+    details: bool,
+}
+
+#[derive(Args, Debug)]
+struct TrackWebsiteOptions {
+    /// specific website flist hash to track
+    flist_hash: String,
+
+    /// server URL (e.g., http://localhost:8080)
+    #[clap(short, long, default_value_t = String::from("http://localhost:8080"))]
+    server: String,
+
+    /// display detailed information about each block
+    #[clap(short, long, default_value_t = false)]
+    details: bool,
 }
 
 /// Parse a single key-value pair
@@ -511,6 +531,7 @@ fn main() -> Result<()> {
         Commands::Token(opts) => get_token(opts),
         Commands::Track(opts) => track_command(opts),
         Commands::TrackBlocks(opts) => track_blocks_command(opts),
+        Commands::TrackWebsite(opts) => track_website_command(opts),
     }
 }
 
@@ -981,7 +1002,21 @@ fn track_blocks_command(opts: TrackBlocksOptions) -> Result<()> {
         // If neither hash nor all is specified, default to all
         let hash = if opts.all { None } else { opts.hash.as_deref() };
 
-        track_blocks(&opts.server, &opts.token, hash)
+        track_blocks(&opts.server, &opts.token, hash, opts.details)
+            .await
+            .context("Failed to track block downloads")
+    })
+}
+
+fn track_website_command(opts: TrackWebsiteOptions) -> Result<()> {
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .thread_stack_size(16 * 1024 * 1024)
+        .enable_all()
+        .build()
+        .unwrap();
+
+    rt.block_on(async move {
+        track_website(&opts.server, &opts.flist_hash, opts.details)
             .await
             .context("Failed to track block downloads")
     })

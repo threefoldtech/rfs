@@ -131,16 +131,23 @@ pub async fn download_dir<P: AsRef<Path>>(
 /// Track blocks uploaded by the user and their download counts
 /// If hash is provided, only track that specific block
 /// Otherwise, track all user blocks
-pub async fn track_blocks(server_url: &str, token: &str, hash: Option<&str>) -> Result<()> {
+pub async fn track_blocks(
+    server_url: &str,
+    token: &str,
+    hash: Option<&str>,
+    details: bool,
+) -> Result<()> {
     if let Some(block_hash) = hash {
         match server_api::get_block_downloads(server_url, block_hash).await {
             Ok(downloads) => {
-                println!("\nBLOCK DETAILS:");
-                println!("{:<64} {:<10}", "BLOCK HASH", "DOWNLOADS");
-                println!("{}", "-".repeat(75));
                 println!(
-                    "{:<64} {:<10}",
-                    downloads.block_hash, downloads.downloads_count
+                    "{:<64} {:<10} {:<10}",
+                    "BLOCK HASH", "DOWNLOADS", "SIZE (B)"
+                );
+                println!("{}", "-".repeat(85));
+                println!(
+                    "{:<64} {:<10} {:<10}",
+                    downloads.block_hash, downloads.downloads_count, downloads.block_size
                 );
             }
             Err(err) => {
@@ -163,17 +170,32 @@ pub async fn track_blocks(server_url: &str, token: &str, hash: Option<&str>) -> 
         user_blocks.total, user_blocks.all_blocks
     );
 
-    println!("\n{:<64} {:<10}", "BLOCK HASH", "DOWNLOADS");
-    println!("{}", "-".repeat(75));
+    let block_hashes: Vec<String> = user_blocks
+        .blocks
+        .into_iter()
+        .map(|(block_hash, _)| block_hash)
+        .collect();
+    print_block_downloads(server_url, block_hashes, details).await?;
 
-    // TODO: many blocks?
-    for (block_hash, _) in user_blocks.blocks.iter() {
-        match server_api::get_block_downloads(server_url, block_hash).await {
+    Ok(())
+}
+
+pub async fn print_block_downloads(
+    server_url: &str,
+    blocks: Vec<String>,
+    details: bool,
+) -> Result<()> {
+    // Collect all block details first
+    let mut block_details = Vec::new();
+    let mut total_downloads = 0;
+    let mut total_sizes = 0;
+
+    for block_hash in blocks {
+        match server_api::get_block_downloads(server_url, &block_hash).await {
             Ok(downloads) => {
-                println!(
-                    "{:<64} {:<10}",
-                    downloads.block_hash, downloads.downloads_count
-                );
+                total_downloads += downloads.downloads_count;
+                total_sizes += downloads.block_size;
+                block_details.push(downloads);
             }
             Err(err) => {
                 return Err(anyhow::anyhow!(
@@ -185,5 +207,100 @@ pub async fn track_blocks(server_url: &str, token: &str, hash: Option<&str>) -> 
         }
     }
 
+    // Print totals first
+    println!("{}", "-".repeat(85));
+    println!("TOTAL DOWNLOADS: {}", total_downloads);
+    println!("BANDWIDTH: {} bytes", total_downloads * total_sizes);
+
+    if details {
+        println!("{}", "-".repeat(85));
+
+        println!(
+            "\n{:<64} {:<10} {:<10}",
+            "BLOCK HASH", "DOWNLOADS", "SIZE (B)"
+        );
+        println!("{}", "-".repeat(85));
+
+        for block in block_details {
+            println!(
+                "{:<64} {:<10} {:<10}",
+                block.block_hash, block.downloads_count, block.block_size
+            );
+        }
+    }
+
     Ok(())
+}
+
+pub async fn track_website(server_url: &str, flist_hash: &str, details: bool) -> Result<()> {
+    // Temporarily disable logs for the upload function
+    let original_level = log::max_level();
+    log::set_max_level(log::LevelFilter::Off);
+
+    let flist_blocks = server_api::get_blocks_by_hash(flist_hash, server_url.to_owned()).await?;
+
+    if flist_blocks.is_empty() {
+        return Err(anyhow::anyhow!("No blocks found for hash: {}", flist_hash));
+    }
+
+    // Download the flist file using its hash
+    let temp_path = std::env::temp_dir().join(format!("{}.fl", flist_hash));
+    download(flist_hash, &temp_path, server_url.to_owned()).await?;
+
+    let meta = fungi::Reader::new(temp_path)
+        .await
+        .context("failed to initialize metadata database")?;
+
+    let router = store::get_router(&meta).await?;
+    let cache_dir = std::env::temp_dir().join("cache_blocks");
+    let cache = cache::Cache::new(cache_dir.clone(), router);
+    let temp_output_dir = std::env::temp_dir().join("output_dir");
+    tokio::fs::create_dir_all(&temp_output_dir)
+        .await
+        .context("Failed to create temporary output directory")?;
+    crate::unpack(&meta, &cache, &temp_output_dir, false).await?;
+
+    // Restore the original log level
+    log::set_max_level(original_level);
+
+    let mut website_blocks = list_files_in_dir(cache_dir.clone())
+        .await
+        .context("Failed to list files in /tmp/cache directory")?;
+
+    website_blocks.extend(flist_blocks.into_iter().map(|(block_hash, _)| block_hash));
+
+    println!("Website has {} blocks on the server", website_blocks.len());
+    print_block_downloads(&server_url, website_blocks, details).await?;
+
+    // Delete the temporary directory
+    tokio::fs::remove_dir_all(&temp_output_dir)
+        .await
+        .context("Failed to delete temporary output directory")?;
+    tokio::fs::remove_dir_all(&cache_dir)
+        .await
+        .context("Failed to delete temporary cache directory")?;
+
+    Ok(())
+}
+
+pub async fn list_files_in_dir<P: AsRef<Path>>(dir: P) -> Result<Vec<String>> {
+    let dir = dir.as_ref();
+    let mut file_names = Vec::new();
+
+    let mut entries = tokio::fs::read_dir(dir)
+        .await
+        .context(format!("Failed to read directory: {}", dir.display()))?;
+
+    while let Some(entry) = entries.next_entry().await.context("Failed to read entry")? {
+        let path = entry.path();
+        if path.is_dir() {
+            let sub_dir_files = Box::pin(list_files_in_dir(path)).await?;
+            file_names.extend(sub_dir_files);
+            continue;
+        }
+        if let Ok(file_name) = entry.file_name().into_string() {
+            file_names.push(file_name);
+        }
+    }
+    Ok(file_names)
 }

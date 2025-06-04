@@ -415,6 +415,8 @@ pub struct BlockDownloadsResponse {
     pub block_hash: String,
     /// Number of times the block has been downloaded
     pub downloads_count: u64,
+    /// Size of the block in bytes
+    pub block_size: u64,
 }
 
 /// Retrieve the number of times a block has been downloaded.
@@ -445,10 +447,11 @@ pub async fn get_block_downloads_handler(
 
     // Get the download count
     match state.db.get_block_downloads(&hash).await {
-        Ok(count) => {
+        Ok((count, block_size)) => {
             let response = BlockDownloadsResponse {
                 block_hash: hash,
                 downloads_count: count,
+                block_size: block_size,
             };
             Ok((StatusCode::OK, Json(response)))
         }

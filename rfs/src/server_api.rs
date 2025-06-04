@@ -61,6 +61,8 @@ pub struct BlockDownloadsResponse {
     pub block_hash: String,
     /// Number of times the block has been downloaded
     pub downloads_count: u64,
+    /// Size of the block in bytes
+    pub block_size: u64,
 }
 
 /// Downloads blocks associated with a hash (file hash or block hash)

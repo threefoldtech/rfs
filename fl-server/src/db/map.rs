@@ -79,8 +79,7 @@ impl DB for MapDB {
         Ok(())
     }
 
-    async fn get_block_downloads(&self, _hash: &str) -> Result<u64, anyhow::Error> {
-        // MapDB is a placeholder implementation, so we just return 0
-        Ok(0)
+    async fn get_block_downloads(&self, _hash: &str) -> Result<(u64, u64), anyhow::Error> {
+        Ok((0, 0))
     }
 }
