@@ -150,7 +150,7 @@ pub async fn check_block_handler(
     axum::extract::Path(hash): axum::extract::Path<String>,
 ) -> Result<impl IntoResponse, ResponseError> {
     // Retrieve the block from the database
-    match state.db.block_exists("", 0, &hash).await {
+    match state.db.block_exists("", 0, &hash, 0).await {
         true => {
             // Block found
             Ok(StatusCode::OK)
@@ -212,7 +212,7 @@ pub async fn verify_blocks_handler(
     for block in request.blocks {
         if !state
             .db
-            .block_exists(&block.file_hash, block.block_index, &block.block_hash)
+            .block_exists(&block.file_hash, block.block_index, &block.block_hash, 0)
             .await
         {
             missing.push(block.block_hash);
@@ -438,7 +438,7 @@ pub async fn get_block_downloads_handler(
     axum::extract::Path(hash): axum::extract::Path<String>,
 ) -> Result<impl IntoResponse, ResponseError> {
     // Check if the block exists
-    if !state.db.block_exists("", 0, &hash).await {
+    if !state.db.block_exists("", 0, &hash, 0).await {
         return Err(ResponseError::NotFound(format!(
             "Block with hash '{}' not found",
             hash

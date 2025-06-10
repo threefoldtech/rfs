@@ -8,7 +8,13 @@ pub trait DB: Send + Sync {
     async fn get_user_by_username(&self, username: &str) -> Option<User>;
 
     // Block methods
-    async fn block_exists(&self, file_hash: &str, block_index: u64, block_hash: &str) -> bool;
+    async fn block_exists(
+        &self,
+        file_hash: &str,
+        block_index: u64,
+        block_hash: &str,
+        user_id: i64,
+    ) -> bool;
     async fn store_block(
         &self,
         block_hash: &str,
@@ -52,10 +58,22 @@ impl DB for DBType {
     }
 
     // Block methods
-    async fn block_exists(&self, file_hash: &str, block_index: u64, block_hash: &str) -> bool {
+    async fn block_exists(
+        &self,
+        file_hash: &str,
+        block_index: u64,
+        block_hash: &str,
+        user_id: i64,
+    ) -> bool {
         match self {
-            DBType::MapDB(db) => db.block_exists(file_hash, block_index, block_hash).await,
-            DBType::SqlDB(db) => db.block_exists(file_hash, block_index, block_hash).await,
+            DBType::MapDB(db) => {
+                db.block_exists(file_hash, block_index, block_hash, user_id)
+                    .await
+            }
+            DBType::SqlDB(db) => {
+                db.block_exists(file_hash, block_index, block_hash, user_id)
+                    .await
+            }
         }
     }
 

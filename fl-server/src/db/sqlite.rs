@@ -48,13 +48,20 @@ impl SqlDB {
         Ok(())
     }
 
-    async fn metadata_exists(&self, file_hash: &str, block_index: u64, block_hash: &str) -> bool {
+    async fn metadata_exists(
+        &self,
+        file_hash: &str,
+        block_index: u64,
+        block_hash: &str,
+        user_id: i64,
+    ) -> bool {
         let result = query(
-            "SELECT COUNT(*) as count FROM metadata WHERE file_hash = ? AND block_index = ? AND block_hash = ?",
+            "SELECT COUNT(*) as count FROM metadata WHERE file_hash = ? AND block_index = ? AND block_hash = ? AND user_id = ?",
         )
         .bind(file_hash)
         .bind(block_index as i64)
         .bind(block_hash)
+        .bind(user_id)
         .fetch_one(&self.pool);
 
         match result.await {
@@ -96,13 +103,19 @@ impl DB for SqlDB {
         }
     }
 
-    async fn block_exists(&self, file_hash: &str, block_index: u64, block_hash: &str) -> bool {
+    async fn block_exists(
+        &self,
+        file_hash: &str,
+        block_index: u64,
+        block_hash: &str,
+        user_id: i64,
+    ) -> bool {
         // Check if the block already exists in storage
         let block_exists = self.storage.block_exists(block_hash);
 
         // Check if the metadata already exists in the database
         let metadata_exists = self
-            .metadata_exists(file_hash, block_index, block_hash)
+            .metadata_exists(file_hash, block_index, block_hash, user_id)
             .await;
 
         // If both block and metadata exist, no need to store again
@@ -126,11 +139,11 @@ impl DB for SqlDB {
 
         // Check if the metadata already exists in the database
         let metadata_exists = self
-            .metadata_exists(file_hash, block_index, block_hash)
+            .metadata_exists(file_hash, block_index, block_hash, user_id)
             .await;
 
         // If both block and metadata exist, no need to store again
-        if block_exists && (metadata_exists || file_hash.is_empty()) {
+        if block_exists && (metadata_exists || (file_hash.is_empty() && user_id == 0)) {
             return Ok(false);
         }
 
