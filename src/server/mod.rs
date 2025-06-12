@@ -19,7 +19,6 @@ use axum::{
     routing::{get, head, post},
     BoxError, Router,
 };
-use clap::{ArgAction, Parser};
 use config::AppState;
 use hyper::{
     header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE},
@@ -31,7 +30,7 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
-use tokio::{runtime::Builder, signal};
+use tokio::signal;
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
 use tower_http::{cors::Any, trace::TraceLayer};
@@ -42,42 +41,8 @@ use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 use website_handlers::WebsiteApi;
 
-#[derive(Parser, Debug)]
-#[clap(name ="fl-server", author, version = env!("GIT_VERSION"), about, long_about = None)]
-struct Options {
-    /// enable debugging logs
-    #[clap(short, long, action=ArgAction::Count)]
-    debug: u8,
-
-    /// config file path
-    #[clap(short, long)]
-    config_path: String,
-}
-
-fn main() -> Result<()> {
-    let rt = Builder::new_multi_thread()
-        .thread_stack_size(8 * 1024 * 1024)
-        .enable_all()
-        .build()
-        .unwrap();
-    rt.block_on(app())
-}
-
-async fn app() -> Result<()> {
-    let opts = Options::parse();
-    simple_logger::SimpleLogger::new()
-        .with_utc_timestamps()
-        .with_level({
-            match opts.debug {
-                0 => log::LevelFilter::Info,
-                1 => log::LevelFilter::Debug,
-                _ => log::LevelFilter::Trace,
-            }
-        })
-        .with_module_level("sqlx", log::Level::Error.to_level_filter())
-        .init()?;
-
-    let config = config::parse_config(&opts.config_path)
+pub async fn app(config_path: &str) -> Result<()> {
+    let config = config::parse_config(config_path)
         .await
         .context("failed to parse config file")?;
 

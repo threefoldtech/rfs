@@ -15,17 +15,17 @@ use std::{
 use bollard::auth::DockerCredentials;
 use serde::{Deserialize, Serialize};
 
-use crate::{
+use crate::docker;
+use crate::fungi;
+use crate::server::{
     auth::{SignInBody, SignInResponse, __path_sign_in_handler},
+    config::{self, Job},
     db::DB,
     response::{DirListTemplate, DirLister, ErrorTemplate, TemplateErr},
-};
-use crate::{
-    config::{self, Job},
     response::{FileInfo, ResponseError, ResponseResult},
     serve_flists::visit_dir_one_level,
 };
-use rfs::fungi::{Reader, Writer};
+use crate::store;
 use utoipa::{OpenApi, ToSchema};
 use uuid::Uuid;
 
@@ -137,7 +137,7 @@ pub async fn create_flist_handler(
         return Err(ResponseError::InternalServerError);
     }
 
-    let meta = match Writer::new(&fl_path, true).await {
+    let meta = match fungi::Writer::new(&fl_path, true).await {
         Ok(writer) => writer,
         Err(err) => {
             log::error!(
@@ -149,7 +149,7 @@ pub async fn create_flist_handler(
         }
     };
 
-    let store = match rfs::store::parse_router(&cfg.store_url).await {
+    let store = match store::parse_router(&cfg.store_url).await {
         Ok(s) => s,
         Err(err) => {
             log::error!("failed to parse router for store with error {}", err);
@@ -193,7 +193,7 @@ pub async fn create_flist_handler(
 
         let (tx, rx) = mpsc::channel();
         let mut docker_to_fl =
-            docker2fl::DockerImageToFlist::new(meta, docker_image, credentials, docker_tmp_dir);
+            docker::DockerImageToFlist::new(meta, docker_image, credentials, docker_tmp_dir);
 
         let res = docker_to_fl.prepare().await;
         if res.is_err() {
@@ -483,7 +483,7 @@ async fn validate_flist_path(state: &Arc<config::AppState>, fl_path: &String) ->
 async fn get_flist_content(fl_path: &String) -> Result<Vec<PathBuf>, Error> {
     let mut visitor = ReadVisitor::default();
 
-    let meta = match Reader::new(&fl_path).await {
+    let meta = match fungi::Reader::new(&fl_path).await {
         Ok(reader) => reader,
         Err(err) => {
             log::error!(
@@ -520,13 +520,13 @@ impl ReadVisitor {
 }
 
 #[async_trait::async_trait]
-impl rfs::fungi::meta::WalkVisitor for ReadVisitor {
+impl fungi::meta::WalkVisitor for ReadVisitor {
     async fn visit(
         &mut self,
         path: &std::path::Path,
-        _node: &rfs::fungi::meta::Inode,
-    ) -> rfs::fungi::meta::Result<rfs::fungi::meta::Walk> {
+        _node: &fungi::meta::Inode,
+    ) -> fungi::meta::Result<fungi::meta::Walk> {
         self.inner.push(path.to_path_buf());
-        Ok(rfs::fungi::meta::Walk::Continue)
+        Ok(fungi::meta::Walk::Continue)
     }
 }

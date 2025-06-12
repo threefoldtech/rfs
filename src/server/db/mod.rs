@@ -1,7 +1,7 @@
 pub mod map;
 pub mod sqlite;
 mod storage;
-use crate::models::{File, User};
+use crate::server::models::{File, User};
 
 pub trait DB: Send + Sync {
     // User methods

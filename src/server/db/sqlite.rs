@@ -1,5 +1,5 @@
 use super::{storage::Storage, DB};
-use crate::models::{File, User};
+use crate::server::models::{File, User};
 use anyhow::Result;
 use sqlx::{query, query_as, Row, SqlitePool};
 
@@ -9,7 +9,7 @@ pub struct SqlDB {
     storage: Storage, // Directory for storing blocks
 }
 
-static SCHEMA: &str = include_str!("../../schema/schema.sql");
+static SCHEMA: &str = include_str!("../../../schema/server.sql");
 
 impl SqlDB {
     pub async fn new(database_filepath: &str, storage_dir: &str, users: &[User]) -> Self {

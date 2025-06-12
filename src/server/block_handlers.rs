@@ -8,7 +8,7 @@ use axum::{
 use axum_macros::debug_handler;
 use std::sync::Arc;
 
-use crate::{
+use crate::server::{
     auth,
     config::AppState,
     db::DB,

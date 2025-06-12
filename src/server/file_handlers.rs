@@ -2,7 +2,7 @@ use axum::{body::Bytes, extract::State, http::StatusCode, response::IntoResponse
 use axum_macros::debug_handler;
 use std::sync::Arc;
 
-use crate::{
+use crate::server::{
     auth,
     config::AppState,
     db::DB,
