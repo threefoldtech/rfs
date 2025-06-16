@@ -12,6 +12,8 @@ pub use unpack::unpack;
 mod clone;
 pub use clone::clone;
 pub mod config;
+mod merge;
+pub use merge::merge;
 mod docker;
 pub use docker::DockerImageToFlist;
 mod upload;
@@ -117,5 +119,36 @@ mod test {
             .unwrap();
 
         assert!(status.success());
+    }
+
+    async fn create_test_files<P: AsRef<std::path::Path>>(dir: P, name: &str, size: usize) {
+        let mut urandom = fs::OpenOptions::default()
+            .read(true)
+            .open("/dev/urandom")
+            .await
+            .unwrap()
+            .take(size as u64);
+
+        let p = dir.as_ref().join(name);
+        let mut file = fs::OpenOptions::default()
+            .create(true)
+            .write(true)
+            .open(p)
+            .await
+            .unwrap();
+
+        tokio::io::copy(&mut urandom, &mut file).await.unwrap();
+    }
+
+    async fn verify_file_content<P: AsRef<std::path::Path>>(path: P, expected_size: usize) {
+        let mut file = fs::OpenOptions::default()
+            .read(true)
+            .open(path)
+            .await
+            .unwrap();
+
+        let mut buffer = vec![0; expected_size];
+        let size = file.read(&mut buffer).await.unwrap();
+        assert_eq!(size, expected_size);
     }
 }

@@ -1,4 +1,3 @@
-
 # Introduction
 
 `rfs` is the main tool to create, mount and extract FungiStore lists (FungiList)`fl` for short. An `fl` is a simple format
@@ -41,6 +40,7 @@ The simplest form of `<store-specs>` is a `url`. the store `url` defines the sto
 - `s3`: aws-s3 is used for storing and retrieving large amounts of data (blobs) in buckets (directories). An example `s3://<username>:<password>@<host>:<port>/<bucket-name>`
 
   `region` is an optional param for s3 stores, if you want to provide one you can add it as a query to the url `?region=<region-name>`
+
 - `http`: http is a store mostly used for wrapping a dir store to fetch data through http requests. It does not support uploading, just fetching the data.
   It can be set in the FL file as the store to fetch the data with `rfs config`. Example: `http://localhost:9000/store` (https works too).
 
@@ -143,6 +143,41 @@ Options:
 ```
 
 By default when unpacking the `-p` flag is not set. which means downloaded files will be `owned` by the current user/group. If `-p` flag is set, the files ownership will be same as the original files used to create the fl (preserve `uid` and `gid` of the files and directories) this normally requires `sudo` while unpacking.
+
+# Merge an `fl`
+
+rfs provides a `merge` subcommand that combines multiple file lists (FL files) into a single unified file list.
+
+```bash
+rfs merge merged.fl flist1.fl flist2.fl --token token
+```
+
+This tells rfs to create an `fl` named `merged.fl` by combining the file lists `flist1.fl` and `flist2.fl`. A token for the server must be specified with the `--token` option.
+
+## Requirements for Merge
+
+- At least 2 input file lists must be specified
+- A token for the server must be specified with the `--token` option
+
+## Full Command Help
+
+```bash
+# rfs merge --help
+
+merge 2 or more FLs into a new one
+
+Usage: rfs merge [OPTIONS] --token <TOKEN> <META> <TARGET_FLISTS>...
+
+Arguments:
+  <META>              path to metadata file (flist)
+  <TARGET_FLISTS>...  
+
+Options:
+  -s, --server <SERVER>  server URL (e.g., http://localhost:8080) [default: http://localhost:8080]
+      --token <TOKEN>    authentication token for the server [default: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjE3NTAwOTAyNTUsImlhdCI6MTc1MDA3MjI1NSwidXNlcm5hbWUiOiJyYXdkYSJ9.PieIEa-O4R2G1_H1Dq8lmpQihNyGun1qLMF9B4ToxEY]
+  -c, --cache <CACHE>    [default: /tmp/cache]
+  -h, --help             Print help
+```
 
 # Specifications
 
