@@ -149,15 +149,15 @@ By default when unpacking the `-p` flag is not set. which means downloaded files
 rfs provides a `merge` subcommand that combines multiple file lists (FL files) into a single unified file list.
 
 ```bash
-rfs merge -m merged.fl -t flist1.fl -t flist2.fl -s dir:///tmp/store
+rfs merge merged.fl flist1.fl flist2.fl --token token
 ```
 
-This tells rfs to create an `fl` named `merged.fl` by combining the file lists `flist1.fl` and `flist2.fl`. A store must be specified with the `-s` option to handle block storage during the merge operation.
+This tells rfs to create an `fl` named `merged.fl` by combining the file lists `flist1.fl` and `flist2.fl`. A token for the server must be specified with the `--token` option.
 
 ## Requirements for Merge
 
-- At least 2 input file lists must be specified with the `-t` option
-- A store must be specified with the `-s` option to store blocks that need to be copied or moved
+- At least 2 input file lists must be specified
+- A token for the server must be specified with the `--token` option
 
 ## Full Command Help
 
@@ -166,17 +166,17 @@ This tells rfs to create an `fl` named `merged.fl` by combining the file lists `
 
 merge 2 or more FLs into a new one
 
-Usage: rfs merge [OPTIONS] --store <STORE> <META> <TARGET_FLISTS>...
+Usage: rfs merge [OPTIONS] --token <TOKEN> <META> <TARGET_FLISTS>...
 
 Arguments:
   <META>              path to metadata file (flist)
-  <TARGET_FLISTS>...
+  <TARGET_FLISTS>...  
 
 Options:
-  -s, --store <STORE>                  store url in the format [xx-xx=]<url>
-      --no-strip-password              disables automatic password stripping from store url
-  -c, --cache <CACHE>                  directory used as cache for downloaded file chunks [default: /tmp/cache]
-  -h, --help                           Print help
+  -s, --server <SERVER>  server URL (e.g., http://localhost:8080) [default: http://localhost:8080]
+      --token <TOKEN>    authentication token for the server [default: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjE3NTAwOTAyNTUsImlhdCI6MTc1MDA3MjI1NSwidXNlcm5hbWUiOiJyYXdkYSJ9.PieIEa-O4R2G1_H1Dq8lmpQihNyGun1qLMF9B4ToxEY]
+  -c, --cache <CACHE>    [default: /tmp/cache]
+  -h, --help             Print help
 ```
 
 # Specifications

@@ -215,11 +215,13 @@ struct MergeOptions {
     /// path to metadata file (flist)
     meta: String,
 
-    #[clap(short, long, action=ArgAction::Append, required = true)]
-    store: Vec<String>,
+    /// server URL (e.g., http://localhost:8080)
+    #[clap(short, long, default_value_t = String::from("http://localhost:8080"))]
+    server: String,
 
-    #[clap(long, default_value_t = false)]
-    no_strip_password: bool,
+    /// authentication token for the server
+    #[clap(long, default_value_t = std::env::var("RFS_TOKEN").unwrap_or_default(), required = true)]
+    token: String,
 
     #[clap(action=ArgAction::Append, required = true)]
     target_flists: Vec<String>,
@@ -817,12 +819,10 @@ fn merge(opts: MergeOptions) -> Result<()> {
     let rt = tokio::runtime::Runtime::new()?;
 
     rt.block_on(async move {
-        let store = store::parse_router(opts.store.as_slice()).await?;
-        let meta = fungi::Writer::new(opts.meta, true).await?;
         rfs::merge(
-            meta,
-            store,
-            !opts.no_strip_password,
+            opts.meta,
+            opts.server,
+            &opts.token,
             opts.target_flists,
             opts.cache,
         )

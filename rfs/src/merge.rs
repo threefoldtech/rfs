@@ -1,10 +1,11 @@
 use crate::{
     cache::Cache,
     fungi::{
+        self,
         meta::{FileType, Inode, Mode, Walk, WalkVisitor},
         Reader, Result, Writer,
     },
-    store::{get_router, BlockStore, Router, Store, Stores},
+    store::{self, get_router, BlockStore, Router, Store, Stores}, upload,
 };
 use anyhow::Context;
 use hex::ToHex;
@@ -14,33 +15,25 @@ use tokio::io::AsyncReadExt;
 
 const ROOT_PATH: &str = "/";
 
-pub async fn merge<S: Store>(
-    writer: Writer,
-    store: S,
-    strip_password: bool,
+pub async fn merge(
+    flist_path: String,
+    server_url: String,
+    token: &str,
     target_flists: Vec<String>,
     cache: String,
 ) -> Result<()> {
-    for route in store.routes() {
-        let mut store_url = route.url;
+    let writer = fungi::Writer::new(flist_path.clone(), true).await?;
 
-        if strip_password {
-            let mut url = url::Url::parse(&store_url).context("failed to parse store url")?;
-            if url.password().is_some() {
-                url.set_password(None)
-                    .map_err(|_| anyhow::anyhow!("failed to strip password"))?;
+    let store = store::parse_router(&[format!(
+        "{}://{}?token={}",
+        store::server::SCHEME,
+        server_url.clone(),
+        token
+    )])
+    .await
+    .context("Failed to create store")?;
 
-                store_url = url.to_string();
-            }
-        }
-
-        let range_start = route.start.unwrap_or_default();
-        let range_end = route.end.unwrap_or(u8::MAX);
-
-        writer.route(range_start, range_end, store_url).await?;
-    }
-
-    let store = store.into();
+    let store = BlockStore::from(store);
 
     let mut path_to_inode_map = HashMap::new();
     let root_path = PathBuf::from(ROOT_PATH);
@@ -70,6 +63,12 @@ pub async fn merge<S: Store>(
 
         reader.walk(&mut visitor).await?;
     }
+
+    let flist_hash = upload(&flist_path, server_url.clone(), None, token)
+        .await
+        .context("Failed to upload flist file")?;
+
+    info!("Flist uploaded successfully. Hash: {}", flist_hash);
 
     Ok(())
 }
