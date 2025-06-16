@@ -18,6 +18,9 @@ e2e:
 	chmod +x e2e_tests.sh
 	./e2e_tests.sh
 
+	chmod +x e2e_tests_updated.sh
+	./e2e_tests_updated.sh
+
 # Run performance tests
 performance:
 	@echo "Running performance tests..."
@@ -27,4 +30,4 @@ performance:
 # Clean test artifacts
 clean:
 	@echo "Cleaning test artifacts..."
-	rm -rf /tmp/rfs-e2e-tests /tmp/rfs-performance-tests
+	rm -rf /tmp/rfs-e2e-tests /tmp/rfs-performance-tests /tmp/rfs-upload-download-tests

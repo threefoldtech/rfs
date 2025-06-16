@@ -182,3 +182,20 @@ Options:
 # Specifications
 
 Please check [docs](../docs)
+
+# Server Command
+
+The `rfs` tool can also be used to run the fl-server
+
+```bash
+rfs server --config-path config.toml [--debug]
+```
+
+This command will start the fl-server using the specified configuration file. The fl-server binary must be located in the same directory as the rfs binary.
+
+Options:
+
+- `--config-path`, `-c`: Path to the configuration file (required)
+- `--debug`, `-d`: Enable debugging logs (can be specified multiple times for more verbose logging)
+
+For more information about the fl-server configuration and usage, please refer to the [fl-server README](../fl-server/README.md).

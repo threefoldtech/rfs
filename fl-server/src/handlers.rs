@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     auth::{SignInBody, SignInResponse, __path_sign_in_handler},
+    db::DB,
     response::{DirListTemplate, DirLister, ErrorTemplate, TemplateErr},
 };
 use crate::{
@@ -441,7 +442,7 @@ async fn validate_flist_path(state: &Arc<config::AppState>, fl_path: &String) ->
     }
 
     // validate username
-    match state.db.get_user_by_username(&parts[1]) {
+    match state.db.get_user_by_username(parts[1]).await {
         Some(_) => (),
         None => {
             anyhow::bail!(

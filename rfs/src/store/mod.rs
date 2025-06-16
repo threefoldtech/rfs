@@ -3,6 +3,7 @@ pub mod dir;
 pub mod http;
 mod router;
 pub mod s3store;
+pub mod server;
 pub mod zdb;
 
 use anyhow::Context;
@@ -23,6 +24,7 @@ pub async fn make<U: AsRef<str>>(u: U) -> Result<Stores> {
         "s3" | "s3s" | "s3s+tls" => return Ok(Stores::S3(s3store::S3Store::make(&u).await?)),
         "zdb" => return Ok(Stores::ZDB(zdb::ZdbStore::make(&u).await?)),
         "http" | "https" => return Ok(Stores::HTTP(http::HTTPStore::make(&u).await?)),
+        server::SCHEME => return Ok(Stores::Server(server::ServerStore::make(&u).await?)),
         _ => return Err(Error::UnknownStore(parsed.scheme().into())),
     }
 }
@@ -210,6 +212,7 @@ pub enum Stores {
     Dir(dir::DirStore),
     ZDB(zdb::ZdbStore),
     HTTP(http::HTTPStore),
+    Server(server::ServerStore),
 }
 
 #[async_trait::async_trait]
@@ -220,6 +223,7 @@ impl Store for Stores {
             self::Stores::Dir(dir_store) => dir_store.get(key).await,
             self::Stores::ZDB(zdb_store) => zdb_store.get(key).await,
             self::Stores::HTTP(http_store) => http_store.get(key).await,
+            self::Stores::Server(server_store) => server_store.get(key).await,
         }
     }
     async fn set(&self, key: &[u8], blob: &[u8]) -> Result<()> {
@@ -228,6 +232,7 @@ impl Store for Stores {
             self::Stores::Dir(dir_store) => dir_store.set(key, blob).await,
             self::Stores::ZDB(zdb_store) => zdb_store.set(key, blob).await,
             self::Stores::HTTP(http_store) => http_store.set(key, blob).await,
+            self::Stores::Server(server_store) => server_store.set(key, blob).await,
         }
     }
     fn routes(&self) -> Vec<Route> {
@@ -236,6 +241,7 @@ impl Store for Stores {
             self::Stores::Dir(dir_store) => dir_store.routes(),
             self::Stores::ZDB(zdb_store) => zdb_store.routes(),
             self::Stores::HTTP(http_store) => http_store.routes(),
+            self::Stores::Server(server_store) => server_store.routes(),
         }
     }
 }
