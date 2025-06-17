@@ -367,6 +367,10 @@ pub struct UserBlocksResponse {
 #[utoipa::path(
     get,
     path = "/api/v1/user/blocks",
+    params(
+        ("page" = Option<u32>, Query, description = "Page number (1-indexed)"),
+        ("per_page" = Option<u32>, Query, description = "Number of items per page")
+    ),
     responses(
         (status = 200, description = "Blocks found", body = UserBlocksResponse),
         (status = 401, description = "Unauthorized"),
@@ -377,7 +381,11 @@ pub struct UserBlocksResponse {
 pub async fn get_user_blocks_handler(
     State(state): State<Arc<AppState>>,
     extension: axum::extract::Extension<String>,
+    Query(params): Query<ListBlocksParams>,
 ) -> Result<impl IntoResponse, ResponseError> {
+    let page = params.page.unwrap_or(1);
+    let per_page = params.per_page.unwrap_or(50).min(100);
+
     // Get the username from the extension (set by the authorize middleware)
     let username = extension.0;
     let user_id = auth::get_user_id_from_token(&*state.db, &username).await?;
@@ -391,7 +399,7 @@ pub async fn get_user_blocks_handler(
     };
 
     // Get all blocks related to the user
-    match state.db.get_user_blocks(user_id).await {
+    match state.db.get_user_blocks(user_id, page, per_page).await {
         Ok(blocks) => {
             let total = blocks.len() as u64;
             let response = UserBlocksResponse {

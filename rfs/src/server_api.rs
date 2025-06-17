@@ -307,8 +307,18 @@ pub async fn signin(
 }
 
 /// Get all blocks uploaded by the authenticated user
-pub async fn get_user_blocks(server_url: &str, token: &str) -> Result<UserBlocksResponse> {
-    let url = format!("{}/api/v1/user/blocks", server_url);
+pub async fn get_user_blocks(
+    server_url: &str,
+    token: &str,
+    page: Option<u32>,
+    per_page: Option<u32>,
+) -> Result<UserBlocksResponse> {
+    let url = format!(
+        "{}/api/v1/user/blocks?page={}&per_page={}",
+        server_url,
+        page.unwrap_or(1),
+        per_page.unwrap_or(50)
+    );
 
     // Create HTTP client
     let client = Client::new();
@@ -324,9 +334,8 @@ pub async fn get_user_blocks(server_url: &str, token: &str) -> Result<UserBlocks
     // Check if the request was successful
     if !response.status().is_success() {
         return Err(anyhow::anyhow!(
-            "Server returned error: {} - {}",
+            "Server returned error: {}",
             response.status(),
-            response.text().await?
         ));
     }
 

@@ -163,15 +163,44 @@ pub async fn track_blocks(
     }
 
     // Track all user blocks
-    let user_blocks = server_api::get_user_blocks(server_url, token).await?;
+    let mut all_user_blocks = Vec::new();
+
+    let first_page = server_api::get_user_blocks(server_url, token, Some(1), Some(50))
+        .await
+        .context("Failed to get user blocks")?;
+
+    let total_pages = (first_page.total as f64 / 50.0).ceil() as u32;
+
+    let mut tasks = Vec::new();
+    for page in 1..=total_pages {
+        let server_url = server_url.to_string();
+        let token = token.to_string();
+        tasks.push(tokio::spawn(async move {
+            server_api::get_user_blocks(&server_url, &token, Some(page), Some(50)).await
+        }));
+    }
+
+    for task in tasks {
+        match task.await {
+            Ok(Ok(blocks_per_page)) => {
+                all_user_blocks.extend(blocks_per_page.blocks);
+            }
+            Ok(Err(err)) => {
+                return Err(anyhow::anyhow!("Failed to get user blocks: {}", err));
+            }
+            Err(err) => {
+                return Err(anyhow::anyhow!("Task failed: {}", err));
+            }
+        }
+    }
 
     println!(
         "User has {} blocks out of {} total blocks on the server",
-        user_blocks.total, user_blocks.all_blocks
+        all_user_blocks.len(),
+        first_page.all_blocks
     );
 
-    let block_hashes: Vec<String> = user_blocks
-        .blocks
+    let block_hashes: Vec<String> = all_user_blocks
         .into_iter()
         .map(|(block_hash, _)| block_hash)
         .collect();
