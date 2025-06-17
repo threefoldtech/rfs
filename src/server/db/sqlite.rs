@@ -313,11 +313,24 @@ impl DB for SqlDB {
         Ok((page_blocks, total))
     }
 
-    async fn get_user_blocks(&self, user_id: i64) -> Result<Vec<(String, u64)>, anyhow::Error> {
+    async fn get_user_blocks(
+        &self,
+        user_id: i64,
+        page: u32,
+        per_page: u32,
+    ) -> Result<Vec<(String, u64)>, anyhow::Error> {
+        let offset = page
+            .checked_sub(1)
+            .and_then(|p| p.checked_mul(per_page))
+            .ok_or_else(|| anyhow::anyhow!("Page or per_page value caused overflow"))?
+            as i64;
+
         let result = query(
-            "SELECT block_hash, block_size FROM metadata WHERE user_id = ? ORDER BY block_index",
+            "SELECT block_hash, block_size FROM metadata WHERE user_id = ? ORDER BY block_index LIMIT ? OFFSET ?",
         )
         .bind(user_id)
+        .bind(per_page as i64)
+        .bind(offset)
         .fetch_all(&self.pool)
         .await;
 

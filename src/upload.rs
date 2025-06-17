@@ -378,19 +378,45 @@ pub async fn track(server_url: &str, token: &str, show_details: bool) -> Result<
         return Err(anyhow::anyhow!("Authentication token is required. Use --token option or set RFS_TOKEN environment variable."));
     }
 
-    let user_blocks = server_api::get_user_blocks(server_url, token)
+    let first_page = server_api::get_user_blocks(server_url, token, Some(1), None)
         .await
         .context("Failed to get user blocks")?;
 
+    let total_pages = (first_page.total as f64 / 50.0).ceil() as u32;
+
+    let mut tasks = Vec::new();
+    for page in 1..=total_pages {
+        let server_url = server_url.to_string();
+        let token = token.to_string();
+        tasks.push(tokio::spawn(async move {
+            server_api::get_user_blocks(&server_url, &token, Some(page), Some(50)).await
+        }));
+    }
+
+    let mut user_blocks = Vec::new();
+    for task in tasks {
+        match task.await {
+            Ok(Ok(blocks_per_page)) => {
+                user_blocks.extend(blocks_per_page.blocks);
+            }
+            Ok(Err(err)) => {
+                return Err(anyhow::anyhow!("Failed to get user blocks: {}", err));
+            }
+            Err(err) => {
+                return Err(anyhow::anyhow!("Task failed: {}", err));
+            }
+        }
+    }
+
     // Calculate total size
-    let total_size: u64 = user_blocks.blocks.iter().map(|(_, size)| size).sum();
+    let total_size: u64 = user_blocks.iter().map(|(_, size)| size).sum();
 
     println!("User Blocks Summary:");
     println!(
         "Usage percentage: {}%",
-        (user_blocks.total as f64 / user_blocks.all_blocks as f64) * 100.0
+        (user_blocks.len() as f64 / first_page.all_blocks as f64) * 100.0
     );
-    println!("Total blocks: {}", user_blocks.total);
+    println!("Total blocks: {}", user_blocks.len());
     println!(
         "Total size: {} bytes ({:.2} MB)",
         total_size,
@@ -398,9 +424,9 @@ pub async fn track(server_url: &str, token: &str, show_details: bool) -> Result<
     );
 
     // Print individual blocks if there are any
-    if show_details && !user_blocks.blocks.is_empty() {
+    if show_details && !user_blocks.is_empty() {
         println!("\nBlock details:");
-        for (hash, size) in &user_blocks.blocks {
+        for (hash, size) in &user_blocks {
             println!("  {} - {} bytes", hash, size);
         }
     }

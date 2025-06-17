@@ -40,7 +40,12 @@ pub trait DB: Send + Sync {
     ) -> Result<(Vec<String>, u64), anyhow::Error>;
 
     // Get all blocks related to a user
-    async fn get_user_blocks(&self, user_id: i64) -> Result<Vec<(String, u64)>, anyhow::Error>;
+    async fn get_user_blocks(
+        &self,
+        user_id: i64,
+        page: u32,
+        per_page: u32,
+    ) -> Result<Vec<(String, u64)>, anyhow::Error>;
 }
 
 pub enum DBType {
@@ -147,10 +152,15 @@ impl DB for DBType {
         }
     }
 
-    async fn get_user_blocks(&self, user_id: i64) -> Result<Vec<(String, u64)>, anyhow::Error> {
+    async fn get_user_blocks(
+        &self,
+        user_id: i64,
+        page: u32,
+        per_page: u32,
+    ) -> Result<Vec<(String, u64)>, anyhow::Error> {
         match self {
-            DBType::MapDB(db) => db.get_user_blocks(user_id).await,
-            DBType::SqlDB(db) => db.get_user_blocks(user_id).await,
+            DBType::MapDB(db) => db.get_user_blocks(user_id, page, per_page).await,
+            DBType::SqlDB(db) => db.get_user_blocks(user_id, page, per_page).await,
         }
     }
 }

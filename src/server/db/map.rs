@@ -76,7 +76,12 @@ impl DB for MapDB {
         Ok((Vec::new(), 0))
     }
 
-    async fn get_user_blocks(&self, _user_id: i64) -> Result<Vec<(String, u64)>, anyhow::Error> {
+    async fn get_user_blocks(
+        &self,
+        _user_id: i64,
+        _page: u32,
+        _per_page: u32,
+    ) -> Result<Vec<(String, u64)>, anyhow::Error> {
         // TODO:
         Ok(Vec::new())
     }
