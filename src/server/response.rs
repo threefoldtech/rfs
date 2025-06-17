@@ -19,12 +19,19 @@ use crate::server::{
 
 #[derive(Serialize, ToSchema)]
 pub enum ResponseError {
+    #[schema(title = "ResponseErrorInternalServerError")]
     InternalServerError,
+    #[schema(title = "ResponseErrorConflict")]
     Conflict(String),
+    #[schema(title = "ResponseErrorNotFound")]
     NotFound(String),
+    #[schema(title = "ResponseErrorUnauthorized")]
     Unauthorized(String),
+    #[schema(title = "ResponseErrorBadRequest")]
     BadRequest(String),
+    #[schema(title = "ResponseErrorForbidden")]
     Forbidden(String),
+    #[schema(title = "ResponseErrorTemplateError")]
     TemplateError(ErrorTemplate),
 }
 
@@ -74,18 +81,28 @@ impl IntoResponse for ResponseError {
     }
 }
 
-#[derive(ToSchema)]
+#[derive(Serialize,ToSchema)]
 pub enum ResponseResult {
+    #[schema(title = "ResponseResultHealth")]
     Health,
+    #[schema(title = "ResponseResultFlistCreated")]
     FlistCreated(Job),
+    #[schema(title = "ResponseResultFlistState")]
     FlistState(FlistState),
+    #[schema(title = "ResponseResultFlists")]
     Flists(HashMap<String, Vec<FileInfo>>),
+    #[schema(title = "ResponseResultPreviewFlist")]
     PreviewFlist(PreviewResponse),
+    #[schema(title = "ResponseResultSignedIn")]
     SignedIn(SignInResponse),
+    #[schema(title = "ResponseResultDirTemplate")]
     DirTemplate(DirListTemplate),
+    #[schema(title = "ResponseResultBlockUploaded")]
     BlockUploaded(String),
+    #[schema(title = "ResponseResultFileUploaded")]
     FileUploaded(FileUploadResponse),
-    #[schema(value_type = Vec<u8>)]
+    #[schema(value_type = Vec<u8>, title = "ResponseResultRes")]
+    #[serde(skip_serializing)]
     Res(hyper::Response<tower_http::services::fs::ServeFileSystemResponseBody>),
 }
 
@@ -187,7 +204,10 @@ const FAIL_REASON_HEADER_NAME: &str = "fl-server-fail-reason";
 
 #[derive(Serialize, ToSchema)]
 pub enum TemplateErr {
+    #[schema(title = "TemplateErrBadRequest")]
     BadRequest(String),
+    #[schema(title = "TemplateErrNotFound")]
     NotFound(String),
+    #[schema(title = "TemplateErrInternalServerError")]
     InternalServerError(String),
 }

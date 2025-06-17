@@ -113,7 +113,7 @@ async fn decrypt_block(state: &Arc<AppState>, block: &meta::Block) -> Result<Vec
 
 #[utoipa::path(
     get,
-    path = "/api/v1/website/{website_hash}/{path:.*}",
+    path = "/api/v1/website/{website_hash}/{path}",
     tag = "Website Serving",
     responses(
         (status = 200, description = "Website file served successfully", content_type = "application/octet-stream", body = Vec<u8>),

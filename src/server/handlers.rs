@@ -102,10 +102,15 @@ pub struct PreviewResponse {
 
 #[derive(Debug, Clone, Serialize, PartialEq, ToSchema)]
 pub enum FlistState {
+    #[schema(title = "FlistStateAccepted")]
     Accepted(String),
+    #[schema(title = "FlistStateStarted")]
     Started(String),
+    #[schema(title = "FlistStateInProgress")]
     InProgress(FlistStateInfo),
+    #[schema(title = "FlistStateCreated")]
     Created(String),
+    #[schema(title = "FlistStateFailed")]
     Failed,
 }
 
