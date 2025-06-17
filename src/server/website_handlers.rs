@@ -14,18 +14,11 @@ use mime_guess::from_path;
 use std::fs;
 use std::sync::Arc;
 use tempfile::NamedTempFile;
-use utoipa::OpenApi;
+// OpenApi is now only used in the main handlers.rs file
 
 use crate::server::{config::AppState, db::DB, response::ResponseError};
 
-#[derive(OpenApi)]
-#[openapi(
-    paths(serve_website_handler),
-    tags(
-        (name = "websites", description = "Website serving API")
-    )
-)]
-pub struct WebsiteApi;
+// Website API endpoints are included in the main FlistApi in handlers.rs
 
 /// Resolves a file path within a flist database to get file information
 async fn get_file_from_flist(flist_content: &[u8], file_path: &str) -> Result<Vec<meta::Block>> {
@@ -120,11 +113,12 @@ async fn decrypt_block(state: &Arc<AppState>, block: &meta::Block) -> Result<Vec
 
 #[utoipa::path(
     get,
-    path = "/v1/api/website/{website_hash}/{path:.*}",
+    path = "/api/v1/website/{website_hash}/{path:.*}",
+    tag = "Website Serving",
     responses(
-        (status = 200, description = "Website file served successfully"),
-        (status = 404, description = "File not found"),
-        (status = 500, description = "Internal server error"),
+        (status = 200, description = "Website file served successfully", content_type = "application/octet-stream", body = Vec<u8>),
+        (status = 404, description = "File not found", body = ResponseError),
+        (status = 500, description = "Internal server error", body = ResponseError),
     ),
     params(
         ("website_hash" = String, Path, description = "flist hash of the website directory"),

@@ -10,19 +10,11 @@ use crate::server::{
     response::{ResponseError, ResponseResult},
 };
 use serde::{Deserialize, Serialize};
-use utoipa::{OpenApi, ToSchema};
+use utoipa::ToSchema;
 
 const BLOCK_SIZE: usize = 1024 * 1024; // 1MB
 
-#[derive(OpenApi)]
-#[openapi(
-    paths(upload_file_handler, get_file_handler),
-    components(schemas(File, FileUploadResponse, FileDownloadRequest)),
-    tags(
-        (name = "files", description = "File management API")
-    )
-)]
-pub struct FileApi;
+// File API endpoints are included in the main FlistApi in handlers.rs
 
 /// Response for file upload
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -38,11 +30,12 @@ pub struct FileUploadResponse {
 #[utoipa::path(
     post,
     path = "/api/v1/file",
+    tag = "File Management",
     request_body(content = Vec<u8>, description = "File data to upload", content_type = "application/octet-stream"),
     responses(
-        (status = 201, description = "File uploaded successfully", body = FileUploadResponse),
-        (status = 400, description = "Bad request"),
-        (status = 500, description = "Internal server error"),
+        (status = 201, description = "File uploaded successfully", body = ResponseResult),
+        (status = 400, description = "Bad request", body = ResponseError),
+        (status = 500, description = "Internal server error", body = ResponseError),
     )
 )]
 #[debug_handler]
@@ -122,11 +115,12 @@ pub struct FileDownloadRequest {
 #[utoipa::path(
     post,
     path = "/api/v1/file/{hash}",
+    tag = "File Management",
     request_body(content = FileDownloadRequest, description = "Optional custom filename for download", content_type = "application/json"),
     responses(
-        (status = 200, description = "File found", content_type = "application/octet-stream"),
-        (status = 404, description = "File not found"),
-        (status = 500, description = "Internal server error"),
+        (status = 200, description = "File found", body = Vec<u8>, content_type = "application/octet-stream"),
+        (status = 404, description = "File not found", body = ResponseError),
+        (status = 500, description = "Internal server error", body = ResponseError),
     ),
     params(
         ("hash" = String, Path, description = "File hash")

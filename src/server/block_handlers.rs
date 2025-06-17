@@ -16,17 +16,9 @@ use crate::server::{
     response::{ResponseError, ResponseResult},
 };
 use serde::{Deserialize, Serialize};
-use utoipa::{OpenApi, ToSchema};
+use utoipa::ToSchema;
 
-#[derive(OpenApi)]
-#[openapi(
-    paths(upload_block_handler, get_block_handler, check_block_handler, verify_blocks_handler, get_blocks_by_hash_handler, list_blocks_handler, get_user_blocks_handler, get_block_downloads_handler),
-    components(schemas(Block, VerifyBlocksRequest, VerifyBlocksResponse, BlocksResponse, ListBlocksParams, ListBlocksResponse, UserBlocksResponse, BlockDownloadsResponse)),
-    tags(
-        (name = "blocks", description = "Block management API")
-    )
-)]
-pub struct BlockApi;
+// Block API endpoints are included in the main FlistApi in handlers.rs
 
 /// Query parameters for uploading a block
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -43,16 +35,17 @@ pub struct UploadBlockParams {
 #[utoipa::path(
     post,
     path = "/api/v1/block",
+    tag = "Block Management",
     request_body(content = Vec<u8>, description = "Block data to upload", content_type = "application/octet-stream"),
     params(
         ("file_hash" = String, Query, description = "File hash associated with the block"),
         ("idx" = u64, Query, description = "Block index within the file")
     ),
     responses(
-        (status = 200, description = "Block already exists", body = String),
-        (status = 201, description = "Block created successfully", body = String),
-        (status = 400, description = "Bad request"),
-        (status = 500, description = "Internal server error"),
+        (status = 200, description = "Block already exists", body = ResponseResult),
+        (status = 201, description = "Block created successfully", body = ResponseResult),
+        (status = 400, description = "Bad request", body = ResponseError),
+        (status = 500, description = "Internal server error", body = ResponseError),
     )
 )]
 #[debug_handler]
@@ -98,10 +91,11 @@ pub async fn upload_block_handler(
 #[utoipa::path(
     get,
     path = "/api/v1/block/{hash}",
+    tag = "Block Management",
     responses(
-        (status = 200, description = "Block found", content_type = "application/octet-stream"),
-        (status = 404, description = "Block not found"),
-        (status = 500, description = "Internal server error"),
+        (status = 200, description = "Block found", body = Vec<u8>, content_type = "application/octet-stream"),
+        (status = 404, description = "Block not found", body = ResponseError),
+        (status = 500, description = "Internal server error", body = ResponseError),
     ),
     params(
         ("hash" = String, Path, description = "Block hash")
@@ -136,9 +130,10 @@ pub async fn get_block_handler(
 #[utoipa::path(
     head,
     path = "/api/v1/block/{hash}",
+    tag = "Block Management",
     responses(
         (status = 200, description = "Block found"),
-        (status = 404, description = "Block not found"),
+        (status = 404, description = "Block not found", body = ResponseError),
     ),
     params(
         ("hash" = String, Path, description = "Block hash")
@@ -194,11 +189,12 @@ pub struct VerifyBlocksResponse {
 #[utoipa::path(
     post,
     path = "/api/v1/block/verify",
+    tag = "Block Management",
     request_body(content = VerifyBlocksRequest, description = "List of block hashes to verify", content_type = "application/json"),
     responses(
         (status = 200, description = "Verification completed", body = VerifyBlocksResponse),
-        (status = 400, description = "Bad request"),
-        (status = 500, description = "Internal server error"),
+        (status = 400, description = "Bad request", body = ResponseError),
+        (status = 500, description = "Internal server error", body = ResponseError),
     )
 )]
 #[debug_handler]
@@ -241,10 +237,11 @@ pub struct BlocksResponse {
 #[utoipa::path(
     get,
     path = "/api/v1/blocks/{hash}",
+    tag = "Block Management",
     responses(
         (status = 200, description = "Blocks found", body = BlocksResponse),
-        (status = 404, description = "Hash not found"),
-        (status = 500, description = "Internal server error"),
+        (status = 404, description = "Hash not found", body = ResponseError),
+        (status = 500, description = "Internal server error", body = ResponseError),
     ),
     params(
         ("hash" = String, Path, description = "File hash or block hash")

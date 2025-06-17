@@ -85,6 +85,7 @@ pub enum ResponseResult {
     DirTemplate(DirListTemplate),
     BlockUploaded(String),
     FileUploaded(FileUploadResponse),
+    #[schema(value_type = Vec<u8>)]
     Res(hyper::Response<tower_http::services::fs::ServeFileSystemResponseBody>),
 }
 

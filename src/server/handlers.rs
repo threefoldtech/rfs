@@ -28,13 +28,38 @@ use crate::server::{
 use crate::store;
 use utoipa::{OpenApi, ToSchema};
 use uuid::Uuid;
+use crate::server::block_handlers;
+use crate::server::file_handlers;
+use crate::server::serve_flists;
+use crate::server::website_handlers;
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(health_check_handler, create_flist_handler, get_flist_state_handler, preview_flist_handler, list_flists_handler, sign_in_handler),
-    components(schemas(DirListTemplate, DirLister, FlistBody, Job, ResponseError, ErrorTemplate, TemplateErr, ResponseResult, FileInfo, SignInBody, FlistState, SignInResponse, FlistStateInfo, PreviewResponse)),
+    paths(health_check_handler, create_flist_handler, get_flist_state_handler, preview_flist_handler, list_flists_handler, sign_in_handler, block_handlers::upload_block_handler, block_handlers::get_block_handler, block_handlers::check_block_handler, block_handlers::verify_blocks_handler, block_handlers::get_blocks_by_hash_handler, block_handlers::list_blocks_handler, block_handlers::get_block_downloads_handler, block_handlers::get_user_blocks_handler, file_handlers::upload_file_handler, file_handlers::get_file_handler, website_handlers::serve_website_handler, serve_flists::serve_flists),
+    components(
+        schemas(
+            // Common schemas
+            DirListTemplate, DirLister, ResponseError, ErrorTemplate, TemplateErr, ResponseResult, FileInfo,
+            // Authentication schemas
+            SignInBody, SignInResponse,
+            // Flist schemas
+            FlistBody, Job, FlistState, FlistStateInfo, PreviewResponse,
+            // Block schemas
+            crate::server::models::Block, block_handlers::VerifyBlock, block_handlers::VerifyBlocksRequest, block_handlers::VerifyBlocksResponse,
+            block_handlers::BlocksResponse, block_handlers::ListBlocksParams, block_handlers::ListBlocksResponse,
+            block_handlers::UserBlocksResponse, block_handlers::BlockDownloadsResponse, block_handlers::UploadBlockParams,
+            // File schemas
+            file_handlers::FileUploadResponse, file_handlers::FileDownloadRequest, crate::server::models::File
+        )
+    ),
     tags(
-        (name = "fl-server", description = "Flist conversion API")
+        (name = "System", description = "System health and status"),
+        (name = "Authentication", description = "Authentication endpoints"),
+        (name = "Flist Management", description = "Flist creation and management"),
+        (name = "Flist Serving", description = "Serving flist files"),
+        (name = "Block Management", description = "Block storage and retrieval"),
+        (name = "File Management", description = "File upload and download"),
+        (name = "Website Serving", description = "Website content serving")
     )
 )]
 pub struct FlistApi;
@@ -55,7 +80,7 @@ pub struct FlistBody {
 
 #[derive(Debug, Deserialize, Serialize, Clone, ToSchema)]
 pub struct PreviewResponse {
-    pub content: Vec<PathBuf>,
+    pub content: Vec<String>,
     pub metadata: String,
     pub checksum: String,
 }
@@ -77,7 +102,8 @@ pub struct FlistStateInfo {
 
 #[utoipa::path(
     get,
-    path = "/v1/api",
+    path = "/api/v1",
+    tag = "System",
     responses(
         (status = 200, description = "flist server is working", body = String)
     )
@@ -88,14 +114,15 @@ pub async fn health_check_handler() -> ResponseResult {
 
 #[utoipa::path(
     post,
-    path = "/v1/api/fl",
+    path = "/api/v1/fl",
+    tag = "Flist Management",
     request_body = FlistBody,
     responses(
         (status = 201, description = "Flist conversion started", body = Job),
-        (status = 401, description = "Unauthorized user"),
-        (status = 403, description = "Forbidden"),
-        (status = 409, description = "Conflict"),
-        (status = 500, description = "Internal server error"),
+        (status = 401, description = "Unauthorized user", body = ResponseError),
+        (status = 403, description = "Forbidden", body = ResponseError),
+        (status = 409, description = "Conflict", body = ResponseError),
+        (status = 500, description = "Internal server error", body = ResponseError),
     )
 )]
 #[debug_handler]
@@ -268,13 +295,14 @@ pub async fn create_flist_handler(
 
 #[utoipa::path(
     get,
-    path = "/v1/api/fl/{job_id}",
+    path = "/api/v1/fl/{job_id}",
+    tag = "Flist Management",
     responses(
         (status = 200, description = "Flist state", body = FlistState),
-        (status = 404, description = "Flist not found"),
-        (status = 500, description = "Internal server error"),
-        (status = 401, description = "Unauthorized user"),
-        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Flist not found", body = ResponseError),
+        (status = 500, description = "Internal server error", body = ResponseError),
+        (status = 401, description = "Unauthorized user", body = ResponseError),
+        (status = 403, description = "Forbidden", body = ResponseError),
     ),
     params(
         ("job_id" = String, Path, description = "flist job id")
@@ -329,12 +357,13 @@ pub async fn get_flist_state_handler(
 
 #[utoipa::path(
 	get,
-	path = "/v1/api/fl",
+	path = "/api/v1/fl",
+	tag = "Flist Management",
 	responses(
         (status = 200, description = "Listing flists", body = HashMap<String, Vec<FileInfo>>),
-        (status = 401, description = "Unauthorized user"),
-        (status = 403, description = "Forbidden"),
-        (status = 500, description = "Internal server error"),
+        (status = 401, description = "Unauthorized user", body = ResponseError),
+        (status = 403, description = "Forbidden", body = ResponseError),
+        (status = 500, description = "Internal server error", body = ResponseError),
 	)
 )]
 #[debug_handler]
@@ -370,13 +399,14 @@ pub async fn list_flists_handler(State(state): State<Arc<config::AppState>>) -> 
 
 #[utoipa::path(
 	get,
-	path = "/v1/api/fl/preview/{flist_path}",
+	path = "/api/v1/fl/preview/{flist_path}",
+	tag = "Flist Management",
 	responses(
         (status = 200, description = "Flist preview result", body = PreviewResponse),
-        (status = 400, description = "Bad request"),
-        (status = 401, description = "Unauthorized user"),
-        (status = 403, description = "Forbidden"),
-        (status = 500, description = "Internal server error"),
+        (status = 400, description = "Bad request", body = ResponseError),
+        (status = 401, description = "Unauthorized user", body = ResponseError),
+        (status = 403, description = "Forbidden", body = ResponseError),
+        (status = 500, description = "Internal server error", body = ResponseError),
 	),
     params(
         ("flist_path" = String, Path, description = "flist file path")
@@ -411,8 +441,14 @@ pub async fn preview_flist_handler(
         }
     };
 
+    // Convert PathBuf values to strings for OpenAPI compatibility
+    let content_strings: Vec<String> = content
+        .into_iter()
+        .map(|path| path.to_string_lossy().to_string())
+        .collect();
+        
     Ok(ResponseResult::PreviewFlist(PreviewResponse {
-        content,
+        content: content_strings,
         metadata: state.config.store_url.join("-"),
         checksum: sha256::digest(&bytes),
     }))
