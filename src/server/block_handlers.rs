@@ -46,6 +46,9 @@ pub struct UploadBlockParams {
         (status = 201, description = "Block created successfully", body = ResponseResult),
         (status = 400, description = "Bad request", body = ResponseError),
         (status = 500, description = "Internal server error", body = ResponseError),
+    ),
+    security(
+        ("bearerAuth" = [])
     )
 )]
 #[debug_handler]
@@ -314,6 +317,7 @@ pub struct ListBlocksResponse {
 #[utoipa::path(
     get,
     path = "/api/v1/blocks",
+    tag = "Block Management",
     params(
         ("page" = Option<u32>, Query, description = "Page number (1-indexed)"),
         ("per_page" = Option<u32>, Query, description = "Number of items per page")
@@ -364,6 +368,7 @@ pub struct UserBlocksResponse {
 #[utoipa::path(
     get,
     path = "/api/v1/user/blocks",
+    tag = "Block Management",
     params(
         ("page" = Option<u32>, Query, description = "Page number (1-indexed)"),
         ("per_page" = Option<u32>, Query, description = "Number of items per page")
@@ -372,6 +377,9 @@ pub struct UserBlocksResponse {
         (status = 200, description = "Blocks found", body = UserBlocksResponse),
         (status = 401, description = "Unauthorized"),
         (status = 500, description = "Internal server error"),
+    ),
+    security(
+        ("bearerAuth" = [])
     )
 )]
 #[debug_handler]
@@ -428,6 +436,7 @@ pub struct BlockDownloadsResponse {
 #[utoipa::path(
     get,
     path = "/api/v1/block/{hash}/downloads",
+    tag = "Block Management",
     responses(
         (status = 200, description = "Download count retrieved successfully", body = BlockDownloadsResponse),
         (status = 404, description = "Block not found"),

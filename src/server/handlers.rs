@@ -26,16 +26,31 @@ use crate::server::{
     serve_flists::visit_dir_one_level,
 };
 use crate::store;
-use utoipa::{OpenApi, ToSchema};
+use utoipa::{OpenApi, ToSchema, Modify};
+use utoipa::openapi::security::{SecurityScheme, HttpAuthScheme, Http};
 use uuid::Uuid;
 use crate::server::block_handlers;
 use crate::server::file_handlers;
 use crate::server::serve_flists;
 use crate::server::website_handlers;
 
+// Security scheme modifier for JWT Bearer authentication
+struct SecurityAddon;
+
+impl Modify for SecurityAddon {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        let components = openapi.components.as_mut().unwrap(); // Safe to unwrap since components are registered
+        components.add_security_scheme(
+            "bearerAuth",
+            SecurityScheme::Http(Http::new(HttpAuthScheme::Bearer)),
+        );
+    }
+}
+
 #[derive(OpenApi)]
 #[openapi(
     paths(health_check_handler, create_flist_handler, get_flist_state_handler, preview_flist_handler, list_flists_handler, sign_in_handler, block_handlers::upload_block_handler, block_handlers::get_block_handler, block_handlers::check_block_handler, block_handlers::verify_blocks_handler, block_handlers::get_blocks_by_hash_handler, block_handlers::list_blocks_handler, block_handlers::get_block_downloads_handler, block_handlers::get_user_blocks_handler, file_handlers::upload_file_handler, file_handlers::get_file_handler, website_handlers::serve_website_handler, serve_flists::serve_flists),
+    modifiers(&SecurityAddon),
     components(
         schemas(
             // Common schemas
@@ -123,6 +138,9 @@ pub async fn health_check_handler() -> ResponseResult {
         (status = 403, description = "Forbidden", body = ResponseError),
         (status = 409, description = "Conflict", body = ResponseError),
         (status = 500, description = "Internal server error", body = ResponseError),
+    ),
+    security(
+        ("bearerAuth" = [])
     )
 )]
 #[debug_handler]
@@ -306,6 +324,9 @@ pub async fn create_flist_handler(
     ),
     params(
         ("job_id" = String, Path, description = "flist job id")
+    ),
+    security(
+        ("bearerAuth" = [])
     )
 )]
 #[debug_handler]

@@ -36,6 +36,9 @@ pub struct FileUploadResponse {
         (status = 201, description = "File uploaded successfully", body = ResponseResult),
         (status = 400, description = "Bad request", body = ResponseError),
         (status = 500, description = "Internal server error", body = ResponseError),
+    ),
+    security(
+        ("bearerAuth" = [])
     )
 )]
 #[debug_handler]
