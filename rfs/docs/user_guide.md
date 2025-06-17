@@ -267,6 +267,80 @@ rfs website-publish <directory_path> --server <server_url> [--block-size <size>]
 
 ---
 
+### 15. **Token**
+
+Retrieve an authentication token using username and password.
+
+**Usage:**
+
+```bash
+rfs token --username <username> --password <password> --server <server_url>
+```
+
+**Options:**
+
+- `--username`: Username for authentication.
+- `--password`: Password for authentication.
+- `--server`: Server URL (e.g., `http://localhost:8080`).
+
+---
+
+### 16. **Track**
+
+Track user blocks on the server and their download statistics.
+
+**Usage:**
+
+```bash
+rfs track --server <server_url> --token <auth_token> [--details]
+```
+
+**Options:**
+
+- `--server`: Server URL (e.g., `http://localhost:8080`).
+- `--token`: Authentication token for the server.
+- `--details`: Display detailed information about each block.
+
+---
+
+### 17. **TrackBlocks**
+
+Track download statistics for specific blocks or all blocks.
+
+**Usage:**
+
+```bash
+rfs track-blocks --server <server_url> --token <auth_token> [--hash <block_hash>] [--all] [--details]
+```
+
+**Options:**
+
+- `--server`: Server URL (e.g., `http://localhost:8080`).
+- `--token`: Authentication token for the server.
+- `--hash`: Specific block hash to track (conflicts with --all).
+- `--all`: Track all blocks (default if no hash is provided).
+- `--details`: Display detailed information about each block.
+
+---
+
+### 18. **TrackWebsite**
+
+Track download statistics for a website using its flist hash.
+
+**Usage:**
+
+```bash
+rfs track-website <flist_hash> --server <server_url> [--details]
+```
+
+**Options:**
+
+- `<flist_hash>`: Hash of the website's flist.
+- `--server`: Server URL (e.g., `http://localhost:8080`).
+- `--details`: Display detailed information about each block.
+
+---
+
 ### Examples
 
 1. **Upload a File**:
@@ -371,6 +445,38 @@ rfs website-publish <directory_path> --server <server_url> [--block-size <size>]
 
     ```bash
     rfs clone --meta myflist.fl --store http://newstore.url --cache /tmp/cache
+    ```
+
+14.  **Get an Authentication Token**:
+
+    Retrieve an authentication token from the server:
+
+    ```bash
+    rfs token --username myuser --password mypass --server http://localhost:8080
+    ```
+
+15.  **Track User Blocks**:
+
+    Track all blocks uploaded by the authenticated user:
+
+    ```bash
+    rfs track --server http://localhost:8080 --token mytoken
+    ```
+
+16.  **Track a Specific Block**:
+
+    Track download statistics for a specific block:
+
+    ```bash
+    rfs track-blocks --server http://localhost:8080 --hash abc123def456
+    ```
+
+4.  **Track Website Downloads**:
+
+    Track download statistics for a published website:
+
+    ```bash
+    rfs track-website abc123def456 --server http://localhost:8080 --details
     ```
 
 ---

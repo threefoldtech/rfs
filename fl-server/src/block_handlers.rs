@@ -9,6 +9,7 @@ use axum_macros::debug_handler;
 use std::sync::Arc;
 
 use crate::{
+    auth,
     config::AppState,
     db::DB,
     models::Block,
@@ -19,8 +20,8 @@ use utoipa::{OpenApi, ToSchema};
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(upload_block_handler, get_block_handler, check_block_handler, verify_blocks_handler, get_blocks_by_hash_handler, list_blocks_handler),
-    components(schemas(Block, VerifyBlocksRequest, VerifyBlocksResponse, BlocksResponse, ListBlocksParams, ListBlocksResponse)),
+    paths(upload_block_handler, get_block_handler, check_block_handler, verify_blocks_handler, get_blocks_by_hash_handler, list_blocks_handler, get_user_blocks_handler, get_block_downloads_handler),
+    components(schemas(Block, VerifyBlocksRequest, VerifyBlocksResponse, BlocksResponse, ListBlocksParams, ListBlocksResponse, UserBlocksResponse, BlockDownloadsResponse)),
     tags(
         (name = "blocks", description = "Block management API")
     )
@@ -58,6 +59,7 @@ pub struct UploadBlockParams {
 pub async fn upload_block_handler(
     State(state): State<Arc<AppState>>,
     Query(params): Query<UploadBlockParams>,
+    extension: axum::extract::Extension<String>,
     body: Bytes,
 ) -> Result<(StatusCode, ResponseResult), ResponseError> {
     // Convert the body bytes to Vec<u8>
@@ -66,10 +68,14 @@ pub async fn upload_block_handler(
     // Calculate the hash of the block data
     let hash = Block::calculate_hash(&data);
 
+    // Get the username from the extension (set by the authorize middleware)
+    let username = extension.0;
+    let user_id = auth::get_user_id_from_token(&*state.db, &username).await?;
+
     // Store the block data in the database
     match state
         .db
-        .store_block(&hash, data, &params.file_hash, params.idx)
+        .store_block(&hash, data, &params.file_hash, params.idx, user_id)
         .await
     {
         Ok(is_new) => {
@@ -144,7 +150,7 @@ pub async fn check_block_handler(
     axum::extract::Path(hash): axum::extract::Path<String>,
 ) -> Result<impl IntoResponse, ResponseError> {
     // Retrieve the block from the database
-    match state.db.block_exists("", 0, &hash).await {
+    match state.db.block_exists("", 0, &hash, 0).await {
         true => {
             // Block found
             Ok(StatusCode::OK)
@@ -206,7 +212,7 @@ pub async fn verify_blocks_handler(
     for block in request.blocks {
         if !state
             .db
-            .block_exists(&block.file_hash, block.block_index, &block.block_hash)
+            .block_exists(&block.file_hash, block.block_index, &block.block_hash, 0)
             .await
         {
             missing.push(block.block_hash);
@@ -341,6 +347,124 @@ pub async fn list_blocks_handler(
         }
         Err(err) => {
             log::error!("Failed to list blocks: {}", err);
+            Err(ResponseError::InternalServerError)
+        }
+    }
+}
+
+/// Response for user blocks endpoint
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct UserBlocksResponse {
+    /// List of blocks with their sizes
+    pub blocks: Vec<(String, u64)>,
+    /// Total number of blocks
+    pub total: u64,
+    /// Total number of all blocks
+    pub all_blocks: u64,
+}
+
+/// Retrieve all blocks uploaded by a specific user.
+#[utoipa::path(
+    get,
+    path = "/api/v1/user/blocks",
+    params(
+        ("page" = Option<u32>, Query, description = "Page number (1-indexed)"),
+        ("per_page" = Option<u32>, Query, description = "Number of items per page")
+    ),
+    responses(
+        (status = 200, description = "Blocks found", body = UserBlocksResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error"),
+    )
+)]
+#[debug_handler]
+pub async fn get_user_blocks_handler(
+    State(state): State<Arc<AppState>>,
+    extension: axum::extract::Extension<String>,
+    Query(params): Query<ListBlocksParams>,
+) -> Result<impl IntoResponse, ResponseError> {
+    let page = params.page.unwrap_or(1);
+    let per_page = params.per_page.unwrap_or(50).min(100);
+
+    // Get the username from the extension (set by the authorize middleware)
+    let username = extension.0;
+    let user_id = auth::get_user_id_from_token(&*state.db, &username).await?;
+
+    let all_blocks = match state.db.list_blocks(1, 1).await {
+        Ok((_, total)) => total,
+        Err(err) => {
+            log::error!("Failed to list blocks: {}", err);
+            0
+        }
+    };
+
+    // Get all blocks related to the user
+    match state.db.get_user_blocks(user_id, page, per_page).await {
+        Ok(blocks) => {
+            let total = blocks.len() as u64;
+            let response = UserBlocksResponse {
+                blocks,
+                total,
+                all_blocks,
+            };
+            Ok((StatusCode::OK, Json(response)))
+        }
+        Err(err) => {
+            log::error!("Failed to retrieve user blocks: {}", err);
+            Err(ResponseError::InternalServerError)
+        }
+    }
+}
+
+/// Response for block downloads endpoint
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct BlockDownloadsResponse {
+    /// Block hash
+    pub block_hash: String,
+    /// Number of times the block has been downloaded
+    pub downloads_count: u64,
+    /// Size of the block in bytes
+    pub block_size: u64,
+}
+
+/// Retrieve the number of times a block has been downloaded.
+#[utoipa::path(
+    get,
+    path = "/api/v1/block/{hash}/downloads",
+    responses(
+        (status = 200, description = "Download count retrieved successfully", body = BlockDownloadsResponse),
+        (status = 404, description = "Block not found"),
+        (status = 500, description = "Internal server error"),
+    ),
+    params(
+        ("hash" = String, Path, description = "Block hash")
+    )
+)]
+#[debug_handler]
+pub async fn get_block_downloads_handler(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Path(hash): axum::extract::Path<String>,
+) -> Result<impl IntoResponse, ResponseError> {
+    // Check if the block exists
+    if !state.db.block_exists("", 0, &hash, 0).await {
+        return Err(ResponseError::NotFound(format!(
+            "Block with hash '{}' not found",
+            hash
+        )));
+    }
+
+    // Get the download count
+    match state.db.get_block_downloads(&hash).await {
+        Ok((count, block_size)) => {
+            let response = BlockDownloadsResponse {
+                block_hash: hash,
+                downloads_count: count,
+                block_size: block_size,
+            };
+            Ok((StatusCode::OK, Json(response)))
+        }
+        Err(err) => {
+            log::error!("Failed to retrieve block download count: {}", err);
             Err(ResponseError::InternalServerError)
         }
     }

@@ -26,7 +26,13 @@ impl DB for MapDB {
         self.users.get(username).cloned()
     }
 
-    async fn block_exists(&self, _file_hash: &str, _block_index: u64, _block_hash: &str) -> bool {
+    async fn block_exists(
+        &self,
+        _file_hash: &str,
+        _block_index: u64,
+        _block_hash: &str,
+        _user_id: i64,
+    ) -> bool {
         // TODO:
         true
     }
@@ -37,6 +43,7 @@ impl DB for MapDB {
         _data: Vec<u8>,
         _file_hash: &str,
         _block_index: u64,
+        _user_id: i64,
     ) -> Result<bool, anyhow::Error> {
         // TODO: Implement block storage logic
         Ok(true) // Placeholder return value
@@ -67,5 +74,23 @@ impl DB for MapDB {
     ) -> Result<(Vec<String>, u64), anyhow::Error> {
         // TODO:
         Ok((Vec::new(), 0))
+    }
+
+    async fn get_user_blocks(
+        &self,
+        _user_id: i64,
+        _page: u32,
+        _per_page: u32,
+    ) -> Result<Vec<(String, u64)>, anyhow::Error> {
+        // TODO:
+        Ok(Vec::new())
+    }
+
+    async fn increment_block_downloads(&self, _hash: &str) -> Result<(), anyhow::Error> {
+        Ok(())
+    }
+
+    async fn get_block_downloads(&self, _hash: &str) -> Result<(u64, u64), anyhow::Error> {
+        Ok((0, 0))
     }
 }

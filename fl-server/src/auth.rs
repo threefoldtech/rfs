@@ -159,3 +159,22 @@ pub async fn authorize(
     req.extensions_mut().insert(current_user.username.clone());
     Ok(next.run(req).await)
 }
+
+/// Get the user ID from the username stored in the request extension
+pub async fn get_user_id_from_token(db: &impl DB, username: &str) -> Result<i64, ResponseError> {
+    match db.get_user_by_username(username).await {
+        Some(user) => match user.id {
+            Some(id) => Ok(id),
+            None => {
+                log::error!("User ID is missing for user: {}", username);
+                Err(ResponseError::Unauthorized(
+                    "User ID is missing".to_string(),
+                ))
+            }
+        },
+        None => {
+            log::error!("User not found: {}", username);
+            Err(ResponseError::Unauthorized("User not found".to_string()))
+        }
+    }
+}

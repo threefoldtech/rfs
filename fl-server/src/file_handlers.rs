@@ -3,6 +3,7 @@ use axum_macros::debug_handler;
 use std::sync::Arc;
 
 use crate::{
+    auth,
     config::AppState,
     db::DB,
     models::{Block, File},
@@ -47,6 +48,7 @@ pub struct FileUploadResponse {
 #[debug_handler]
 pub async fn upload_file_handler(
     State(state): State<Arc<AppState>>,
+    extension: axum::extract::Extension<String>,
     body: Bytes,
 ) -> Result<(StatusCode, ResponseResult), ResponseError> {
     // Convert the request body to a byte vector
@@ -60,6 +62,10 @@ pub async fn upload_file_handler(
     // For now, we'll just log it
     log::info!("Storing file metadata: hash={}", file.file_hash);
 
+    // Get the username from the extension (set by the authorize middleware)
+    let username = extension.0;
+    let user_id = auth::get_user_id_from_token(&*state.db, &username).await?;
+
     // Store each block with a reference to the file
     for (i, chunk) in data
         .chunks(state.config.block_size.unwrap_or(BLOCK_SIZE))
@@ -71,7 +77,13 @@ pub async fn upload_file_handler(
         // Store each block in the storage with file hash and block index in metadata in DB
         match state
             .db
-            .store_block(&block_hash, chunk.to_vec(), &file.file_hash, i as u64)
+            .store_block(
+                &block_hash,
+                chunk.to_vec(),
+                &file.file_hash,
+                i as u64,
+                user_id,
+            )
             .await
         {
             Ok(_) => {
