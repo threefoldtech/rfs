@@ -9,6 +9,7 @@ use anyhow::{Context, Result};
 use clap::{ArgAction, Args, Parser, Subcommand};
 
 use rfs::fungi;
+use rfs::server::app;
 use rfs::store::{self};
 use rfs::{
     cache, config, download, download_dir, exists, exists_by_hash, get_token_from_server,
@@ -43,7 +44,7 @@ enum Commands {
     Config(ConfigOptions),
     /// convert a docker image to an FL
     Docker(DockerOptions),
-    /// run the fl-server
+    /// run the server
     Server(ServerOptions),
     /// upload a file to a server
     Upload(UploadFileOptions),
@@ -229,10 +230,6 @@ struct ServerOptions {
     /// config file path
     #[clap(short, long)]
     config_path: String,
-
-    /// enable debugging logs
-    #[clap(short, long, action=ArgAction::Count)]
-    debug: u8,
 }
 
 #[derive(Subcommand, Debug)]
@@ -889,41 +886,13 @@ fn docker(opts: DockerOptions) -> Result<()> {
 }
 
 fn server(opts: ServerOptions) -> Result<()> {
-    use std::process::{Command, Stdio};
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .thread_stack_size(8 * 1024 * 1024)
+        .enable_all()
+        .build()
+        .unwrap();
 
-    println!("Starting fl-server with config: {}", opts.config_path);
-
-    // Find the fl-server binary in the same directory as the mycofs binary
-    let current_exe = std::env::current_exe()?;
-    let bin_dir = current_exe
-        .parent()
-        .context("Failed to get binary directory")?;
-    let fl_server_path = bin_dir.join("fl-server");
-
-    // Build the command with proper arguments
-    let mut cmd = Command::new(fl_server_path);
-
-    // Add config path
-    cmd.arg("-c").arg(&opts.config_path);
-
-    // Add debug flags if specified
-    if opts.debug > 0 {
-        for _ in 0..opts.debug {
-            cmd.arg("-d");
-        }
-    }
-
-    // Make sure we can see the output
-    cmd.stdout(Stdio::inherit()).stderr(Stdio::inherit());
-
-    // Run the fl-server binary
-    let status = cmd.status().context("Failed to execute fl-server")?;
-
-    if !status.success() {
-        anyhow::bail!("fl-server exited with status: {}", status);
-    }
-
-    Ok(())
+    rt.block_on(app(&opts.config_path))
 }
 
 fn upload_file(opts: UploadFileOptions) -> Result<()> {

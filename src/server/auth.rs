@@ -12,7 +12,7 @@ use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, TokenData, 
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::{
+use crate::server::{
     config,
     db::DB,
     response::{ResponseError, ResponseResult},

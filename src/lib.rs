@@ -3,6 +3,7 @@ extern crate log;
 
 pub mod cache;
 pub mod fungi;
+pub mod server;
 pub mod store;
 
 mod pack;

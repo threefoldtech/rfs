@@ -1,3 +1,4 @@
+use crate::fungi::{meta, Reader};
 use aes_gcm::{
     aead::{Aead, KeyInit},
     Aes256Gcm, Nonce,
@@ -10,13 +11,12 @@ use axum::{
 };
 use axum_macros::debug_handler;
 use mime_guess::from_path;
-use rfs::fungi::{meta, Reader};
 use std::fs;
 use std::sync::Arc;
 use tempfile::NamedTempFile;
 use utoipa::OpenApi;
 
-use crate::{config::AppState, db::DB, response::ResponseError};
+use crate::server::{config::AppState, db::DB, response::ResponseError};
 
 #[derive(OpenApi)]
 #[openapi(

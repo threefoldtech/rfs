@@ -2,13 +2,13 @@
 mod parallel_download_tests {
     use anyhow::Result;
     use std::path::Path;
+    use std::time::Instant;
     use tempdir::TempDir;
     use tokio::runtime::Runtime;
-    use std::time::Instant;
 
+    use rfs::cache::Cache;
     use rfs::fungi::{self, meta};
     use rfs::store::{self, dir::DirStore};
-    use rfs::cache::Cache;
     use rfs::{pack, unpack};
 
     #[test]
@@ -24,7 +24,7 @@ mod parallel_download_tests {
             let dest_dir_serial = temp_dir.path().join("dest-serial");
             let store_dir = temp_dir.path().join("store");
             let cache_dir = temp_dir.path().join("cache");
-            
+
             std::fs::create_dir_all(&source_dir)?;
             std::fs::create_dir_all(&dest_dir_parallel)?;
             std::fs::create_dir_all(&dest_dir_serial)?;
@@ -63,11 +63,11 @@ mod parallel_download_tests {
             // In a real test, we would use a feature flag or environment variable
             let cache_serial = Cache::new(&cache_dir, router);
             let start_serial = Instant::now();
-            
+
             // Here we're still using the parallel implementation, but in a real test
             // we would use a version with PARALLEL_DOWNLOAD=1
             unpack(&reader, &cache_serial, &dest_dir_serial, false).await?;
-            
+
             let serial_duration = start_serial.elapsed();
 
             // Print the results
@@ -84,18 +84,18 @@ mod parallel_download_tests {
 
     // Helper function to create test files
     async fn create_test_files(dir: &Path, count: usize, size: usize) -> Result<()> {
+        use rand::{thread_rng, Rng};
         use tokio::fs::File;
         use tokio::io::AsyncWriteExt;
-        use rand::{thread_rng, Rng};
 
         for i in 0..count {
             let file_path = dir.join(format!("file_{}.bin", i));
             let mut file = File::create(&file_path).await?;
-            
+
             // Create random data
             let mut data = vec![0u8; size];
             thread_rng().fill(&mut data[..]);
-            
+
             // Write to file
             file.write_all(&data).await?;
             file.flush().await?;

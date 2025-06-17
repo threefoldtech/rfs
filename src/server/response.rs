@@ -10,7 +10,7 @@ use axum::{
 use serde::Serialize;
 use utoipa::ToSchema;
 
-use crate::{
+use crate::server::{
     auth::SignInResponse,
     config::Job,
     file_handlers::FileUploadResponse,

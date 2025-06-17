@@ -8,7 +8,8 @@ use std::{
 };
 use utoipa::ToSchema;
 
-use crate::{db::DBType, handlers, models::User};
+use crate::server::{db::DBType, handlers, models::User};
+use crate::store;
 
 #[derive(Debug, ToSchema, Serialize, Clone)]
 pub struct Job {
@@ -48,7 +49,7 @@ pub async fn parse_config(filepath: &str) -> Result<Config> {
         anyhow::bail!("host '{}' is invalid", c.host)
     }
 
-    rfs::store::parse_router(&c.store_url)
+    store::parse_router(&c.store_url)
         .await
         .context("failed to parse store urls")?;
     fs::create_dir_all(&c.flist_dir).context("failed to create flists directory")?;

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use utoipa::ToSchema;
 
 use super::DB;
-use crate::models::{File, User};
+use crate::server::models::{File, User};
 use anyhow::Result;
 
 #[derive(Debug, ToSchema)]
