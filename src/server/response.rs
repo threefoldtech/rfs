@@ -81,6 +81,13 @@ impl IntoResponse for ResponseError {
     }
 }
 
+// Wrapper structs for OpenAPI documentation to match the actual JSON response format
+#[derive(Serialize, ToSchema)]
+pub struct FlistStateResponse {
+    pub flist_state: FlistState,
+}
+
+
 #[derive(Serialize,ToSchema)]
 pub enum ResponseResult {
     #[schema(title = "ResponseResultHealth")]

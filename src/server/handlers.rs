@@ -22,7 +22,7 @@ use crate::server::{
     config::{self, Job},
     db::DB,
     response::{DirListTemplate, DirLister, ErrorTemplate, TemplateErr},
-    response::{FileInfo, ResponseError, ResponseResult},
+    response::{FileInfo, ResponseError, ResponseResult, FlistStateResponse},
     serve_flists::visit_dir_one_level,
 };
 use crate::store;
@@ -54,7 +54,7 @@ impl Modify for SecurityAddon {
     components(
         schemas(
             // Common schemas
-            DirListTemplate, DirLister, ResponseError, ErrorTemplate, TemplateErr, ResponseResult, FileInfo,
+            DirListTemplate, DirLister, ResponseError, ErrorTemplate, TemplateErr, ResponseResult, FileInfo, FlistStateResponse,
             // Authentication schemas
             SignInBody, SignInResponse,
             // Flist schemas
@@ -321,7 +321,7 @@ pub async fn create_flist_handler(
     path = "/api/v1/fl/{job_id}",
     tag = "Flist Management",
     responses(
-        (status = 200, description = "Flist state", body = FlistState),
+        (status = 200, description = "Flist state", body = FlistStateResponse),
         (status = 404, description = "Flist not found", body = ResponseError),
         (status = 500, description = "Internal server error", body = ResponseError),
         (status = 401, description = "Unauthorized user", body = ResponseError),
