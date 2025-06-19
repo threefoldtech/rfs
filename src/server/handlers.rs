@@ -55,13 +55,15 @@ impl Modify for SecurityAddon {
         schemas(
             // Common schemas
             DirListTemplate, DirLister, ResponseError, ErrorTemplate, TemplateErr, ResponseResult, FileInfo, FlistStateResponse,
+            // Response wrapper schemas
+            crate::server::response::HealthResponse, crate::server::response::BlockUploadedResponse,
             // Authentication schemas
             SignInBody, SignInResponse,
             // Flist schemas
             FlistBody, Job, FlistState, FlistStateInfo, PreviewResponse,
             // Block schemas
             crate::server::models::Block, block_handlers::VerifyBlock, block_handlers::VerifyBlocksRequest, block_handlers::VerifyBlocksResponse,
-            block_handlers::BlocksResponse, block_handlers::ListBlocksParams, block_handlers::ListBlocksResponse,
+            block_handlers::BlocksResponse, block_handlers::ListBlocksParams, block_handlers::ListBlocksResponse, block_handlers::BlockInfo,
             block_handlers::UserBlocksResponse, block_handlers::BlockDownloadsResponse, block_handlers::UploadBlockParams,
             // File schemas
             file_handlers::FileUploadResponse, file_handlers::FileDownloadRequest, crate::server::models::File
@@ -125,7 +127,7 @@ pub struct FlistStateInfo {
     path = "/api/v1",
     tag = "System",
     responses(
-        (status = 200, description = "flist server is working", body = String)
+        (status = 200, description = "flist server is working", body = HealthResponse)
     )
 )]
 pub async fn health_check_handler() -> ResponseResult {

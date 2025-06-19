@@ -42,8 +42,8 @@ pub struct UploadBlockParams {
         ("idx" = u64, Query, description = "Block index within the file")
     ),
     responses(
-        (status = 200, description = "Block already exists", body = ResponseResult),
-        (status = 201, description = "Block created successfully", body = ResponseResult),
+        (status = 200, description = "Block already exists", body = BlockUploadedResponse),
+        (status = 201, description = "Block created successfully", body = BlockUploadedResponse),
         (status = 400, description = "Bad request", body = ResponseError),
         (status = 500, description = "Internal server error", body = ResponseError),
     ),
@@ -227,11 +227,20 @@ pub async fn verify_blocks_handler(
     ))
 }
 
+/// Block information with hash and index
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct BlockInfo {
+    /// Block hash
+    pub hash: String,
+    /// Block index within the file
+    pub index: u64,
+}
+
 /// Response for blocks by hash endpoint
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct BlocksResponse {
     /// List of blocks with their indices
-    pub blocks: Vec<(String, u64)>,
+    pub blocks: Vec<BlockInfo>,
 }
 
 /// Retrieve blocks by hash (file hash or block hash).
@@ -259,7 +268,10 @@ pub async fn get_blocks_by_hash_handler(
     match state.db.get_file_blocks_ordered(&hash).await {
         Ok(blocks) if !blocks.is_empty() => {
             // This is a file hash, return all blocks with their indices
-            Ok((StatusCode::OK, Json(BlocksResponse { blocks })))
+            let block_infos = blocks.into_iter()
+                .map(|(hash, index)| BlockInfo { hash, index })
+                .collect();
+            Ok((StatusCode::OK, Json(BlocksResponse { blocks: block_infos })))
         }
         Ok(_) | Err(_) => {
             // Not a file hash or error occurred, try as block hash
@@ -269,7 +281,7 @@ pub async fn get_blocks_by_hash_handler(
                     Ok((
                         StatusCode::OK,
                         Json(BlocksResponse {
-                            blocks: vec![(hash.clone(), 0)],
+                            blocks: vec![BlockInfo { hash: hash.clone(), index: 0 }],
                         }),
                     ))
                 }
@@ -356,8 +368,8 @@ pub async fn list_blocks_handler(
 /// Response for user blocks endpoint
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct UserBlocksResponse {
-    /// List of blocks with their sizes
-    pub blocks: Vec<(String, u64)>,
+    /// List of blocks with their indices
+    pub blocks: Vec<BlockInfo>,
     /// Total number of blocks
     pub total: u64,
     /// Total number of all blocks
@@ -408,7 +420,9 @@ pub async fn get_user_blocks_handler(
         Ok(blocks) => {
             let total = blocks.len() as u64;
             let response = UserBlocksResponse {
-                blocks,
+                blocks: blocks.into_iter()
+                .map(|(hash, index)| BlockInfo { hash, index })
+                .collect(),
                 total,
                 all_blocks,
             };

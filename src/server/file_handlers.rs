@@ -33,7 +33,7 @@ pub struct FileUploadResponse {
     tag = "File Management",
     request_body(content = Vec<u8>, description = "File data to upload", content_type = "application/octet-stream"),
     responses(
-        (status = 201, description = "File uploaded successfully", body = ResponseResult),
+        (status = 201, description = "File uploaded successfully", body = FileUploadResponse),
         (status = 400, description = "Bad request", body = ResponseError),
         (status = 500, description = "Internal server error", body = ResponseError),
     ),
@@ -116,7 +116,7 @@ pub struct FileDownloadRequest {
 /// Retrieve a file by its hash from path, with optional custom filename in request body.
 /// The file will be reconstructed from its blocks.
 #[utoipa::path(
-    post,
+    get,
     path = "/api/v1/file/{hash}",
     tag = "File Management",
     request_body(content = FileDownloadRequest, description = "Optional custom filename for download", content_type = "application/json"),

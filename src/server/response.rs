@@ -87,6 +87,17 @@ pub struct FlistStateResponse {
     pub flist_state: FlistState,
 }
 
+#[derive(Serialize, ToSchema)]
+pub struct HealthResponse {
+    pub msg: String,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct BlockUploadedResponse {
+    pub hash: String,
+    pub message: String,
+}
+
 
 #[derive(Serialize,ToSchema)]
 pub enum ResponseResult {
@@ -118,7 +129,9 @@ impl IntoResponse for ResponseResult {
         match self {
             ResponseResult::Health => (
                 StatusCode::OK,
-                Json(serde_json::json!({"msg": "flist server is working"})),
+                Json(HealthResponse {
+                    msg: "flist server is working".to_string(),
+                }),
             )
                 .into_response(),
             ResponseResult::SignedIn(token) => (StatusCode::CREATED, Json(token)).into_response(),
@@ -136,10 +149,10 @@ impl IntoResponse for ResponseResult {
             }
             ResponseResult::BlockUploaded(hash) => (
                 StatusCode::OK,
-                Json(serde_json::json!({
-                    "hash": hash,
-                    "message": "Block processed successfully"
-                })),
+                Json(BlockUploadedResponse {
+                    hash,
+                    message: "Block processed successfully".to_string(),
+                }),
             )
                 .into_response(),
             ResponseResult::FileUploaded(response) => {

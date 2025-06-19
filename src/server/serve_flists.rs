@@ -25,7 +25,7 @@ use crate::server::{
 #[utoipa::path(
     get,
     path = "/{path}",
-    tag = "Flist Serving",
+    tag = "Flist Management",
     params(
         ("path" = String, Path, description = "Path to the flist file or directory to serve")
     ),
