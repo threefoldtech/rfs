@@ -116,7 +116,7 @@ async fn decrypt_block(state: &Arc<AppState>, block: &meta::Block) -> Result<Vec
     path = "/api/v1/website/{website_hash}/{path}",
     tag = "Website Serving",
     responses(
-        (status = 200, description = "Website file served successfully", content_type = "application/octet-stream", body = Vec<u8>),
+        (status = 200, description = "Website file served successfully", content_type = "application/octet-stream", body = [u8]),
         (status = 404, description = "File not found", body = ResponseError),
         (status = 500, description = "Internal server error", body = ResponseError),
     ),

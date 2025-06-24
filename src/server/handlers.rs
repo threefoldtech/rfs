@@ -22,7 +22,7 @@ use crate::server::{
     config::{self, Job},
     db::DB,
     response::{DirListTemplate, DirLister, ErrorTemplate, TemplateErr},
-    response::{FileInfo, ResponseError, ResponseResult, FlistStateResponse},
+    response::{FileInfo, ResponseError, ResponseResult, FlistStateResponse, HealthResponse, BlockUploadedResponse},
     serve_flists::visit_dir_one_level,
 };
 use crate::store;
@@ -56,24 +56,23 @@ impl Modify for SecurityAddon {
             // Common schemas
             DirListTemplate, DirLister, ResponseError, ErrorTemplate, TemplateErr, ResponseResult, FileInfo, FlistStateResponse,
             // Response wrapper schemas
-            crate::server::response::HealthResponse, crate::server::response::BlockUploadedResponse,
+            HealthResponse, BlockUploadedResponse,
             // Authentication schemas
             SignInBody, SignInResponse,
             // Flist schemas
             FlistBody, Job, FlistState, FlistStateInfo, PreviewResponse,
             // Block schemas
-            crate::server::models::Block, block_handlers::VerifyBlock, block_handlers::VerifyBlocksRequest, block_handlers::VerifyBlocksResponse,
+            block_handlers::VerifyBlock, block_handlers::VerifyBlocksRequest, block_handlers::VerifyBlocksResponse,
             block_handlers::BlocksResponse, block_handlers::ListBlocksParams, block_handlers::ListBlocksResponse, block_handlers::BlockInfo,
             block_handlers::UserBlocksResponse, block_handlers::BlockDownloadsResponse, block_handlers::UploadBlockParams,
             // File schemas
-            file_handlers::FileUploadResponse, file_handlers::FileDownloadRequest, crate::server::models::File
+            file_handlers::FileUploadResponse, file_handlers::FileDownloadRequest
         )
     ),
     tags(
         (name = "System", description = "System health and status"),
         (name = "Authentication", description = "Authentication endpoints"),
         (name = "Flist Management", description = "Flist creation and management"),
-        (name = "Flist Serving", description = "Serving flist files"),
         (name = "Block Management", description = "Block storage and retrieval"),
         (name = "File Management", description = "File upload and download"),
         (name = "Website Serving", description = "Website content serving")

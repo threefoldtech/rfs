@@ -13,7 +13,7 @@ use crate::server::{
     config::AppState,
     db::DB,
     models::Block,
-    response::{ResponseError, ResponseResult},
+    response::{ResponseError, ResponseResult, BlockUploadedResponse},
 };
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -36,7 +36,7 @@ pub struct UploadBlockParams {
     post,
     path = "/api/v1/block",
     tag = "Block Management",
-    request_body(content = Vec<u8>, description = "Block data to upload", content_type = "application/octet-stream"),
+    request_body(content = [u8], description = "Block data to upload", content_type = "application/octet-stream"),
     params(
         ("file_hash" = String, Query, description = "File hash associated with the block"),
         ("idx" = u64, Query, description = "Block index within the file")
@@ -96,7 +96,7 @@ pub async fn upload_block_handler(
     path = "/api/v1/block/{hash}",
     tag = "Block Management",
     responses(
-        (status = 200, description = "Block found", body = Vec<u8>, content_type = "application/octet-stream"),
+        (status = 200, description = "Block found", body = [u8], content_type = "application/octet-stream"),
         (status = 404, description = "Block not found", body = ResponseError),
         (status = 500, description = "Internal server error", body = ResponseError),
     ),
