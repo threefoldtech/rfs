@@ -6,7 +6,7 @@ use bytes::Bytes;
 use openapi::{
     apis::{
         authentication_api, block_management_api, flist_management_api,
-        file_management_api, system_api, website_serving_api, flist_serving_api,
+        file_management_api, system_api, website_serving_api,
         configuration::Configuration,
         Error as OpenApiError,
     },
@@ -398,45 +398,19 @@ impl RfsClient {
         Ok(result.msg)
     }
 
+
     /// Download an FList file
     /// 
     /// This method downloads an FList from the server and saves it to the specified path.
     pub async fn download_flist<P: AsRef<Path>>(&self, flist_path: &str, output_path: P) -> Result<()> {
-        // Construct the URL for the FList
-        let url = format!("{}/{}", self.client_config.base_url, flist_path);
+        let response = flist_management_api::serve_flists(&self.config, flist_path)
+            .await
+            .map_err(map_openapi_error)?;
         
-        // Create a reqwest client with the same timeout as our configuration
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(self.client_config.timeout_seconds))
-            .build()
-            .map_err(|e| RfsError::RequestError(e))?;
-        
-        // Send the request
-        let mut request = client.get(&url);
-        
-        // Add authentication token if available
-        if let Some(ref token) = self.auth_token {
-            request = request.header("Authorization", format!("Bearer {}", token));
-        }
-        
-        // Execute the request
-        let response = request.send().await
-            .map_err(|e| RfsError::RequestError(e))?;
-        
-        // Check if the request was successful
-        if !response.status().is_success() {
-            return Err(RfsError::Other(format!(
-                "Failed to download FList: HTTP status {}", 
-                response.status()
-            )));
-        }
-        
-        // Get the response bytes
         let bytes = response.bytes().await
             .map_err(|e| RfsError::RequestError(e))?;
         
-        // Write the bytes to the output file
-        std::fs::write(output_path, bytes)
+        std::fs::write(output_path, &bytes)
             .map_err(|e| RfsError::FileSystemError(e.to_string()))?;
         
         Ok(())

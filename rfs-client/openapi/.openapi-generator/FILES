@@ -3,7 +3,6 @@
 Cargo.toml
 README.md
 docs/AuthenticationApi.md
-docs/Block.md
 docs/BlockDownloadsResponse.md
 docs/BlockInfo.md
 docs/BlockManagementApi.md
@@ -12,14 +11,12 @@ docs/BlocksResponse.md
 docs/DirListTemplate.md
 docs/DirLister.md
 docs/ErrorTemplate.md
-docs/File.md
 docs/FileDownloadRequest.md
 docs/FileInfo.md
 docs/FileManagementApi.md
 docs/FileUploadResponse.md
 docs/FlistBody.md
 docs/FlistManagementApi.md
-docs/FlistServingApi.md
 docs/FlistState.md
 docs/FlistStateAccepted.md
 docs/FlistStateCreated.md
@@ -47,6 +44,7 @@ docs/ResponseResultFlistCreated.md
 docs/ResponseResultFlistState.md
 docs/ResponseResultFlists.md
 docs/ResponseResultPreviewFlist.md
+docs/ResponseResultRes.md
 docs/ResponseResultSignedIn.md
 docs/SignInBody.md
 docs/SignInResponse.md
@@ -67,12 +65,10 @@ src/apis/block_management_api.rs
 src/apis/configuration.rs
 src/apis/file_management_api.rs
 src/apis/flist_management_api.rs
-src/apis/flist_serving_api.rs
 src/apis/mod.rs
 src/apis/system_api.rs
 src/apis/website_serving_api.rs
 src/lib.rs
-src/models/block.rs
 src/models/block_downloads_response.rs
 src/models/block_info.rs
 src/models/block_uploaded_response.rs
@@ -80,7 +76,6 @@ src/models/blocks_response.rs
 src/models/dir_list_template.rs
 src/models/dir_lister.rs
 src/models/error_template.rs
-src/models/file.rs
 src/models/file_download_request.rs
 src/models/file_info.rs
 src/models/file_upload_response.rs
@@ -113,6 +108,7 @@ src/models/response_result_flist_created.rs
 src/models/response_result_flist_state.rs
 src/models/response_result_flists.rs
 src/models/response_result_preview_flist.rs
+src/models/response_result_res.rs
 src/models/response_result_signed_in.rs
 src/models/sign_in_body.rs
 src/models/sign_in_response.rs

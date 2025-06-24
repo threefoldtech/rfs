@@ -23,6 +23,7 @@ pub enum ResponseResult {
     ResponseResultDirTemplate(Box<models::ResponseResultDirTemplate>),
     ResponseResultBlockUploaded(Box<models::ResponseResultBlockUploaded>),
     ResponseResultFileUploaded(Box<models::ResponseResultFileUploaded>),
+    ResponseResultRes(Box<models::ResponseResultRes>),
 }
 
 impl Default for ResponseResult {

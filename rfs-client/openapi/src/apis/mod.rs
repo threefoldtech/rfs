@@ -115,7 +115,6 @@ pub mod authentication_api;
 pub mod block_management_api;
 pub mod file_management_api;
 pub mod flist_management_api;
-pub mod flist_serving_api;
 pub mod system_api;
 pub mod website_serving_api;
 

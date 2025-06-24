@@ -8,6 +8,7 @@ Method | HTTP request | Description
 [**get_flist_state_handler**](FlistManagementApi.md#get_flist_state_handler) | **GET** /api/v1/fl/{job_id} | 
 [**list_flists_handler**](FlistManagementApi.md#list_flists_handler) | **GET** /api/v1/fl | 
 [**preview_flist_handler**](FlistManagementApi.md#preview_flist_handler) | **GET** /api/v1/fl/preview/{flist_path} | 
+[**serve_flists**](FlistManagementApi.md#serve_flists) | **GET** /{path} | Serve flist files from the server's filesystem
 
 
 
@@ -116,6 +117,34 @@ No authorization required
 
 - **Content-Type**: Not defined
 - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+
+## serve_flists
+
+> std::path::PathBuf serve_flists(path)
+Serve flist files from the server's filesystem
+
+### Parameters
+
+
+Name | Type | Description  | Required | Notes
+------------- | ------------- | ------------- | ------------- | -------------
+**path** | **String** | Path to the flist file or directory to serve | [required] |
+
+### Return type
+
+[**std::path::PathBuf**](std::path::PathBuf.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/octet-stream, application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 

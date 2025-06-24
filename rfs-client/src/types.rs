@@ -1,6 +1,6 @@
 // Re-export common types from OpenAPI client for convenience
 pub use openapi::models::{
-    Block, BlockDownloadsResponse, BlocksResponse, File, FileInfo, 
+    BlockDownloadsResponse, BlocksResponse, FileInfo, 
     FileUploadResponse, FlistBody, FlistState, Job, ListBlocksResponse,
     PreviewResponse, ResponseResult, SignInResponse, VerifyBlocksResponse,
 };

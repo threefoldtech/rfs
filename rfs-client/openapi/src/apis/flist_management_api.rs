@@ -58,6 +58,15 @@ pub enum PreviewFlistHandlerError {
     UnknownValue(serde_json::Value),
 }
 
+/// struct for typed errors of method [`serve_flists`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ServeFlistsError {
+    Status404(models::ResponseError),
+    Status500(models::ResponseError),
+    UnknownValue(serde_json::Value),
+}
+
 
 pub async fn create_flist_handler(configuration: &configuration::Configuration, flist_body: models::FlistBody) -> Result<models::Job, Error<CreateFlistHandlerError>> {
     // add a prefix to parameters to efficiently prevent name collisions
@@ -204,6 +213,31 @@ pub async fn preview_flist_handler(configuration: &configuration::Configuration,
     } else {
         let content = resp.text().await?;
         let entity: Option<PreviewFlistHandlerError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent { status, content, entity }))
+    }
+}
+
+pub async fn serve_flists(configuration: &configuration::Configuration, path: &str) -> Result<reqwest::Response, Error<ServeFlistsError>> {
+    // add a prefix to parameters to efficiently prevent name collisions
+    let p_path = path;
+
+    let uri_str = format!("{}/{path}", configuration.base_path, path=crate::apis::urlencode(p_path));
+    let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
+
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req).await?;
+
+    let status = resp.status();
+
+    if !status.is_client_error() && !status.is_server_error() {
+        Ok(resp)
+    } else {
+        let content = resp.text().await?;
+        let entity: Option<ServeFlistsError> = serde_json::from_str(&content).ok();
         Err(Error::ResponseError(ResponseContent { status, content, entity }))
     }
 }

@@ -41,14 +41,13 @@ Class | Method | HTTP request | Description
 *FlistManagementApi* | [**get_flist_state_handler**](docs/FlistManagementApi.md#get_flist_state_handler) | **GET** /api/v1/fl/{job_id} | 
 *FlistManagementApi* | [**list_flists_handler**](docs/FlistManagementApi.md#list_flists_handler) | **GET** /api/v1/fl | 
 *FlistManagementApi* | [**preview_flist_handler**](docs/FlistManagementApi.md#preview_flist_handler) | **GET** /api/v1/fl/preview/{flist_path} | 
-*FlistServingApi* | [**serve_flists**](docs/FlistServingApi.md#serve_flists) | **GET** /{path} | Serve flist files from the server's filesystem
+*FlistManagementApi* | [**serve_flists**](docs/FlistManagementApi.md#serve_flists) | **GET** /{path} | Serve flist files from the server's filesystem
 *SystemApi* | [**health_check_handler**](docs/SystemApi.md#health_check_handler) | **GET** /api/v1 | 
 *WebsiteServingApi* | [**serve_website_handler**](docs/WebsiteServingApi.md#serve_website_handler) | **GET** /api/v1/website/{website_hash}/{path} | 
 
 
 ## Documentation For Models
 
- - [Block](docs/Block.md)
  - [BlockDownloadsResponse](docs/BlockDownloadsResponse.md)
  - [BlockInfo](docs/BlockInfo.md)
  - [BlockUploadedResponse](docs/BlockUploadedResponse.md)
@@ -56,7 +55,6 @@ Class | Method | HTTP request | Description
  - [DirListTemplate](docs/DirListTemplate.md)
  - [DirLister](docs/DirLister.md)
  - [ErrorTemplate](docs/ErrorTemplate.md)
- - [File](docs/File.md)
  - [FileDownloadRequest](docs/FileDownloadRequest.md)
  - [FileInfo](docs/FileInfo.md)
  - [FileUploadResponse](docs/FileUploadResponse.md)
@@ -88,6 +86,7 @@ Class | Method | HTTP request | Description
  - [ResponseResultFlistState](docs/ResponseResultFlistState.md)
  - [ResponseResultFlists](docs/ResponseResultFlists.md)
  - [ResponseResultPreviewFlist](docs/ResponseResultPreviewFlist.md)
+ - [ResponseResultRes](docs/ResponseResultRes.md)
  - [ResponseResultSignedIn](docs/ResponseResultSignedIn.md)
  - [SignInBody](docs/SignInBody.md)
  - [SignInResponse](docs/SignInResponse.md)

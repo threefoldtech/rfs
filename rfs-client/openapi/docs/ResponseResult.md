@@ -11,6 +11,7 @@
 | ResponseResultFlistState |  |
 | ResponseResultFlists |  |
 | ResponseResultPreviewFlist |  |
+| ResponseResultRes |  |
 | ResponseResultSignedIn |  |
 | String |  |
 
