@@ -70,6 +70,10 @@ pub async fn upload_block_handler(
 
     // Get the username from the extension (set by the authorize middleware)
     let username = extension.0;
+	if username.is_empty() {
+        log::error!("Username is required but not provided");
+        return Err(ResponseError::BadRequest("Username is required".to_string()));
+	}
     let user_id = auth::get_user_id_from_token(&*state.db, &username).await?;
 
     // Store the block data in the database
@@ -388,6 +392,10 @@ pub async fn get_user_blocks_handler(
 
     // Get the username from the extension (set by the authorize middleware)
     let username = extension.0;
+    if username.is_empty() {
+        log::error!("Username is required but not provided");
+        return Err(ResponseError::BadRequest("Username is required".to_string()));
+    }
     let user_id = auth::get_user_id_from_token(&*state.db, &username).await?;
 
     let all_blocks = match state.db.list_blocks(1, 1).await {
