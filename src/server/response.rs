@@ -99,7 +99,7 @@ pub struct BlockUploadedResponse {
 }
 
 
-#[derive(Serialize,ToSchema)]
+#[derive(ToSchema)]
 pub enum ResponseResult {
     #[schema(title = "ResponseResultHealth")]
     Health,
@@ -119,8 +119,7 @@ pub enum ResponseResult {
     BlockUploaded(String),
     #[schema(title = "ResponseResultFileUploaded")]
     FileUploaded(FileUploadResponse),
-    #[schema(value_type = Vec<u8>, title = "ResponseResultRes")]
-    #[serde(skip_serializing)]
+    #[schema(value_type = String, title = "ResponseResultRes", format = "binary")]
     Res(hyper::Response<tower_http::services::fs::ServeFileSystemResponseBody>),
 }
 
