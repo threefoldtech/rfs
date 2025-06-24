@@ -17,9 +17,9 @@ pub struct UserBlocksResponse {
     /// Total number of all blocks
     #[serde(rename = "all_blocks")]
     pub all_blocks: i64,
-    /// List of blocks with their indices
+    /// List of blocks with their sizes
     #[serde(rename = "blocks")]
-    pub blocks: Vec<models::BlockInfo>,
+    pub blocks: Vec<models::UserBlockInfo>,
     /// Total number of blocks
     #[serde(rename = "total")]
     pub total: i64,
@@ -27,7 +27,7 @@ pub struct UserBlocksResponse {
 
 impl UserBlocksResponse {
     /// Response for user blocks endpoint
-    pub fn new(all_blocks: i64, blocks: Vec<models::BlockInfo>, total: i64) -> UserBlocksResponse {
+    pub fn new(all_blocks: i64, blocks: Vec<models::UserBlockInfo>, total: i64) -> UserBlocksResponse {
         UserBlocksResponse {
             all_blocks,
             blocks,

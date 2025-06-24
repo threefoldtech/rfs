@@ -54,6 +54,7 @@ docs/TemplateErrBadRequest.md
 docs/TemplateErrInternalServerError.md
 docs/TemplateErrNotFound.md
 docs/UploadBlockParams.md
+docs/UserBlockInfo.md
 docs/UserBlocksResponse.md
 docs/VerifyBlock.md
 docs/VerifyBlocksRequest.md
@@ -117,6 +118,7 @@ src/models/template_err_bad_request.rs
 src/models/template_err_internal_server_error.rs
 src/models/template_err_not_found.rs
 src/models/upload_block_params.rs
+src/models/user_block_info.rs
 src/models/user_blocks_response.rs
 src/models/verify_block.rs
 src/models/verify_blocks_request.rs

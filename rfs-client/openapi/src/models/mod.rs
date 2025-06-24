@@ -92,6 +92,8 @@ pub mod template_err_not_found;
 pub use self::template_err_not_found::TemplateErrNotFound;
 pub mod upload_block_params;
 pub use self::upload_block_params::UploadBlockParams;
+pub mod user_block_info;
+pub use self::user_block_info::UserBlockInfo;
 pub mod user_blocks_response;
 pub use self::user_blocks_response::UserBlocksResponse;
 pub mod verify_block;

@@ -109,7 +109,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let user_blocks = client.get_user_blocks(Some(1), Some(10)).await?;
     println!("User has {} blocks (showing page 1 with 10 per page)", user_blocks.total);
     for block in user_blocks.blocks.iter().take(3) {
-        println!("  - Block: {}, Index: {}", block.hash, block.index);
+        println!("  - Block: {}, Size: {}", block.hash, block.size);
     }
     
     // Upload a block (upload_block_handler)

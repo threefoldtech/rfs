@@ -1,12 +1,11 @@
-# UserBlocksResponse
+# UserBlockInfo
 
 ## Properties
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**all_blocks** | **i64** | Total number of all blocks | 
-**blocks** | [**Vec<models::UserBlockInfo>**](UserBlockInfo.md) | List of blocks with their sizes | 
-**total** | **i64** | Total number of blocks | 
+**hash** | **String** | Block hash | 
+**size** | **i64** | Block size in bytes | 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
 

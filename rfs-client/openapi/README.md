@@ -95,6 +95,7 @@ Class | Method | HTTP request | Description
  - [TemplateErrInternalServerError](docs/TemplateErrInternalServerError.md)
  - [TemplateErrNotFound](docs/TemplateErrNotFound.md)
  - [UploadBlockParams](docs/UploadBlockParams.md)
+ - [UserBlockInfo](docs/UserBlockInfo.md)
  - [UserBlocksResponse](docs/UserBlocksResponse.md)
  - [VerifyBlock](docs/VerifyBlock.md)
  - [VerifyBlocksRequest](docs/VerifyBlocksRequest.md)
