@@ -236,6 +236,15 @@ pub struct BlockInfo {
     pub index: u64,
 }
 
+/// Block information with hash and size
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct UserBlockInfo {
+    /// Block hash
+    pub hash: String,
+    /// Block size in bytes
+    pub size: u64,
+}
+
 /// Response for blocks by hash endpoint
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct BlocksResponse {
@@ -368,8 +377,8 @@ pub async fn list_blocks_handler(
 /// Response for user blocks endpoint
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct UserBlocksResponse {
-    /// List of blocks with their indices
-    pub blocks: Vec<BlockInfo>,
+    /// List of blocks with their sizes
+    pub blocks: Vec<UserBlockInfo>,
     /// Total number of blocks
     pub total: u64,
     /// Total number of all blocks
@@ -421,7 +430,7 @@ pub async fn get_user_blocks_handler(
             let total = blocks.len() as u64;
             let response = UserBlocksResponse {
                 blocks: blocks.into_iter()
-                .map(|(hash, index)| BlockInfo { hash, index })
+                .map(|(hash, size)| UserBlockInfo { hash, size })
                 .collect(),
                 total,
                 all_blocks,
