@@ -19,12 +19,19 @@ use crate::server::{
 
 #[derive(Serialize, ToSchema)]
 pub enum ResponseError {
+    #[schema(title = "ResponseErrorInternalServerError")]
     InternalServerError,
+    #[schema(title = "ResponseErrorConflict")]
     Conflict(String),
+    #[schema(title = "ResponseErrorNotFound")]
     NotFound(String),
+    #[schema(title = "ResponseErrorUnauthorized")]
     Unauthorized(String),
+    #[schema(title = "ResponseErrorBadRequest")]
     BadRequest(String),
+    #[schema(title = "ResponseErrorForbidden")]
     Forbidden(String),
+    #[schema(title = "ResponseErrorTemplateError")]
     TemplateError(ErrorTemplate),
 }
 
@@ -74,17 +81,45 @@ impl IntoResponse for ResponseError {
     }
 }
 
+// Wrapper structs for OpenAPI documentation to match the actual JSON response format
+#[derive(Serialize, ToSchema)]
+pub struct FlistStateResponse {
+    pub flist_state: FlistState,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct HealthResponse {
+    pub msg: String,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct BlockUploadedResponse {
+    pub hash: String,
+    pub message: String,
+}
+
+
 #[derive(ToSchema)]
 pub enum ResponseResult {
+    #[schema(title = "ResponseResultHealth")]
     Health,
+    #[schema(title = "ResponseResultFlistCreated")]
     FlistCreated(Job),
+    #[schema(title = "ResponseResultFlistState")]
     FlistState(FlistState),
+    #[schema(title = "ResponseResultFlists")]
     Flists(HashMap<String, Vec<FileInfo>>),
+    #[schema(title = "ResponseResultPreviewFlist")]
     PreviewFlist(PreviewResponse),
+    #[schema(title = "ResponseResultSignedIn")]
     SignedIn(SignInResponse),
+    #[schema(title = "ResponseResultDirTemplate")]
     DirTemplate(DirListTemplate),
+    #[schema(title = "ResponseResultBlockUploaded")]
     BlockUploaded(String),
+    #[schema(title = "ResponseResultFileUploaded")]
     FileUploaded(FileUploadResponse),
+    #[schema(value_type = String, title = "ResponseResultRes", format = "binary")]
     Res(hyper::Response<tower_http::services::fs::ServeFileSystemResponseBody>),
 }
 
@@ -93,7 +128,9 @@ impl IntoResponse for ResponseResult {
         match self {
             ResponseResult::Health => (
                 StatusCode::OK,
-                Json(serde_json::json!({"msg": "flist server is working"})),
+                Json(HealthResponse {
+                    msg: "flist server is working".to_string(),
+                }),
             )
                 .into_response(),
             ResponseResult::SignedIn(token) => (StatusCode::CREATED, Json(token)).into_response(),
@@ -111,10 +148,10 @@ impl IntoResponse for ResponseResult {
             }
             ResponseResult::BlockUploaded(hash) => (
                 StatusCode::OK,
-                Json(serde_json::json!({
-                    "hash": hash,
-                    "message": "Block processed successfully"
-                })),
+                Json(BlockUploadedResponse {
+                    hash,
+                    message: "Block processed successfully".to_string(),
+                }),
             )
                 .into_response(),
             ResponseResult::FileUploaded(response) => {
@@ -186,7 +223,10 @@ const FAIL_REASON_HEADER_NAME: &str = "fl-server-fail-reason";
 
 #[derive(Serialize, ToSchema)]
 pub enum TemplateErr {
+    #[schema(title = "TemplateErrBadRequest")]
     BadRequest(String),
+    #[schema(title = "TemplateErrNotFound")]
     NotFound(String),
+    #[schema(title = "TemplateErrInternalServerError")]
     InternalServerError(String),
 }

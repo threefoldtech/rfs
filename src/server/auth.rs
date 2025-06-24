@@ -38,12 +38,13 @@ pub struct SignInResponse {
 
 #[utoipa::path(
     post,
-    path = "/v1/api/signin",
+    path = "/api/v1/signin",
+    tag = "Authentication",
     request_body = SignInBody,
     responses(
-        (status = 200, description = "User signed in successfully", body = SignInResponse),
-        (status = 500, description = "Internal server error"),
-        (status = 401, description = "Unauthorized user"),
+        (status = 201, description = "User signed in successfully", body = SignInResponse),
+        (status = 500, description = "Internal server error", body = ResponseError),
+        (status = 401, description = "Unauthorized user", body = ResponseError),
     )
 )]
 #[debug_handler]
