@@ -64,7 +64,7 @@ impl Modify for SecurityAddon {
             // Block schemas
             block_handlers::VerifyBlock, block_handlers::VerifyBlocksRequest, block_handlers::VerifyBlocksResponse,
             block_handlers::BlocksResponse, block_handlers::ListBlocksParams, block_handlers::ListBlocksResponse, block_handlers::BlockInfo,
-            block_handlers::UserBlocksResponse, block_handlers::BlockDownloadsResponse, block_handlers::UploadBlockParams,
+            block_handlers::UserBlocksResponse, block_handlers::BlockDownloadsResponse, block_handlers::UploadBlockParams, block_handlers::UserBlockInfo,
             // File schemas
             file_handlers::FileUploadResponse, file_handlers::FileDownloadRequest
         )
