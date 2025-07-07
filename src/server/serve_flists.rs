@@ -21,6 +21,20 @@ use crate::server::{
 };
 
 #[debug_handler]
+/// Serve flist files from the server's filesystem
+#[utoipa::path(
+    get,
+    path = "/{path}",
+    tag = "Flist Management",
+    params(
+        ("path" = String, Path, description = "Path to the flist file or directory to serve")
+    ),
+    responses(
+        (status = 200, description = "Successfully served the flist or directory listing", body = ResponseResult),
+        (status = 404, description = "Flist not found", body = ResponseError),
+        (status = 500, description = "Internal server error", body = ResponseError)
+    )
+)]
 pub async fn serve_flists(
     State(state): State<Arc<config::AppState>>,
     req: Request<Body>,

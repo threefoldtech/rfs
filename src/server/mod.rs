@@ -35,11 +35,9 @@ use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
 use tower_http::{cors::Any, trace::TraceLayer};
 
-use block_handlers::BlockApi;
-use file_handlers::FileApi;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
-use website_handlers::WebsiteApi;
+// Using only the main FlistApi for OpenAPI documentation
 
 pub async fn app(config_path: &str) -> Result<()> {
     let config = config::parse_config(config_path)
@@ -154,10 +152,7 @@ pub async fn app(config_path: &str) -> Result<()> {
     let app = Router::new()
         .merge(
             SwaggerUi::new("/swagger-ui")
-                .url("/api-docs/openapi.json", handlers::FlistApi::openapi())
-                .url("/api-docs/block-api.json", BlockApi::openapi())
-                .url("/api-docs/file-api.json", FileApi::openapi())
-                .url("/api-docs/website-api.json", WebsiteApi::openapi()),
+                .url("/api-docs/openapi.json", handlers::FlistApi::openapi()),
         )
         .merge(v1_routes)
         .layer(
