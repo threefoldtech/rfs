@@ -2,7 +2,7 @@
 /tests/*.flist.d
 result
 .direnv/
-fl-server/flists
-fl-server/config.toml
+flists
+config.toml
 *.db
 storage/

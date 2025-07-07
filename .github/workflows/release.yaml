@@ -31,9 +31,6 @@ jobs:
       - name: Strip
         run: |
           strip target/x86_64-unknown-linux-musl/release/rfs
-      - name: Strip
-        run: |
-          strip target/x86_64-unknown-linux-musl/release/docker2fl
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1
@@ -53,15 +50,4 @@ jobs:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: target/x86_64-unknown-linux-musl/release/rfs
           asset_name: rfs
-          asset_content_type: application/x-pie-executable
-
-      - name: Upload Release Asset for docker2fl
-        id: upload-release-asset-docker2fl
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: target/x86_64-unknown-linux-musl/release/docker2fl
-          asset_name: docker2fl
           asset_content_type: application/x-pie-executable
