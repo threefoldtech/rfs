@@ -3,7 +3,7 @@
 ## Requirements
 
 - tfcmd
-- docker2fl
+- rfs
 - rust
 - docker
 - git
@@ -54,14 +54,14 @@ apt-get update
 dockerd > docker.log 2>&1 &
 ```
 
-### Install docker2fl
+### Install rfs
 
 ```bash
 git clone https://github.com/threefoldtech/rfs.git
 cd rfs
 rustup target add x86_64-unknown-linux-musl
 cargo build --features build-binary --release --target=x86_64-unknown-linux-musl
-mv ./target/x86_64-unknown-linux-musl/release/docker2fl /usr/local/bin
+mv ./target/x86_64-unknown-linux-musl/release/rfs /usr/local/bin
 ```
 
 ### Install sqlite
@@ -137,7 +137,7 @@ export WRITE_KEY_ID=<"your key ID">
 export WRITE_KEY_SECRET=<"your key secret">
 export MYCELIUM_IP=<"your machine mycelium IP which has your garage server">
 
-docker2fl -i $IMAGE -s 's3://$WRITE_KEY_ID:$WRITE_KEY_SECRET@$[$MYCELIUM_IP]:3900/blobs?region=garage'
+rfs docker -i $IMAGE -s 's3://$WRITE_KEY_ID:$WRITE_KEY_SECRET@$[$MYCELIUM_IP]:3900/blobs?region=garage'
 ```
 
 - Update the key to the read only key
