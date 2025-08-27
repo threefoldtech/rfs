@@ -1,73 +1,114 @@
-# FungiList specifications
+# RFS Documentation
 
-## Introduction
+Welcome to the comprehensive documentation for the RFS (Remote File System) command-line tool. This documentation covers all aspects of using the `rfs` command, including its various subcommands, concepts, tutorials, and user guides.
 
-The idea behind the FL format is to build a full filesystem description that is compact and also easy to use from almost ANY language. The format need to be easy to edit by tools like `rfs` or any other tool.
+## Table of Contents
 
-We decided to eventually use `sqlite`! Yes the `FL` file is just a `sqlite` database that has the following [schema](../rfs/schema/schema.sql)
+### Architecture
 
-## Tables
+The architecture documentation provides a high-level overview of the RFS system and how it works.
 
-### Inode
+- [Architecture Overview](./architecture/overview.md) - High-level architecture of the RFS system
+- [Components](./architecture/components.md) - How the different components work together
+- [Data Flow](./architecture/data-flow.md) - How data flows through the system
+- [Storage Backends](./architecture/storage-backends.md) - Details about the supported storage backends
 
-Inode table describe each entry on the filesystem. It matches really closely the same `inode` structure on the linux operating system. Each inode has a unique id called `ino`, a parent `ino`, name, and other parameters (user, group, etc...).
+### Concepts
 
-The type of the `inode` is defined by its `mode` which is a `1:1` mapping from the linux `mode`
+The concepts documentation explains the core concepts and principles behind RFS.
 
-> from the [inode manual](https://man7.org/linux/man-pages/man7/inode.7.html)
+- [Understanding Flists](./concepts/flists.md) - What are flists and how they work
+- [Understanding Storage Backends](./concepts/stores.md) - How storage backends work
+- [Understanding Caching](./concepts/caching.md) - How caching works in RFS
+- [Understanding Sharding and Replication](./concepts/sharding.md) - How sharding and replication work
 
+### Tutorials
+
+The tutorials provide step-by-step guides for common tasks using the `rfs` command.
+
+### Core Functionality
+
+- [Getting Started](./tutorials/getting-started.md) - Installation and basic usage
+- [Creating Flists](./tutorials/creating-flists.md) - How to create flists from directories
+- [Mounting Flists](./tutorials/mounting-flists.md) - How to mount and use flists
+- [End-to-End Flist Workflow](./tutorials/end-to-end-flist-workflow.md) - Complete workflow for creating and using flists
+
+### Docker Integration
+
+- [Docker Conversion](./tutorials/docker-conversion.md) - How to convert Docker images to flists
+- [End-to-End Docker Workflow](./tutorials/end-to-end-docker-workflow.md) - Complete workflow for Docker conversion
+
+### Server and Distribution
+
+- [Server Setup](./tutorials/server-setup.md) - How to set up the server functionality
+- [Website Publishing](./tutorials/website-publishing.md) - How to publish websites using RFS
+- [Syncing Files](./tutorials/syncing-files.md) - How to sync files between RFS servers
+
+### User Guides
+
+The user guides provide detailed information about using specific features of the `rfs` command.
+
+- [RFS Command Reference](./user-guides/rfs-cli.md) - Comprehensive command reference
+- [RFS Server Guide](./user-guides/fl-server.md) - Server configuration and management
+- [Web Interface Guide](./user-guides/frontend.md) - Using the web interface
+- [Performance Tuning](./user-guides/performance-tuning.md) - Optimizing performance
+- [Troubleshooting](./user-guides/troubleshooting.md) - Common issues and solutions
+
+## Command Overview
+
+The `rfs` command provides all the functionality you need to work with flists:
+
+```bash
+# Core functionality
+rfs pack        # Create flists from directories
+rfs mount       # Mount flists as filesystems
+rfs unpack      # Extract flist contents to a directory
+rfs clone       # Copy data between stores
+rfs config      # Manage flist metadata and stores
+
+# Docker conversion
+rfs docker      # Convert Docker images to flists
+
+# Server functionality
+rfs server      # Run the RFS server for web-based management
+
+# Server API interaction
+rfs upload      # Upload a file to a server
+rfs upload-dir  # Upload a directory to a server
+rfs download    # Download a file from a server
+rfs download-dir # Download a directory from a server
+rfs exists      # Check if a file exists on a server
+rfs flist create # Create an flist on a server
+rfs website-publish # Publish a website to a server
 ```
 
-POSIX refers to the stat.st_mode bits corresponding to the mask
-S_IFMT (see below) as the file type, the 12 bits corresponding to
-the mask 07777 as the file mode bits and the least significant 9
-bits (0777) as the file permission bits.
+For detailed information about each command, use the `--help` flag:
 
-The following mask values are defined for the file type:
-
-    S_IFMT     0170000   bit mask for the file type bit field
-
-    S_IFSOCK   0140000   socket
-    S_IFLNK    0120000   symbolic link
-    S_IFREG    0100000   regular file
-    S_IFBLK    0060000   block device
-    S_IFDIR    0040000   directory
-    S_IFCHR    0020000   character device
-    S_IFIFO    0010000   FIFO
+```bash
+rfs --help
+rfs pack --help
+rfs mount --help
 ```
 
-## Extra
+## Getting Help
 
-the `extra` table holds any **optional** data associated to the inode based on its type. For now it holds the `link target` for symlink inodes.
+If you encounter issues or have questions that aren't addressed in the documentation:
 
-## Tag
+1. Check the [Troubleshooting Guide](./user-guides/troubleshooting.md) for common issues and solutions.
+2. Use the `--help` flag with any command for detailed usage information.
+3. Search for similar issues on the [RFS GitHub repository](https://github.com/threefoldtech/rfs/issues).
+4. Open a new issue if needed.
 
-tag is key value for some user defined data associated with the FL. The standard keys are:
+## Contributing to Documentation
 
-- `version`
-- `description`
-- `author`
+We welcome contributions to improve this documentation. If you find errors, omissions, or areas that could be clarified:
 
-But an FL author can add other custom keys there
+1. Fork the repository
+2. Make your changes
+3. Submit a pull request
 
-## Block
+Please follow the existing style and structure when making changes.
 
-the `block` table is used to associate data file blocks with files. An `id` field is the blob `id` in the `store`, the `key` is the key used to decrypt the blob. The current implementation of `rfs` does the following:
+## License
 
-- For each blob (512k) the `sha256`. This becomes the encryption key of the block. We call it `key`
-- The block is then `snap` compressed
-- Then encrypted with `aes_gcm` using the `key`, and the first 12 bytes of the key as `nonce`
-- The final encrypted blocked is hashed again with `sha256` this becomes the `id` of the block
-- The final encrypted blob is then sent to the store using the `id` as a key.
-
-## Route
-
-the route table holds routing information for the blobs. It basically describe where to find `blobs` with certain `ids`. The routing is done as following:
-
-> Note routing table is loaded one time when `rfs` is started.
-
-- We use the first byte of the blob `id` as the `route key`
-- The `route key` is then consulted against the routing table
-- While building an `FL` all matching stores are updated with the new blob. This is how the system does replication
-- On `getting` an object, the list of matching routes are tried in random order the first one to return a value is used
-- Note that same range and overlapping ranges are allowed, this is how shards and replications are done.
+This documentation is licensed under the [Apache License 2.0](../LICENSE).

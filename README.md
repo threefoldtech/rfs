@@ -1,216 +1,236 @@
-# rfs
-
-This repo contains the binaries related to rfs.
+# RFS - Remote File System
 
 [![Test](https://github.com/threefoldtech/rfs/actions/workflows/tests.yaml/badge.svg?branch=master)](https://github.com/threefoldtech/rfs/actions/workflows/tests.yaml)
 
-# Introduction
+## What is RFS?
 
-`rfs` is the main tool to create, mount and extract FungiStore lists (FungiList)`fl` for short. An `fl` is a simple format
-to keep information about an entire filesystem in a compact form. It does not hold the data itself but enough information to
-retrieve this data back from a `store`.
+RFS (Remote File System) is a powerful command-line tool that lets you efficiently store, distribute, and access filesystems across different storage backends. It solves common problems in file distribution by separating metadata from content, allowing for:
 
-## Building rfs
+- **Efficient file distribution** - Share only the metadata, download content on-demand
+- **Reduced bandwidth usage** - Only download the files you actually need
+- **Flexible storage options** - Store content in local directories, ZDB, S3, or HTTP backends
+- **Docker image conversion** - Convert Docker images to lightweight, mountable filesystems
+- **Web-based management** - Manage your filesystems through a user-friendly web interface
 
-To build rfs make sure you have rust installed then run the following commands:
+## Key Features
+
+- **Flists**: Compact metadata files that describe filesystems without containing the actual data
+- **On-demand access**: Files are only downloaded when accessed, saving bandwidth and storage
+- **Content deduplication**: Identical files are stored only once, even across different flists
+- **Multiple storage backends**: Store content in directory, ZDB, S3, or HTTP backends
+- **Docker conversion**: Convert Docker images to flists for efficient distribution
+- **Server functionality**: Run a server for web-based flist management
+- **Sharding and replication**: Distribute and replicate content across multiple storage backends
+
+## Common Use Cases
+
+### Efficient Docker Image Distribution
+
+Convert Docker images to flists for more efficient distribution and usage:
 
 ```bash
-# this is needed to be run once to make sure the musl target is installed
+# Convert a Docker image to an flist
+rfs docker -i nginx:latest -s dir:///tmp/store
+
+# Mount the resulting flist
+sudo rfs mount -m nginx-latest.fl /mnt/nginx
+```
+
+### Distributing Large Filesystems
+
+Package and distribute large filesystems efficiently:
+
+```bash
+# Create an flist from a directory
+rfs pack -m myapp.fl -s dir:///tmp/store /path/to/myapp
+
+# Share the flist (typically <1MB) instead of the entire content
+# Recipients can mount it and access files on-demand
+sudo rfs mount -m myapp.fl /mnt/myapp
+```
+
+### Web Content Distribution
+
+Publish and distribute web content efficiently:
+
+```bash
+# Create an flist from a website directory
+rfs pack -m website.fl -s s3://user:pass@s3.example.com:9000/bucket /path/to/website
+
+# Mount the website on a server
+sudo rfs mount -m website.fl /var/www/html
+```
+
+### Application Deployment
+
+Deploy applications with all their dependencies:
+
+```bash
+# Convert an application Docker image to an flist
+rfs docker -i myapp:latest -s zdb://zdb.example.com:9900/namespace
+
+# Deploy the application on multiple servers by mounting the flist
+sudo rfs mount -m myapp-latest.fl /opt/myapp
+```
+
+## Quick Start
+
+### Installation
+
+```bash
+# Install dependencies
+sudo apt-get install -y build-essential fuse libfuse-dev
+
+# Install Rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source $HOME/.cargo/env
+
+# Clone the repository
+git clone https://github.com/threefoldtech/rfs.git
+cd rfs
+
+# Build RFS
 rustup target add x86_64-unknown-linux-musl
-
-# build the binary
 cargo build --features build-binary --release --target=x86_64-unknown-linux-musl
+
+# Install the binary
+sudo cp ./target/x86_64-unknown-linux-musl/release/rfs /usr/local/bin/
 ```
 
-the binary will be available under `./target/x86_64-unknown-linux-musl/release/rfs` you can copy that binary then to `/usr/bin/`
-to be able to use from anywhere on your system.
-
-## Stores
-
-A store in where the actual data lives. A store can be as simple as a `directory` on your local machine in that case the files on the `fl` are only 'accessible' on your local machine. A store can also be a `zdb` running remotely or a cluster of `zdb`. Right now only `dir`, `http`, `zdb` and `s3` stores are supported but this will change in the future to support even more stores.
-
-## Usage
-
-### Creating an `fl`
+### Creating Your First Flist
 
 ```bash
-rfs pack -m output.fl -s <store-specs> <directory>
+# Create a directory to use as a store
+mkdir -p ~/rfs-store
+
+# Create an flist from a directory
+rfs pack -m ~/test.fl -s dir://~/rfs-store ~/my-directory
+
+# Mount the flist
+mkdir -p ~/mount-point
+sudo rfs mount -m ~/test.fl ~/mount-point
+
+# Access the files
+ls -la ~/mount-point
+
+# Unmount when done
+sudo umount ~/mount-point
 ```
 
-This tells rfs to create an `fl` named `output.fl` using the store defined by the url `<store-specs>` and upload all the files under directory recursively.
-
-The simplest form of `<store-specs>` is a `url`. the store `url` defines the store to use. Any `url`` has a schema that defines the store type. Right now we have support only for:
-
-- `dir`: dir is a very simple store that is mostly used for testing. A dir store will store the fs blobs in another location defined by the url path. An example of a valid dir url is `dir:///tmp/store`
-- `zdb`: [zdb](https://github.com/threefoldtech/0-db) is a append-only key value store and provides a redis like API. An example zdb url can be something like `zdb://<hostname>[:port][/namespace]`
-- `s3`: aws-s3 is used for storing and retrieving large amounts of data (blobs) in buckets (directories). An example `s3://<username>:<password>@<host>:<port>/<bucket-name>`
-
-  `region` is an optional param for s3 stores, if you want to provide one you can add it as a query to the url `?region=<region-name>`
-- `http`: http is a store mostly used for wrapping a dir store to fetch data through http requests. It does not support uploading, just fetching the data.
-  It can be set in the FL file as the store to fetch the data with `rfs config`. Example: `http://localhost:9000/store` (https works too).
-
-`<store-specs>` can also be of the form `<start>-<end>=<url>` where `start` and `end` are a hex bytes for partitioning of blob keys. rfs will then store a set of blobs on the defined store if they blob key falls in the `[start:end]` range (inclusive).
-
-If the `start-end` range is not provided a `00-FF` range is assume basically a catch all range for the blob keys. In other words, all blobs will be written to that store.
-
-This is only useful because `rfs` can accept multiple stores on the command line with different and/or overlapping ranges.
-
-For example `-s 00-80=dir:///tmp/store0 -s 81-ff=dir:///tmp/store1` means all keys that has prefix byte in range `[00-80]` will be written to /tmp/store0 all other keys `[81-ff]` will be written to store1.
-
-The same range can appear multiple times, which means the blob will be replicated to all the stores that matches its key prefix.
-
-To quickly test this operation
+### Converting a Docker Image
 
 ```bash
-rfs pack -m output.fl -s 00-80=dir:///tmp/store0 -s 81-ff=dir:///tmp/store1 ~/Documents
+# Create a directory to use as a store
+mkdir -p ~/rfs-store
+
+# Convert a Docker image to an flist
+rfs docker -i alpine:latest -s dir://~/rfs-store
+
+# Mount the resulting flist
+mkdir -p ~/mount-point
+sudo rfs mount -m alpine-latest.fl ~/mount-point
+
+# Run commands in the mounted filesystem
+sudo chroot ~/mount-point /bin/sh -c "ls -la"
+
+# Unmount when done
+sudo umount ~/mount-point
 ```
 
-this command will effectively create the `output.fl` and store (and shard) the blobs across the 2 locations /tmp/store0 and /tmp/store1.
+### Running the Server
 
 ```bash
-#rfs pack --help
+# Create a configuration file
+cat > config.toml << EOF
+host = "localhost"
+port = 3000
+store_url = ["dir:///tmp/store"]
+flist_dir = "flists"
 
-create an FL and upload blocks to provided storage
-
-Usage: rfs pack [OPTIONS] --meta <META> <TARGET>
-
-Arguments:
-  <TARGET>  target directory to upload
-
-Options:
-  -m, --meta <META>    path to metadata file (flist)
-  -s, --store <STORE>  store url in the format [xx-xx=]<url>. the range xx-xx is optional and used for sharding. the URL is per store type, please check docs for more information
-      --no-strip-password  disables automatic password stripping from store url, otherwise password will be stored in the fl.
-  -h, --help           Print help
-```
-
-#### Password stripping
-
-During creation of an flist you will probably provide a password in the URL of the store. This is normally needed to allow write operation to the store (say s3 bucket)
-Normally this password is removed from the store info so it's safe to ship the fl to users. A user of the flist then will only have read access, if configured correctly
-in the store
-
-For example a `zdb` store has the notion of a public namespace which is password protected for writes, but open for reads. An S3 bucket can have the policy to allow public reads, but protected writes (minio supports that via bucket settings)
-
-If you wanna disable the password stripping from the store url, you can provide the `--no-strip-password` flag during creation. This also means someone can extract
-this information from the fl and gain write access to your store, so be careful how u use it.
-
-# Mounting an `fl`
-
-Once the `fl` is created it can be distributes to other people. Then they can mount the `fl` which will allow them then to traverse the packed filesystem and also access (read-only) the files.
-
-To mount an `fl` only the `fl` is needed since all information regarding the `stores` is already stored in the `fl`. This also means you can only share the `fl` if the other user can actually reach the store used to crate the `fl`. So a `dir` store is not sharable, also a `zdb` instance that is running on localhost :no_good:
-
-```bash
-sudo rfs mount -m output.fl <target>
-```
-
-The `<target>` is the mount location, usually `/mnt` but can be anywhere. In another terminal you can now `cd <target>` and walk the filesystem tree. Opening the files will trigger a file download from the store only on read access.
-
-full command help
-
-```bash
-# rfs mount --help
-
-mount an FL
-
-Usage: rfs mount [OPTIONS] --meta <META> <TARGET>
-
-Arguments:
-  <TARGET>  target mountpoint
-
-Options:
-  -m, --meta <META>    path to metadata file (flist)
-  -c, --cache <CACHE>  directory used as cache for downloaded file chuncks [default: /tmp/cache]
-  -d, --daemon         run in the background
-  -l, --log <LOG>      log file only used with daemon mode
-  -h, --help           Print help
-```
-
-# Unpack an `fl`
-
-Similar to `mount` rfs provides an `unpack` subcommand that downloads the entire content (extract) of an `fl` to a provided directory.
-
-```bash
-rfs unpack --help
-unpack (downloads) content of an FL the provided location
-
-Usage: rfs unpack [OPTIONS] --meta <META> <TARGET>
-
-Arguments:
-  <TARGET>  target directory to upload
-
-Options:
-  -m, --meta <META>         path to metadata file (flist)
-  -c, --cache <CACHE>       directory used as cache for downloaded file chuncks [default: /tmp/cache]
-  -p, --preserve-ownership  preserve files ownership from the FL, otherwise use the current user ownership setting this flag to true normally requires sudo
-  -h, --help                Print help
-```
-
-By default when unpacking the `-p` flag is not set. which means downloaded files will be `owned` by the current user/group. If `-p` flag is set, the files ownership will be same as the original files used to create the fl (preserve `uid` and `gid` of the files and directories) this normally requires `sudo` while unpacking.
-
-# Server Command
-
-The `rfs` tool can also be used to run the server
-
-```bash
-rfs server --config-path config.toml [--debug]
-```
-
-This command will start the server using the specified configuration file. The server binary must be located in the same directory as the rfs binary.
-
-Options:
-
-- `--config-path`, `-c`: Path to the configuration file (required)
-- `--debug`, `-d`: Enable debugging logs (can be specified multiple times for more verbose logging)
-
-## Configuration
-
-Before building or running the server, create `config.toml` in the current directory.
-
-example `config.toml`:
-
-```toml
-host="Your host to run the server on, required, example: 'localhost'"
-port="Your port to run the server on, required, example: 3000, validation: between [0, 65535]"
-store_url="List of stores to pack flists in which can be 'dir', 'zdb', 's3', required, example: ['dir:///tmp/store0']"
-flist_dir="A directory to save each user flists, required, example: 'flists'"
-
-jwt_secret="secret for jwt, required, example: 'secret'"
-jwt_expire_hours="Life time for jwt token in hours, required, example: 5, validation: between [1, 24]"
-
-sqlite_path="path of database file, example: 'server.db'"
-storage_dir="path of server storage directory for blocks, example: 'storage'"
-block_size="Size of blocks in bytes used for splitting files during storage operations, optional, example: 1048576 (1MB)"
-
-[[users]] # list of authorized user in the server
-username = "user1"
-password = "password1"
+jwt_secret = "your-secret-key"
+jwt_expire_hours = 5
 
 [[users]]
-username = "user2"
-password = "password2"
-...
+username = "admin"
+password = "admin-password"
+EOF
+
+# Create the flists directory
+mkdir -p flists/admin
+
+# Run the server
+rfs server --config-path config.toml
 ```
 
-## Testing
+## Command Reference
 
-The project includes various tests to ensure functionality:
+The `rfs` command provides all the functionality you need to work with flists:
+
+- `rfs pack` - Create flists from directories
+- `rfs mount` - Mount flists as filesystems
+- `rfs unpack` - Extract flist contents to a directory
+- `rfs docker` - Convert Docker images to flists
+- `rfs server` - Run the RFS server for web-based management
+- `rfs config` - Manage flist metadata and stores
+- `rfs clone` - Copy data between stores
+- `rfs flist tree` - Display flist contents as a tree structure
+- `rfs flist inspect` - Inspect file details within an flist
+- And more...
+
+For detailed information about each command, use the `--help` flag:
 
 ```bash
-# Run all tests
-cd tests
-make all
-
-# Or run specific test types
-make unit
-make integration
-make e2e
-make performance
+rfs --help
+rfs pack --help
+rfs mount --help
 ```
 
-See the [tests README](./tests/README.md) for more details.
+## Documentation
 
-# Specifications
+Comprehensive documentation is available in the [docs](./docs) directory:
 
-Please check [docs](../docs)
+### Getting Started
+
+- [Installation and Basic Usage](./docs/tutorials/getting-started.md)
+### Core Functionality
+
+- [Getting Started](./docs/tutorials/getting-started.md) - Installation and basic usage
+- [Creating Flists](./docs/tutorials/creating-flists.md) - How to create flists from directories
+- [Mounting Flists](./docs/tutorials/mounting-flists.md) - How to mount and use flists
+- [End-to-End Flist Workflow](./docs/tutorials/end-to-end-flist-workflow.md) - Complete workflow for creating and using flists
+
+### Docker Integration
+
+- [Converting Docker Images](./docs/tutorials/docker-conversion.md) - How to convert Docker images to flists
+- [End-to-End Docker Workflow](./docs/tutorials/end-to-end-docker-workflow.md) - Complete workflow for Docker conversion
+
+### Server and Distribution
+
+- [Server Setup](./docs/tutorials/server-setup.md) - How to set up the RFS server
+- [Website Publishing](./docs/tutorials/website-publishing.md) - How to publish websites using RFS
+- [Syncing Files](./docs/tutorials/syncing-files.md) - How to sync files between RFS servers
+
+### User Guides
+
+- [RFS Command Reference](./docs/user-guides/rfs-cli.md)
+- [RFS Server Setup and Usage](./docs/user-guides/fl-server.md)
+- [Web Interface Guide](./docs/user-guides/frontend.md)
+- [Performance Tuning](./docs/user-guides/performance-tuning.md)
+- [Troubleshooting](./docs/user-guides/troubleshooting.md)
+
+### Concepts and Architecture
+
+- [Understanding Flists](./docs/concepts/flists.md)
+- [Storage Backends](./docs/concepts/stores.md)
+- [Caching](./docs/concepts/caching.md)
+- [Sharding and Replication](./docs/concepts/sharding.md)
+- [System Architecture](./docs/architecture/overview.md)
+
+## Community and Support
+
+- **GitHub Issues**: Report bugs or request features on our [GitHub repository](https://github.com/threefoldtech/rfs/issues)
+- **Documentation**: Comprehensive documentation is available in the [docs](./docs) directory
+
+## License
+
+This project is licensed under the [Apache License 2.0](./LICENSE).
