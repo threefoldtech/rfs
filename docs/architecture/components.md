@@ -64,7 +64,7 @@ The Docker functionality leverages Docker's API to extract image contents and th
 
 ## 3. Server Functionality
 
-The server functionality (`rfs server`) provides a REST API for managing flists.
+The server functionality (`rfs server`) provides a REST API for managing flists, storing the flists, serving/storing the blobs.
 
 ### Key Features
 
