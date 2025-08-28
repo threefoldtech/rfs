@@ -98,7 +98,6 @@ pub struct BlockUploadedResponse {
     pub message: String,
 }
 
-
 #[derive(ToSchema)]
 pub enum ResponseResult {
     #[schema(title = "ResponseResultHealth")]

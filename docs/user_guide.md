@@ -341,6 +341,47 @@ rfs track-website <flist_hash> --server <server_url> [--details]
 
 ---
 
+### 19. **Merge flist**
+
+Provides a `merge` subcommand that combines multiple file lists (FL files) into a single unified file list.
+
+```bash
+rfs merge merged.fl flist1.fl flist2.fl --token token
+```
+
+This tells the binary to create an `fl` named `merged.fl` by combining the file lists `flist1.fl` and `flist2.fl`. A token for the server must be specified with the `--token` option.
+
+**Requirements:**
+
+- At least 2 input file lists must be specified
+- A token for the server must be specified with the `--token` option
+
+**Usage:**
+
+```bash
+# rfs merge --help
+
+merge 2 or more FLs into a new one
+
+Usage: rfs merge [OPTIONS] --token <TOKEN> <META> <TARGET_FLISTS>...
+```
+
+**Options:**
+
+```bash
+Arguments:
+  <META>              path to metadata file (flist)
+  <TARGET_FLISTS>...  
+
+Options:
+  -s, --server <SERVER>  server URL (e.g., http://localhost:8080) [default: http://localhost:8080]
+      --token <TOKEN>    authentication token for the server [default: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjE3NTAwOTAyNTUsImlhdCI6MTc1MDA3MjI1NSwidXNlcm5hbWUiOiJyYXdkYSJ9.PieIEa-O4R2G1_H1Dq8lmpQihNyGun1qLMF9B4ToxEY]
+  -c, --cache <CACHE>    [default: /tmp/cache]
+  -h, --help             Print help
+```
+
+---
+
 ### Examples
 
 1. **Upload a File**:

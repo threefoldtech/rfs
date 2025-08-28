@@ -13,7 +13,7 @@ use crate::server::{
     config::AppState,
     db::DB,
     models::Block,
-    response::{ResponseError, ResponseResult, BlockUploadedResponse},
+    response::{BlockUploadedResponse, ResponseError, ResponseResult},
 };
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -277,10 +277,16 @@ pub async fn get_blocks_by_hash_handler(
     match state.db.get_file_blocks_ordered(&hash).await {
         Ok(blocks) if !blocks.is_empty() => {
             // This is a file hash, return all blocks with their indices
-            let block_infos = blocks.into_iter()
+            let block_infos = blocks
+                .into_iter()
                 .map(|(hash, index)| BlockInfo { hash, index })
                 .collect();
-            Ok((StatusCode::OK, Json(BlocksResponse { blocks: block_infos })))
+            Ok((
+                StatusCode::OK,
+                Json(BlocksResponse {
+                    blocks: block_infos,
+                }),
+            ))
         }
         Ok(_) | Err(_) => {
             // Not a file hash or error occurred, try as block hash
@@ -290,7 +296,10 @@ pub async fn get_blocks_by_hash_handler(
                     Ok((
                         StatusCode::OK,
                         Json(BlocksResponse {
-                            blocks: vec![BlockInfo { hash: hash.clone(), index: 0 }],
+                            blocks: vec![BlockInfo {
+                                hash: hash.clone(),
+                                index: 0,
+                            }],
                         }),
                     ))
                 }
@@ -429,9 +438,10 @@ pub async fn get_user_blocks_handler(
         Ok(blocks) => {
             let total = blocks.len() as u64;
             let response = UserBlocksResponse {
-                blocks: blocks.into_iter()
-                .map(|(hash, size)| UserBlockInfo { hash, size })
-                .collect(),
+                blocks: blocks
+                    .into_iter()
+                    .map(|(hash, size)| UserBlockInfo { hash, size })
+                    .collect(),
                 total,
                 all_blocks,
             };

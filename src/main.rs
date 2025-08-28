@@ -42,6 +42,8 @@ enum Commands {
     Clone(CloneOptions),
     /// list or modify FL metadata and stores
     Config(ConfigOptions),
+    /// merge 2 or more FLs into a new one
+    Merge(MergeOptions),
     /// convert a docker image to an FL
     Docker(DockerOptions),
     /// run the server
@@ -213,6 +215,37 @@ struct CloneOptions {
     /// directory used as cache for downloaded file chunks
     #[clap(short, long, default_value_t = String::from("/tmp/cache"))]
     cache: String,
+}
+
+#[derive(Args, Debug)]
+struct MergeOptions {
+    /// path to metadata file (flist)
+    meta: String,
+
+    /// server URL (e.g., http://localhost:8080)
+    #[clap(short, long, default_value_t = String::from("http://localhost:8080"))]
+    server: String,
+
+    /// authentication token for the server
+    #[clap(long, default_value_t = std::env::var("RFS_TOKEN").unwrap_or_default(), required = true)]
+    token: String,
+
+    #[clap(action=ArgAction::Append, required = true)]
+    target_flists: Vec<String>,
+
+    #[clap(short, long, default_value_t = String::from("/tmp/cache"))]
+    cache: String,
+}
+
+impl MergeOptions {
+    fn validate(&self) -> Result<()> {
+        if self.target_flists.len() < 2 {
+            return Err(anyhow::anyhow!(
+                "At least 2 target file lists are required for merge operation"
+            ));
+        }
+        Ok(())
+    }
 }
 
 #[derive(Args, Debug)]
@@ -542,6 +575,7 @@ fn main() -> Result<()> {
         Commands::Unpack(opts) => unpack(opts),
         Commands::Clone(opts) => clone(opts),
         Commands::Config(opts) => config(opts),
+        Commands::Merge(opts) => merge(opts),
         Commands::Docker(opts) => docker(opts),
         Commands::Server(opts) => server(opts),
         Commands::Upload(opts) => upload_file(opts),
@@ -833,6 +867,24 @@ fn config(opts: ConfigOptions) -> Result<()> {
             },
         }
 
+        Ok(())
+    })
+}
+
+fn merge(opts: MergeOptions) -> Result<()> {
+    opts.validate()?;
+
+    let rt = tokio::runtime::Runtime::new()?;
+
+    rt.block_on(async move {
+        rfs::merge(
+            opts.meta,
+            opts.server,
+            &opts.token,
+            opts.target_flists,
+            opts.cache,
+        )
+        .await?;
         Ok(())
     })
 }

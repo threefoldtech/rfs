@@ -17,22 +17,25 @@ use serde::{Deserialize, Serialize};
 
 use crate::docker;
 use crate::fungi;
-use crate::server::{
-    auth::{SignInBody, SignInResponse, __path_sign_in_handler},
-    config::{self, Job},
-    db::DB,
-    response::{DirListTemplate, DirLister, ErrorTemplate, TemplateErr},
-    response::{FileInfo, ResponseError, ResponseResult, FlistStateResponse, HealthResponse, BlockUploadedResponse},
-    serve_flists::visit_dir_one_level,
-};
-use crate::store;
-use utoipa::{OpenApi, ToSchema, Modify};
-use utoipa::openapi::security::{SecurityScheme, HttpAuthScheme, Http};
-use uuid::Uuid;
 use crate::server::block_handlers;
 use crate::server::file_handlers;
 use crate::server::serve_flists;
 use crate::server::website_handlers;
+use crate::server::{
+    auth::{SignInBody, SignInResponse, __path_sign_in_handler},
+    config::{self, Job},
+    db::DB,
+    response::{
+        BlockUploadedResponse, FileInfo, FlistStateResponse, HealthResponse, ResponseError,
+        ResponseResult,
+    },
+    response::{DirListTemplate, DirLister, ErrorTemplate, TemplateErr},
+    serve_flists::visit_dir_one_level,
+};
+use crate::store;
+use utoipa::openapi::security::{Http, HttpAuthScheme, SecurityScheme};
+use utoipa::{Modify, OpenApi, ToSchema};
+use uuid::Uuid;
 
 // Security scheme modifier for JWT Bearer authentication
 struct SecurityAddon;
@@ -473,7 +476,7 @@ pub async fn preview_flist_handler(
         .into_iter()
         .map(|path| path.to_string_lossy().to_string())
         .collect();
-        
+
     Ok(ResponseResult::PreviewFlist(PreviewResponse {
         content: content_strings,
         metadata: state.config.store_url.join("-"),
