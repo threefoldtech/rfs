@@ -62,7 +62,9 @@ pub async fn upload_file_handler(
     let username = extension.0;
     if username.is_empty() {
         log::error!("Username is required but not provided");
-        return Err(ResponseError::BadRequest("Username is required".to_string()));
+        return Err(ResponseError::BadRequest(
+            "Username is required".to_string(),
+        ));
     }
     let user_id = auth::get_user_id_from_token(&*state.db, &username).await?;
 
