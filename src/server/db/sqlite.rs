@@ -119,7 +119,7 @@ impl DB for SqlDB {
             .await;
 
         // If both block and metadata exist, no need to store again
-        if block_exists && (metadata_exists || file_hash.is_empty()) {
+        if block_exists && (metadata_exists || file_hash.is_empty() || user_id == 0) {
             return true;
         }
 
