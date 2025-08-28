@@ -43,83 +43,102 @@ mod test {
     use std::path::PathBuf;
     use tokio::{fs, io::AsyncReadExt};
 
-    #[tokio::test]
-    async fn pack_unpack() {
-        const ROOT: &str = "/tmp/pack-unpack-test";
-        let _ = fs::remove_dir_all(ROOT).await;
+    #[test]
+    fn pack_unpack() {
+        // Run the test in a thread with increased stack size to prevent stack overflow
+        let handle = std::thread::Builder::new()
+            .stack_size(16 * 1024 * 1024) // 16MB stack size
+            .spawn(|| {
+                // Create a runtime for async operations
+                let rt = tokio::runtime::Builder::new_multi_thread()
+                    .worker_threads(2)
+                    .thread_stack_size(16 * 1024 * 1024)
+                    .enable_time()
+                    .enable_io()
+                    .build()
+                    .unwrap();
 
-        let root: PathBuf = ROOT.into();
-        let source = root.join("source");
-        fs::create_dir_all(&source).await.unwrap();
+                rt.block_on(async {
+                    const ROOT: &str = "/tmp/pack-unpack-test";
+                    let _ = fs::remove_dir_all(ROOT).await;
 
-        for size in [0, 100 * 1024, 1024 * 1024, 10 * 1024 * 1024] {
-            let mut urandom = fs::OpenOptions::default()
-                .read(true)
-                .open("/dev/urandom")
-                .await
-                .unwrap()
-                .take(size);
+                    let root: PathBuf = ROOT.into();
+                    let source = root.join("source");
+                    fs::create_dir_all(&source).await.unwrap();
 
-            let name = format!("file-{}.rnd", size);
-            let p = source.join(&name);
-            let mut file = fs::OpenOptions::default()
-                .create(true)
-                .write(true)
-                .open(p)
-                .await
-                .unwrap();
+                    for size in [0, 100 * 1024, 1024 * 1024, 10 * 1024 * 1024] {
+                        let mut urandom = fs::OpenOptions::default()
+                            .read(true)
+                            .open("/dev/urandom")
+                            .await
+                            .unwrap()
+                            .take(size);
 
-            tokio::io::copy(&mut urandom, &mut file).await.unwrap();
-        }
+                        let name = format!("file-{}.rnd", size);
+                        let p = source.join(&name);
+                        let mut file = fs::OpenOptions::default()
+                            .create(true)
+                            .write(true)
+                            .open(p)
+                            .await
+                            .unwrap();
 
-        println!("file generation complete");
-        let writer = meta::Writer::new(root.join("meta.fl"), true).await.unwrap();
+                        tokio::io::copy(&mut urandom, &mut file).await.unwrap();
+                    }
 
-        // while we at it we can already create 2 stores and create a router store on top
-        // of that.
-        let store0 = DirStore::new(root.join("store0")).await.unwrap();
-        let store1 = DirStore::new(root.join("store1")).await.unwrap();
-        let mut store = Router::new();
+                    println!("file generation complete");
+                    let writer = meta::Writer::new(root.join("meta.fl"), true).await.unwrap();
 
-        store.add(0x00, 0x7f, store0);
-        store.add(0x80, 0xff, store1);
+                    // while we at it we can already create 2 stores and create a router store on top
+                    // of that.
+                    let store0 = DirStore::new(root.join("store0")).await.unwrap();
+                    let store1 = DirStore::new(root.join("store1")).await.unwrap();
+                    let mut store = Router::new();
 
-        pack(writer, store, &source, false, None).await.unwrap();
+                    store.add(0x00, 0x7f, store0);
+                    store.add(0x80, 0xff, store1);
 
-        println!("packing complete");
-        // recreate the stores for reading.
-        let store0 = DirStore::new(root.join("store0")).await.unwrap();
-        let store1 = DirStore::new(root.join("store1")).await.unwrap();
-        let mut store = Router::new();
+                    pack(writer, store, &source, false, None).await.unwrap();
 
-        store.add(0x00, 0x7f, store0);
-        store.add(0x80, 0xff, store1);
+                    println!("packing complete");
+                    // recreate the stores for reading.
+                    let store0 = DirStore::new(root.join("store0")).await.unwrap();
+                    let store1 = DirStore::new(root.join("store1")).await.unwrap();
+                    let mut store = Router::new();
 
-        let cache = Cache::new(root.join("cache"), store);
+                    store.add(0x00, 0x7f, store0);
+                    store.add(0x80, 0xff, store1);
 
-        let reader = meta::Reader::new(root.join("meta.fl")).await.unwrap();
-        // validate reader store routing
-        let routers = reader.routes().await.unwrap();
-        assert_eq!(2, routers.len());
-        assert_eq!(routers[0].url, "dir:///tmp/pack-unpack-test/store0");
-        assert_eq!(routers[1].url, "dir:///tmp/pack-unpack-test/store1");
+                    let cache = Cache::new(root.join("cache"), store);
 
-        assert_eq!((routers[0].start, routers[0].end), (0x00, 0x7f));
-        assert_eq!((routers[1].start, routers[1].end), (0x80, 0xff));
+                    let reader = meta::Reader::new(root.join("meta.fl")).await.unwrap();
+                    // validate reader store routing
+                    let routers = reader.routes().await.unwrap();
+                    assert_eq!(2, routers.len());
+                    assert_eq!(routers[0].url, "dir:///tmp/pack-unpack-test/store0");
+                    assert_eq!(routers[1].url, "dir:///tmp/pack-unpack-test/store1");
 
-        unpack(&reader, &cache, root.join("destination"), false)
-            .await
+                    assert_eq!((routers[0].start, routers[0].end), (0x00, 0x7f));
+                    assert_eq!((routers[1].start, routers[1].end), (0x80, 0xff));
+
+                    unpack(&reader, &cache, root.join("destination"), false)
+                        .await
+                        .unwrap();
+
+                    println!("unpacking complete");
+                    // compare that source directory is exactly the same as target directory
+                    let status = std::process::Command::new("diff")
+                        .arg(root.join("source"))
+                        .arg(root.join("destination"))
+                        .status()
+                        .unwrap();
+
+                    assert!(status.success());
+                })
+            })
             .unwrap();
 
-        println!("unpacking complete");
-        // compare that source directory is exactly the same as target directory
-        let status = std::process::Command::new("diff")
-            .arg(root.join("source"))
-            .arg(root.join("destination"))
-            .status()
-            .unwrap();
-
-        assert!(status.success());
+        handle.join().unwrap();
     }
 
     async fn create_test_files<P: AsRef<std::path::Path>>(dir: P, name: &str, size: usize) {
