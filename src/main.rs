@@ -101,7 +101,7 @@ struct FlistInspectionOptions {
 #[derive(Args, Debug)]
 struct SyncOptions {
     /// Hash of the file or block to sync
-    #[clap(short, long)]
+    #[clap(short = 'H', long)]
     hash: Option<String>,
 
     /// Source server URL (e.g., http://localhost:8080)
@@ -479,7 +479,7 @@ struct TrackBlocksOptions {
     token: String,
 
     /// specific block hash to track
-    #[clap(short, long, conflicts_with = "all")]
+    #[clap(short = 'H', long, conflicts_with = "all")]
     hash: Option<String>,
 
     /// track all blocks (default if no hash is provided)
