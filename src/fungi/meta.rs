@@ -12,31 +12,31 @@ use crate::store;
 
 const ID_LEN: usize = 32;
 const KEY_LEN: usize = 32;
-const TYPE_MASK: u32 = libc::S_IFMT;
+const TYPE_MASK: u32 = libc::S_IFMT as u32;
 
 #[repr(u32)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FileType {
-    Regular = libc::S_IFREG,
-    Dir = libc::S_IFDIR,
-    Link = libc::S_IFLNK,
-    Block = libc::S_IFBLK,
-    Char = libc::S_IFCHR,
-    Socket = libc::S_IFSOCK,
-    FIFO = libc::S_IFIFO,
+    Regular = libc::S_IFREG as u32,
+    Dir = libc::S_IFDIR as u32,
+    Link = libc::S_IFLNK as u32,
+    Block = libc::S_IFBLK as u32,
+    Char = libc::S_IFCHR as u32,
+    Socket = libc::S_IFSOCK as u32,
+    FIFO = libc::S_IFIFO as u32,
     Unknown = 0xFFFFFFFF, // Use a different value to avoid conflict
 }
 
 impl From<u32> for FileType {
     fn from(value: u32) -> Self {
         match value {
-            libc::S_IFREG => Self::Regular,
-            libc::S_IFDIR => Self::Dir,
-            libc::S_IFLNK => Self::Link,
-            libc::S_IFBLK => Self::Block,
-            libc::S_IFCHR => Self::Char,
-            libc::S_IFSOCK => Self::Socket,
-            libc::S_IFIFO => Self::FIFO,
+            x if x == libc::S_IFREG as u32 => Self::Regular,
+            x if x == libc::S_IFDIR as u32 => Self::Dir,
+            x if x == libc::S_IFLNK as u32 => Self::Link,
+            x if x == libc::S_IFBLK as u32 => Self::Block,
+            x if x == libc::S_IFCHR as u32 => Self::Char,
+            x if x == libc::S_IFSOCK as u32 => Self::Socket,
+            x if x == libc::S_IFIFO as u32 => Self::FIFO,
             _ => Self::Unknown,
         }
     }
