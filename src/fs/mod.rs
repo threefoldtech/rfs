@@ -79,12 +79,27 @@ where
             std::process::id()
         ));
 
+        // Prefer fusermount3 if available (FUSE3), otherwise fall back to fusermount (FUSE2).
         // polyfuse assumes an absolute path, see https://github.com/ubnt-intrepid/polyfuse/issues/83
-        let fusermount_path =
-            which::which("fusermount").context("looking up 'fusermount' in PATH")?;
-        options.fusermount_path(fusermount_path);
+        let fusermount_path = which::which("fusermount3")
+            .or_else(|_| which::which("fusermount"))
+            .context("looking up 'fusermount3' or 'fusermount' in PATH")?;
+        // Clone because we need to both set the path and inspect the filename.
+        options.fusermount_path(fusermount_path.clone());
+
+        // 'nonempty' is specific to libfuse2 and may be rejected by fusermount3.
+        // Only add it when using the legacy 'fusermount' binary.
+        let is_fuse2 = fusermount_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map(|n| n == "fusermount")
+            .unwrap_or(false);
+        if is_fuse2 {
+            options.mount_option("nonempty");
+        }
 
         let session = AsyncSession::mount(mountpoint, options).await?;
+
 
         // release here
         while let Some(req) = session.next_request().await? {
