@@ -189,6 +189,15 @@ rfs mount --help
 
 Comprehensive documentation is available in the [docs](./docs) directory:
 
+### Documentation Map
+- [docs/architecture/overview.md](docs/architecture/overview.md)
+- [docs/docs-conventions.md](docs/docs-conventions.md)
+- [docs/function-index.md](docs/function-index.md)
+- [docs/entrypoints.md](docs/entrypoints.md)
+- [docs/call-stacks/pack.md](docs/call-stacks/pack.md)
+- [docs/call-stacks/mount.md](docs/call-stacks/mount.md)
+- [docs/architecture/adr/index.md](docs/architecture/adr/index.md)
+
 ### Getting Started
 
 - [Installation and Basic Usage](./docs/tutorials/getting-started.md)
