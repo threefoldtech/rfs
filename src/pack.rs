@@ -1,6 +1,6 @@
 use crate::fungi::meta::{Ino, Inode};
 use crate::fungi::{Error, Result, Writer};
-use crate::store::{BlockStore, Store};
+use crate::store::{BlockStore, Store, StoreHealth, RetryStore};
 use anyhow::Context;
 use futures::lock::Mutex;
 use std::collections::LinkedList;
@@ -22,7 +22,7 @@ struct Item(Ino, PathBuf, OsString, Metadata);
 /// it's logically incorrect to store multiple filessytem in the same FL.
 /// All file chunks will then be uploaded to the provided store
 ///
-pub async fn pack<P: Into<PathBuf>, S: Store>(
+pub async fn pack<P: Into<PathBuf>, S: Store + StoreHealth>(
     writer: Writer,
     store: S,
     root: P,
@@ -30,6 +30,24 @@ pub async fn pack<P: Into<PathBuf>, S: Store>(
     sender: Option<Sender<u32>>,
 ) -> Result<()> {
     use tokio::fs;
+
+    // preflight stores (fail-fast on auth, warn on connectivity; see ADR-0006)
+    if let Err(e) = store.preflight().await {
+        match e {
+            crate::store::PreflightError::Auth(msg) => {
+                return Err(Error::Anyhow(anyhow::anyhow!(format!(
+                    "Store auth failure: {}",
+                    msg
+                ))));
+            }
+            crate::store::PreflightError::Connectivity(msg) => {
+                log::warn!("Store connectivity issue detected during preflight: {}", msg);
+            }
+            crate::store::PreflightError::Other(msg) => {
+                log::debug!("Store preflight reported: {}", msg);
+            }
+        }
+    }
 
     // building routing table from store information
     for route in store.routes() {
@@ -54,7 +72,8 @@ pub async fn pack<P: Into<PathBuf>, S: Store>(
             .await?;
     }
 
-    let store: BlockStore<S> = store.into();
+    let store = RetryStore::new(store);
+    let store: BlockStore<_> = store.into();
 
     let root = root.into();
     let meta = fs::metadata(&root)

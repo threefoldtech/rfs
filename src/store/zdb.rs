@@ -138,7 +138,7 @@ impl Store for ZdbStore {
             return Ok(());
         };
 
-        con.set(key, blob).await.context("failed to set blob")?;
+        con.set::<_, _, ()>(key, blob).await.context("failed to set blob")?;
 
         Ok(())
     }

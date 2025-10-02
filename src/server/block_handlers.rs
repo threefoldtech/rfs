@@ -13,7 +13,7 @@ use crate::server::{
     config::AppState,
     db::DB,
     models::Block,
-    response::{BlockUploadedResponse, ResponseError, ResponseResult},
+    response::{ResponseError, ResponseResult},
 };
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;

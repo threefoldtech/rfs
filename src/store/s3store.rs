@@ -78,22 +78,73 @@ impl Store for S3Store {
         match self.bucket.get_object(hex::encode(key)).await {
             Ok(res) => Ok(res.to_vec()),
             Err(S3Error::HttpFailWithBody(404, _)) => Err(Error::KeyNotFound),
+            Err(S3Error::HttpFailWithBody(401, _)) | Err(S3Error::HttpFailWithBody(403, _)) => {
+                Err(Error::Auth)
+            }
+            Err(S3Error::HttpFailWithBody(code, _)) if (500..=599).contains(&code) || code == 408 || code == 429 => {
+                Err(Error::Unavailable)
+            }
             Err(S3Error::Io(err)) => Err(Error::IO(err)),
             Err(err) => Err(anyhow::Error::from(err).into()),
         }
     }
 
     async fn set(&self, key: &[u8], blob: &[u8]) -> Result<()> {
-        self.bucket
-            .put_object(hex::encode(key), blob)
-            .await
-            .context("put object over s3 storage")?;
-
-        Ok(())
+        match self.bucket.put_object(hex::encode(key), blob).await {
+            Ok(_) => Ok(()),
+            Err(S3Error::HttpFailWithBody(401, _)) | Err(S3Error::HttpFailWithBody(403, _)) => {
+                Err(Error::Auth)
+            }
+            Err(S3Error::HttpFailWithBody(code, _)) if (500..=599).contains(&code) || code == 408 || code == 429 => {
+                Err(Error::Unavailable)
+            }
+            Err(S3Error::Io(err)) => Err(Error::IO(err)),
+            Err(err) => Err(anyhow::Error::from(err).into()),
+        }
     }
 
     fn routes(&self) -> Vec<Route> {
         vec![Route::url(self.url.clone())]
+    }
+}
+
+#[async_trait::async_trait]
+impl super::StoreHealth for S3Store {
+    async fn preflight(&self) -> std::result::Result<(), super::PreflightError> {
+        // Use a fixed non-existent key; 404 means auth/connectivity OK.
+        let probe_key = "rfs-preflight-nonexistent-probe";
+        match self.bucket.get_object(probe_key).await {
+            Ok(_) => Ok(()), // 200 also means credentials and access OK.
+            Err(S3Error::HttpFailWithBody(code, body)) => {
+                match code {
+                    401 | 403 => Err(super::PreflightError::Auth(format!(
+                        "S3 auth/permission failure (status {}): {}",
+                        code, body
+                    ))),
+                    404 => Ok(()), // Not found is fine: proves connectivity and permission to query.
+                    408 | 429 => Err(super::PreflightError::Connectivity(format!(
+                        "S3 transient status {} during preflight",
+                        code
+                    ))),
+                    500..=599 => Err(super::PreflightError::Connectivity(format!(
+                        "S3 server error {} during preflight",
+                        code
+                    ))),
+                    other => Err(super::PreflightError::Other(format!(
+                        "S3 unexpected status {} during preflight",
+                        other
+                    ))),
+                }
+            }
+            Err(S3Error::Io(err)) => Err(super::PreflightError::Connectivity(format!(
+                "S3 IO error during preflight: {}",
+                err
+            ))),
+            Err(err) => Err(super::PreflightError::Other(format!(
+                "S3 error during preflight: {}",
+                err
+            ))),
+        }
     }
 }
 

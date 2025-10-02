@@ -8,6 +8,7 @@ pub mod zdb;
 
 use anyhow::Context;
 use rand::seq::SliceRandom;
+use std::collections::HashSet;
 
 pub use bs::BlockStore;
 use regex::Regex;
@@ -41,6 +42,8 @@ pub enum Error {
     KeyNotRoutable,
     #[error("store is not available")]
     Unavailable,
+    #[error("authentication/authorization error")]
+    Auth,
 
     #[error("compression error: {0}")]
     Compression(#[from] snap::Error),
@@ -67,6 +70,20 @@ pub enum Error {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+#[derive(Debug)]
+pub enum PreflightError {
+    Auth(String),
+    Connectivity(String),
+    Other(String),
+}
+
+/// Optional health check for stores used prior to pack operations.
+/// Implementations should avoid side effects (read-only probes).
+#[async_trait::async_trait]
+pub trait StoreHealth: Send + Sync {
+    async fn preflight(&self) -> std::result::Result<(), PreflightError>;
+}
 
 pub struct Route {
     pub start: Option<u8>,
@@ -158,6 +175,46 @@ where
     }
 }
 
+/// Preflight for a Router aggregates preflight across its underlying stores.
+/// Deduplicates by URL to avoid probing the same backend multiple times.
+#[async_trait::async_trait]
+impl<S> StoreHealth for Router<S>
+where
+    S: Store + StoreHealth,
+{
+    async fn preflight(&self) -> std::result::Result<(), PreflightError> {
+        let mut seen = HashSet::new();
+        let mut first_connectivity_error: Option<PreflightError> = None;
+
+        for (_range, store) in self.routes.iter() {
+            // Deduplicate by route URL(s)
+            for r in store.routes() {
+                if seen.insert(r.url.clone()) {
+                    match store.preflight().await {
+                        Ok(()) => {}
+                        Err(PreflightError::Auth(e)) => return Err(PreflightError::Auth(e)),
+                        Err(e @ PreflightError::Connectivity(_)) => {
+                            // Keep the first connectivity error; proceed to probe others.
+                            if first_connectivity_error.is_none() {
+                                first_connectivity_error = Some(e);
+                            }
+                        }
+                        Err(PreflightError::Other(_)) => {
+                            // Non-fatal, proceed. We prefer to allow upload try with retry logic.
+                        }
+                    }
+                }
+            }
+        }
+
+        if let Some(err) = first_connectivity_error {
+            return Err(err);
+        }
+
+        Ok(())
+    }
+}
+
 pub async fn get_router(meta: &fungi::Reader) -> Result<Router<Stores>> {
     let mut router = Router::new();
 
@@ -243,5 +300,132 @@ impl Store for Stores {
             self::Stores::HTTP(http_store) => http_store.routes(),
             self::Stores::Server(server_store) => server_store.routes(),
         }
+    }
+}
+
+// No-op preflight implementations for non-S3 backends (treated as healthy by default).
+#[async_trait::async_trait]
+impl StoreHealth for dir::DirStore {
+    async fn preflight(&self) -> std::result::Result<(), PreflightError> {
+        Ok(())
+    }
+}
+
+#[async_trait::async_trait]
+impl StoreHealth for http::HTTPStore {
+    async fn preflight(&self) -> std::result::Result<(), PreflightError> {
+        Ok(())
+    }
+}
+
+#[async_trait::async_trait]
+impl StoreHealth for zdb::ZdbStore {
+    async fn preflight(&self) -> std::result::Result<(), PreflightError> {
+        Ok(())
+    }
+}
+
+#[async_trait::async_trait]
+impl StoreHealth for server::ServerStore {
+    async fn preflight(&self) -> std::result::Result<(), PreflightError> {
+        Ok(())
+    }
+}
+
+#[async_trait::async_trait]
+impl StoreHealth for Stores {
+    async fn preflight(&self) -> std::result::Result<(), PreflightError> {
+        match self {
+            // S3 implements real probing
+            Stores::S3(s3) => s3.preflight().await,
+            // Other backends: no-op by default (treated as healthy)
+            Stores::Dir(_) | Stores::ZDB(_) | Stores::HTTP(_) | Stores::Server(_) => Ok(()),
+        }
+    }
+}
+
+
+// Retry wrapper with exponential backoff and jitter for transient errors.
+// Applies uniformly over any Store implementation without changing Store trait.
+//
+// Policy (defaults):
+// - attempts: 5
+// - base delay: 250ms (doubles up to max 5s)
+// - jitter: 0..50ms per attempt
+use std::time::Duration;
+use tokio::time::sleep;
+use rand::Rng;
+
+pub struct RetryStore<T> {
+    inner: T,
+    attempts: usize,
+    base_delay: Duration,
+    max_delay: Duration,
+}
+
+impl<T> RetryStore<T> {
+    pub fn new(inner: T) -> Self {
+        Self {
+            inner,
+            attempts: 5,
+            base_delay: Duration::from_millis(250),
+            max_delay: Duration::from_millis(5_000),
+        }
+    }
+
+    fn is_transient(err: &Error) -> bool {
+        matches!(err, Error::Unavailable | Error::IO(_))
+    }
+
+    fn is_auth(err: &Error) -> bool {
+        matches!(err, Error::Auth)
+    }
+
+    async fn retry<F, Fut, R>(&self, mut op: F) -> Result<R>
+    where
+        F: FnMut() -> Fut,
+        Fut: std::future::Future<Output = Result<R>>,
+    {
+        let mut attempt = 0;
+        let mut delay = self.base_delay;
+
+        loop {
+            match op().await {
+                Ok(v) => return Ok(v),
+                Err(e) if Self::is_auth(&e) => {
+                    // Do not retry on permanent auth errors
+                    return Err(e);
+                }
+                Err(e) if Self::is_transient(&e) && (attempt + 1) < self.attempts => {
+                    // Retry with backoff + jitter
+                    let jitter_ms: u64 = rand::thread_rng().gen_range(0..50);
+                    sleep(delay + Duration::from_millis(jitter_ms)).await;
+                    delay = std::cmp::min(delay.saturating_mul(2), self.max_delay);
+                    attempt += 1;
+                }
+                Err(e) => {
+                    // Give up
+                    return Err(e);
+                }
+            }
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl<T> Store for RetryStore<T>
+where
+    T: Store + Send + Sync + 'static,
+{
+    async fn get(&self, key: &[u8]) -> Result<Vec<u8>> {
+        self.retry(|| self.inner.get(key)).await
+    }
+
+    async fn set(&self, key: &[u8], blob: &[u8]) -> Result<()> {
+        self.retry(|| self.inner.set(key, blob)).await
+    }
+
+    fn routes(&self) -> Vec<Route> {
+        self.inner.routes()
     }
 }

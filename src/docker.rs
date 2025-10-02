@@ -19,7 +19,7 @@ use std::process::Command;
 use tokio_async_drop::tokio_async_drop;
 
 use crate::fungi::Writer;
-use crate::store::Store;
+use crate::store::{Store, StoreHealth};
 
 struct DockerInfo {
     image_name: String,
@@ -104,7 +104,7 @@ impl DockerImageToFlist {
         Ok(())
     }
 
-    pub async fn pack<S: Store>(&mut self, store: S, sender: Option<Sender<u32>>) -> Result<()> {
+    pub async fn pack<S: Store + StoreHealth>(&mut self, store: S, sender: Option<Sender<u32>>) -> Result<()> {
         crate::pack(
             self.meta.clone(),
             store,
@@ -119,7 +119,7 @@ impl DockerImageToFlist {
         Ok(())
     }
 
-    pub async fn convert<S: Store>(&mut self, store: S, sender: Option<Sender<u32>>) -> Result<()> {
+    pub async fn convert<S: Store + StoreHealth>(&mut self, store: S, sender: Option<Sender<u32>>) -> Result<()> {
         self.prepare().await?;
         self.pack(store, sender).await?;
 
