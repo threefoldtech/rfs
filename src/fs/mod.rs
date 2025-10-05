@@ -100,7 +100,6 @@ where
 
         let session = AsyncSession::mount(mountpoint, options).await?;
 
-
         // release here
         while let Some(req) = session.next_request().await? {
             let fs = self.clone();

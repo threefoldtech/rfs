@@ -1,6 +1,6 @@
 use crate::fungi::meta::{Ino, Inode};
 use crate::fungi::{Error, Result, Writer};
-use crate::store::{BlockStore, Store};
+use crate::store::{BlockStore, Error as StoreError, Store};
 use anyhow::Context;
 use futures::lock::Mutex;
 use std::collections::LinkedList;
@@ -19,7 +19,7 @@ type FailuresList = Arc<Mutex<Vec<(PathBuf, Error)>>>;
 #[derive(Debug)]
 struct Item(Ino, PathBuf, OsString, Metadata);
 /// creates an FL from the given root location. It takes ownership of the writer because
-/// it's logically incorrect to store multiple filessytem in the same FL.
+/// it's logically incorrect to store multiple filesystem in the same FL.
 /// All file chunks will then be uploaded to the provided store
 ///
 pub async fn pack<P: Into<PathBuf>, S: Store>(
@@ -239,7 +239,16 @@ where
             }
 
             // write block to remote store
-            let block = self.store.set(&self.buffer[..size]).await?;
+            let store_result = self.store.set(&self.buffer[..size]).await;
+
+            if let Err(store_err) = &store_result {
+                if let StoreError::Other(_) = store_err {
+                    log::error!("failed to upload file {}: {:#}", path.display(), store_err);
+                    std::process::exit(1); // Force immediate termination
+                }
+            }
+
+            let block = store_result.map_err(Error::Store)?;
 
             // write block info to meta
             self.writer.block(ino, &block.id, &block.key).await?;
