@@ -88,8 +88,8 @@ hostname-validator = "1.1.1"
 sha256 = "1.5.0"
 
 [dependencies.polyfuse]
-branch = "master"
-git = "https://github.com/muhamadazmy/polyfuse"
+tag = "v0.5.0"
+git = "https://github.com/ubnt-intrepid/polyfuse"
 optional = true
 
 [dev-dependencies]

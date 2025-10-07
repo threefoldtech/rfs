@@ -12,31 +12,31 @@ use crate::store;
 
 const ID_LEN: usize = 32;
 const KEY_LEN: usize = 32;
-const TYPE_MASK: u32 = libc::S_IFMT as u32;
+const TYPE_MASK: u32 = libc::S_IFMT;
 
 #[repr(u32)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FileType {
-    Regular = libc::S_IFREG as u32,
-    Dir = libc::S_IFDIR as u32,
-    Link = libc::S_IFLNK as u32,
-    Block = libc::S_IFBLK as u32,
-    Char = libc::S_IFCHR as u32,
-    Socket = libc::S_IFSOCK as u32,
-    FIFO = libc::S_IFIFO as u32,
+    Regular = libc::S_IFREG,
+    Dir = libc::S_IFDIR,
+    Link = libc::S_IFLNK,
+    Block = libc::S_IFBLK,
+    Char = libc::S_IFCHR,
+    Socket = libc::S_IFSOCK,
+    FIFO = libc::S_IFIFO,
     Unknown = 0xFFFFFFFF, // Use a different value to avoid conflict
 }
 
 impl From<u32> for FileType {
     fn from(value: u32) -> Self {
         match value {
-            x if x == libc::S_IFREG as u32 => Self::Regular,
-            x if x == libc::S_IFDIR as u32 => Self::Dir,
-            x if x == libc::S_IFLNK as u32 => Self::Link,
-            x if x == libc::S_IFBLK as u32 => Self::Block,
-            x if x == libc::S_IFCHR as u32 => Self::Char,
-            x if x == libc::S_IFSOCK as u32 => Self::Socket,
-            x if x == libc::S_IFIFO as u32 => Self::FIFO,
+            x if x == libc::S_IFREG => Self::Regular,
+            x if x == libc::S_IFDIR => Self::Dir,
+            x if x == libc::S_IFLNK => Self::Link,
+            x if x == libc::S_IFBLK => Self::Block,
+            x if x == libc::S_IFCHR => Self::Char,
+            x if x == libc::S_IFSOCK => Self::Socket,
+            x if x == libc::S_IFIFO => Self::FIFO,
             _ => Self::Unknown,
         }
     }
@@ -581,10 +581,7 @@ mod test {
             Some("value")
         ));
 
-        assert!(matches!(
-            meta.tag(Tag::Custom("unknown")).await.unwrap(),
-            None
-        ));
+        assert!(meta.tag(Tag::Custom("unknown")).await.unwrap().is_none());
     }
 
     #[tokio::test]
@@ -606,9 +603,9 @@ mod test {
 
     #[test]
     fn test_mode() {
-        let m = Mode::new(FileType::Regular, 0754);
+        let m = Mode::new(FileType::Regular, 0o754);
 
-        assert_eq!(m.permissions(), 0754);
+        assert_eq!(m.permissions(), 0o754);
         assert_eq!(m.file_type(), FileType::Regular);
     }
 
@@ -628,7 +625,7 @@ mod test {
 
         for name in ["bin", "etc", "usr"] {
             meta.inode(Inode {
-                parent: parent,
+                parent,
                 name: name.into(),
                 ..Inode::default()
             })

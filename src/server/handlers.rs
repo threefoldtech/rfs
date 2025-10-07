@@ -562,7 +562,7 @@ async fn get_flist_content(fl_path: &String) -> Result<Vec<PathBuf>, Error> {
     };
 
     match meta.walk(&mut visitor).await {
-        Ok(()) => return Ok(visitor.into_inner()),
+        Ok(()) => Ok(visitor.into_inner()),
         Err(err) => {
             log::error!(
                 "failed to walk through metadata for flist `{}` with error {}",
@@ -571,7 +571,7 @@ async fn get_flist_content(fl_path: &String) -> Result<Vec<PathBuf>, Error> {
             );
             anyhow::bail!("Internal server error");
         }
-    };
+    }
 }
 
 #[derive(Default)]

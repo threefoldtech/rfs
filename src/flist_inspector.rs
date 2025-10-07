@@ -8,6 +8,12 @@ pub struct InspectVisitor {
     total_size: u64,
 }
 
+impl Default for InspectVisitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl InspectVisitor {
     pub fn new() -> Self {
         Self {

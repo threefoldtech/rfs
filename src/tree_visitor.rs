@@ -5,6 +5,12 @@ pub struct TreeVisitor {
     // We don't need to track depth since the path already contains the structure
 }
 
+impl Default for TreeVisitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TreeVisitor {
     pub fn new() -> Self {
         Self {}

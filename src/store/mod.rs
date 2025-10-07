@@ -26,7 +26,7 @@ pub async fn make<U: AsRef<str>>(u: U) -> Result<Stores> {
         "zdb" => return Ok(Stores::ZDB(zdb::ZdbStore::make(&u).await?)),
         "http" | "https" => return Ok(Stores::HTTP(http::HTTPStore::make(&u).await?)),
         server::SCHEME => return Ok(Stores::Server(server::ServerStore::make(&u).await?)),
-        _ => return Err(Error::UnknownStore(parsed.scheme().into())),
+        _ => Err(Error::UnknownStore(parsed.scheme().into())),
     }
 }
 

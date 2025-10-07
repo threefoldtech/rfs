@@ -121,6 +121,7 @@ where
 }
 
 // Parallel download implementation
+#[allow(dead_code)]
 struct ParallelCopyVisitor<'a, S>
 where
     S: Store,
@@ -135,6 +136,7 @@ impl<'a, S> ParallelCopyVisitor<'a, S>
 where
     S: Store,
 {
+    #[allow(dead_code)]
     pub fn new(
         meta: &'a Reader,
         root: &'a Path,
@@ -205,6 +207,7 @@ where
     }
 }
 
+#[allow(dead_code)]
 struct Downloader<S>
 where
     S: Store,
@@ -216,6 +219,7 @@ impl<S> Downloader<S>
 where
     S: Store,
 {
+    #[allow(dead_code)]
     fn new(cache: Cache<S>) -> Self {
         Self {
             cache: Arc::new(cache),
@@ -232,7 +236,7 @@ where
             .with_context(|| format!("failed to create file '{:?}'", path))?;
 
         self.cache
-            .direct(&blocks, &mut fd)
+            .direct(blocks, &mut fd)
             .await
             .with_context(|| format!("failed to download file '{:?}'", path))?;
 

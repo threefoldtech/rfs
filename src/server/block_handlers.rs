@@ -510,7 +510,7 @@ pub async fn get_block_downloads_handler(
             let response = BlockDownloadsResponse {
                 block_hash: hash,
                 downloads_count: count,
-                block_size: block_size,
+                block_size,
             };
             Ok((StatusCode::OK, Json(response)))
         }

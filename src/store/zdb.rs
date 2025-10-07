@@ -54,7 +54,7 @@ fn get_connection_info<U: AsRef<str>>(u: U) -> Result<(ConnectionInfo, Option<St
             let addr = ConnectionAddr::Tcp(addr, u.port().unwrap_or(9900));
             let ns: Option<String> = u
                 .path_segments()
-                .and_then(|s| s.last().map(|s| s.to_owned()));
+                .and_then(|mut s| s.next_back().map(|s| s.to_owned()));
             (addr, ns)
         }
         None => (ConnectionAddr::Unix(u.path().into()), None),

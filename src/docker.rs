@@ -247,8 +247,8 @@ async fn container_boot(
     if let Some(ref entrypoint) = container_config.entrypoint {
         if !entrypoint.is_empty() {
             command = entrypoint[0].to_string();
-            for i in 1..entrypoint.len() {
-                args.push(entrypoint[i].to_string());
+            for item in entrypoint.iter().skip(1) {
+                args.push(item.to_string());
             }
         }
     }
@@ -257,12 +257,12 @@ async fn container_boot(
         if !cmd.is_empty() {
             if command.is_empty() {
                 command = cmd[0].to_string();
-                for i in 1..cmd.len() {
-                    args.push(cmd[i].to_string());
+                for item in cmd.iter().skip(1) {
+                    args.push(item.to_string());
                 }
             } else {
-                for i in 0..cmd.len() {
-                    args.push(cmd[i].to_string());
+                for item in cmd {
+                    args.push(item.to_string());
                 }
             }
         }
@@ -305,7 +305,7 @@ async fn container_boot(
     log::info!(
         "Creating '.startup.toml' file from container {} contains {}",
         container_name,
-        toml_metadata.to_string()
+        toml_metadata
     );
 
     fs::write(

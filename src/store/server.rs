@@ -95,7 +95,7 @@ impl Store for ServerStore {
             self.token.clone().unwrap_or_default(),
         )
         .await
-        .map_err(|err| Error::Other(err))?;
+        .map_err(Error::Other)?;
 
         Ok(())
     }

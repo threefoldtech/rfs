@@ -22,7 +22,7 @@ impl DirStore {
             return Err(Error::InvalidScheme(u.scheme().into(), SCHEME.into()));
         }
 
-        Ok(DirStore::new(u.path()).await?)
+        DirStore::new(u.path()).await
     }
     pub async fn new<P: Into<PathBuf>>(root: P) -> Result<Self> {
         let root = root.into();

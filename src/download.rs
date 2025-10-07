@@ -299,7 +299,7 @@ pub async fn track_website(server_url: &str, flist_hash: &str, details: bool) ->
     website_blocks.extend(flist_blocks.into_iter().map(|(block_hash, _)| block_hash));
 
     println!("Website has {} blocks on the server", website_blocks.len());
-    print_block_downloads(&server_url, website_blocks, details).await?;
+    print_block_downloads(server_url, website_blocks, details).await?;
 
     // Delete the temporary directory
     tokio::fs::remove_dir_all(&temp_output_dir)

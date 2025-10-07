@@ -6,3 +6,4 @@ flists
 config.toml
 *.db
 storage/
+.Cargo.lock

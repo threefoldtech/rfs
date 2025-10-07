@@ -30,7 +30,6 @@ mod server_api;
 pub mod tree_visitor;
 
 const PARALLEL_UPLOAD: usize = 20; // number of files we can upload in parallel
-const PARALLEL_DOWNLOAD: usize = 20; // number of files we can download in parallel
 
 #[cfg(test)]
 mod test {
@@ -66,24 +65,10 @@ mod test {
                     let source = root.join("source");
                     fs::create_dir_all(&source).await.unwrap();
 
+                    // Create test files using helper function
                     for size in [0, 100 * 1024, 1024 * 1024, 10 * 1024 * 1024] {
-                        let mut urandom = fs::OpenOptions::default()
-                            .read(true)
-                            .open("/dev/urandom")
-                            .await
-                            .unwrap()
-                            .take(size);
-
                         let name = format!("file-{}.rnd", size);
-                        let p = source.join(&name);
-                        let mut file = fs::OpenOptions::default()
-                            .create(true)
-                            .write(true)
-                            .open(p)
-                            .await
-                            .unwrap();
-
-                        tokio::io::copy(&mut urandom, &mut file).await.unwrap();
+                        create_test_files(&source, &name, size).await;
                     }
 
                     println!("file generation complete");
@@ -126,6 +111,13 @@ mod test {
                         .unwrap();
 
                     println!("unpacking complete");
+                    
+                    // Verify unpacked files match expected sizes
+                    for size in [0, 100 * 1024, 1024 * 1024, 10 * 1024 * 1024] {
+                        let name = format!("file-{}.rnd", size);
+                        verify_file_content(root.join("destination").join(&name), size).await;
+                    }
+                    
                     // compare that source directory is exactly the same as target directory
                     let status = std::process::Command::new("diff")
                         .arg(root.join("source"))
@@ -134,6 +126,10 @@ mod test {
                         .unwrap();
 
                     assert!(status.success());
+                    
+                    // Clean up test artifacts
+                    let _ = fs::remove_dir_all(ROOT).await;
+                    println!("test cleanup complete");
                 })
             })
             .unwrap();
@@ -161,14 +157,14 @@ mod test {
     }
 
     async fn verify_file_content<P: AsRef<std::path::Path>>(path: P, expected_size: usize) {
-        let mut file = fs::OpenOptions::default()
-            .read(true)
-            .open(path)
-            .await
-            .unwrap();
-
-        let mut buffer = vec![0; expected_size];
-        let size = file.read(&mut buffer).await.unwrap();
-        assert_eq!(size, expected_size);
+        let metadata = fs::metadata(path.as_ref()).await.unwrap();
+        assert_eq!(
+            metadata.len() as usize,
+            expected_size,
+            "File {:?} has size {} but expected {}",
+            path.as_ref(),
+            metadata.len(),
+            expected_size
+        );
     }
 }

@@ -14,7 +14,7 @@ impl HTTPStore {
             return Err(Error::Other(anyhow::Error::msg("invalid scheme")));
         }
 
-        Ok(HTTPStore::new(u).await?)
+        HTTPStore::new(u).await
     }
     pub async fn new<U: Into<Url>>(url: U) -> Result<Self> {
         let url = url.into();

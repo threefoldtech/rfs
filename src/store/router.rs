@@ -42,12 +42,12 @@ mod test {
         router.add(0, 255, "b");
         router.add(0, 128, "c");
 
-        let paths: Vec<&str> = router.route(200).map(|v| *v).collect();
+        let paths: Vec<&str> = router.route(200).copied().collect();
         assert_eq!(paths.len(), 2);
         assert_eq!(paths[0], "a");
         assert_eq!(paths[1], "b");
 
-        let paths: Vec<&str> = router.route(0).map(|v| *v).collect();
+        let paths: Vec<&str> = router.route(0).copied().collect();
         assert_eq!(paths.len(), 3);
         assert_eq!(paths[0], "a");
         assert_eq!(paths[1], "b");

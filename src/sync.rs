@@ -20,8 +20,8 @@ pub async fn sync(
         return Err(anyhow::anyhow!("Authentication token is required. Use --token option or set RFS_TOKEN environment variable."));
     }
 
-    if hash.is_some() {
-        return sync_blocks(hash.unwrap(), source_server, dest_server, token).await;
+    if let Some(hash) = hash {
+        return sync_blocks(hash, source_server, dest_server, token).await;
     }
     sync_all_blocks(source_server, dest_server, Some(DEFAULT_PAGE_SIZE), token).await
 }

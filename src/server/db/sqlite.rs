@@ -97,10 +97,7 @@ impl DB for SqlDB {
             .bind(username)
             .fetch_one(&self.pool);
 
-        match result.await {
-            Ok(user) => Some(user),
-            Err(_) => None,
-        }
+        (result.await).ok()
     }
 
     async fn block_exists(
@@ -184,7 +181,7 @@ impl DB for SqlDB {
         // Retrieve the block data from storage
         match self.storage.get_block(hash) {
             Ok(Some(data)) => {
-                if let Err(err) = self.increment_block_downloads(&hash).await {
+                if let Err(err) = self.increment_block_downloads(hash).await {
                     return Err(anyhow::anyhow!(
                         "Failed to increment download count for block {}: {}",
                         hash,
