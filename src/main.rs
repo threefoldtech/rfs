@@ -131,7 +131,7 @@ fn wait_child(target: String, mut pid_file: tempfile::NamedTempFile) {
     if let Err(e) = pid_file.read_to_string(&mut buf) {
         error!("failed to read pid_file: {}", e);
     }
-    let pid = buf.parse::<i32>();
+    let pid = buf.trim().parse::<i32>();
     match pid {
         Err(e) => error!("failed to parse pid_file contents {}: {}", buf, e),
         Ok(v) => {
