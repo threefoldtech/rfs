@@ -2,15 +2,19 @@
 
 [![Test](https://github.com/threefoldtech/rfs/actions/workflows/tests.yaml/badge.svg?branch=master)](https://github.com/threefoldtech/rfs/actions/workflows/tests.yaml)
 
-## What is RFS?
+RFS (Remote File System) is a command-line tool written in Rust that enables efficient storage, distribution, and mounting of filesystems across different storage backends. It separates filesystem metadata from content, allowing files to be downloaded on demand rather than up front. RFS is particularly useful for distributing container images, large datasets, and web content with minimal bandwidth and storage overhead.
 
-RFS (Remote File System) is a powerful command-line tool that lets you efficiently store, distribute, and access filesystems across different storage backends. It solves common problems in file distribution by separating metadata from content, allowing for:
+## What this is
 
-- **Efficient file distribution** - Share only the metadata, download content on-demand
-- **Reduced bandwidth usage** - Only download the files you actually need
-- **Flexible storage options** - Store content in local directories, ZDB, S3, or HTTP backends
-- **Docker image conversion** - Convert Docker images to lightweight, mountable filesystems
-- **Web-based management** - Manage your filesystems through a user-friendly web interface
+RFS solves file distribution by storing filesystem metadata in compact "flist" files while keeping actual content in pluggable backends. When an flist is mounted, files are fetched lazily — only the blocks that are actually accessed are downloaded. Identical files across different flists are stored only once through content deduplication.
+
+## What this repository contains
+
+- **`rfs` CLI binary** with commands for packing, mounting, unpacking, Docker conversion, cloning, and server operation
+- **Flist metadata format** — compact descriptions of filesystems without embedded content
+- **Multiple storage backends** — directory, ZDB, S3, and HTTP
+- **Web server mode** for browser-based flist management
+- **Comprehensive documentation** in the [docs](./docs) directory covering tutorials, user guides, and architecture
 
 ## Key Features
 
@@ -21,6 +25,18 @@ RFS (Remote File System) is a powerful command-line tool that lets you efficient
 - **Docker conversion**: Convert Docker images to flists for efficient distribution
 - **Server functionality**: Run a server for web-based flist management
 - **Sharding and replication**: Distribute and replicate content across multiple storage backends
+
+## Role in the stack
+
+RFS is used by ZOS / Zero-OS, the operating system layer used to run and manage nodes, for container image distribution and filesystem provisioning. When a workload is deployed on a node, the required filesystem is fetched on demand via RFS, minimizing startup time and storage consumption. It integrates with the content-addressed storage layer to ensure efficient deduplication and distribution.
+
+## Relation to ThreeFold
+
+This technology is used within the ThreeFold ecosystem and was first deployed on the ThreeFold Grid. The component itself is designed as reusable infrastructure technology and should be understood by its technical function first, independent of any specific deployment.
+
+## Ownership
+
+This repository is owned and maintained by TF-Tech NV, a Belgian company responsible for the development and maintenance of this technology.
 
 ## Common Use Cases
 
@@ -192,23 +208,23 @@ Comprehensive documentation is available in the [docs](./docs) directory:
 ### Getting Started
 
 - [Installation and Basic Usage](./docs/tutorials/getting-started.md)
+
 ### Core Functionality
 
-- [Getting Started](./docs/tutorials/getting-started.md) - Installation and basic usage
-- [Creating Flists](./docs/tutorials/creating-flists.md) - How to create flists from directories
-- [Mounting Flists](./docs/tutorials/mounting-flists.md) - How to mount and use flists
-- [End-to-End Flist Workflow](./docs/tutorials/end-to-end-flist-workflow.md) - Complete workflow for creating and using flists
+- [Creating Flists](./docs/tutorials/creating-flists.md)
+- [Mounting Flists](./docs/tutorials/mounting-flists.md)
+- [End-to-End Flist Workflow](./docs/tutorials/end-to-end-flist-workflow.md)
 
 ### Docker Integration
 
-- [Converting Docker Images](./docs/tutorials/docker-conversion.md) - How to convert Docker images to flists
-- [End-to-End Docker Workflow](./docs/tutorials/end-to-end-docker-workflow.md) - Complete workflow for Docker conversion
+- [Converting Docker Images](./docs/tutorials/docker-conversion.md)
+- [End-to-End Docker Workflow](./docs/tutorials/end-to-end-docker-workflow.md)
 
 ### Server and Distribution
 
-- [Server Setup](./docs/tutorials/server-setup.md) - How to set up the RFS server
-- [Website Publishing](./docs/tutorials/website-publishing.md) - How to publish websites using RFS
-- [Syncing Files](./docs/tutorials/syncing-files.md) - How to sync files between RFS servers
+- [Server Setup](./docs/tutorials/server-setup.md)
+- [Website Publishing](./docs/tutorials/website-publishing.md)
+- [Syncing Files](./docs/tutorials/syncing-files.md)
 
 ### User Guides
 
@@ -228,7 +244,7 @@ Comprehensive documentation is available in the [docs](./docs) directory:
 
 ## Community and Support
 
-- **GitHub Issues**: Report bugs or request features on our [GitHub repository](https://github.com/threefoldtech/rfs/issues)
+- **GitHub Issues**: Report bugs or request features on the [GitHub repository](https://github.com/threefoldtech/rfs/issues)
 - **Documentation**: Comprehensive documentation is available in the [docs](./docs) directory
 
 ## License
