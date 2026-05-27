@@ -1,12 +1,12 @@
-# RFS - Remote File System
+# ZOS RFS - Remote File System
 
 [![Test](https://github.com/threefoldtech/rfs/actions/workflows/tests.yaml/badge.svg?branch=master)](https://github.com/threefoldtech/rfs/actions/workflows/tests.yaml)
 
-RFS (Remote File System) is a command-line tool written in Rust that enables efficient storage, distribution, and mounting of filesystems across different storage backends. It separates filesystem metadata from content, allowing files to be downloaded on demand rather than up front. RFS is particularly useful for distributing container images, large datasets, and web content with minimal bandwidth and storage overhead.
+ZOS RFS (Remote File System) is a command-line tool written in Rust that enables efficient storage, distribution, and mounting of filesystems across different storage backends. It separates filesystem metadata from content, allowing files to be downloaded on demand rather than up front. ZOS RFS is particularly useful for distributing container images, large datasets, and web content with minimal bandwidth and storage overhead.
 
 ## What this is
 
-RFS solves file distribution by storing filesystem metadata in compact "flist" files while keeping actual content in pluggable backends. When an flist is mounted, files are fetched lazily — only the blocks that are actually accessed are downloaded. Identical files across different flists are stored only once through content deduplication.
+ZOS RFS solves file distribution by storing filesystem metadata in compact "flist" files while keeping actual content in pluggable backends. When an flist is mounted, files are fetched lazily — only the blocks that are actually accessed are downloaded. Identical files across different flists are stored only once through content deduplication.
 
 ## What this repository contains
 
@@ -28,7 +28,7 @@ RFS solves file distribution by storing filesystem metadata in compact "flist" f
 
 ## Role in the stack
 
-RFS is used by ZOS / Zero-OS, the operating system layer used to run and manage nodes, for container image distribution and filesystem provisioning. When a workload is deployed on a node, the required filesystem is fetched on demand via RFS, minimizing startup time and storage consumption. It integrates with the content-addressed storage layer to ensure efficient deduplication and distribution.
+ZOS RFS is used by ZOS / Zero-OS, the operating system layer used to run and manage nodes, for container image distribution and filesystem provisioning. When a workload is deployed on a node, the required filesystem is fetched on demand via ZOS RFS, minimizing startup time and storage consumption. It integrates with the content-addressed storage layer to ensure efficient deduplication and distribution.
 
 ## Relation to ThreeFold
 
@@ -105,7 +105,7 @@ source $HOME/.cargo/env
 git clone https://github.com/threefoldtech/rfs.git
 cd rfs
 
-# Build RFS
+# Build ZOS RFS
 rustup target add x86_64-unknown-linux-musl
 cargo build --features build-binary --release --target=x86_64-unknown-linux-musl
 
@@ -186,7 +186,7 @@ The `rfs` command provides all the functionality you need to work with flists:
 - `rfs mount` - Mount flists as filesystems
 - `rfs unpack` - Extract flist contents to a directory
 - `rfs docker` - Convert Docker images to flists
-- `rfs server` - Run the RFS server for web-based management
+- `rfs server` - Run the ZOS RFS server for web-based management
 - `rfs config` - Manage flist metadata and stores
 - `rfs clone` - Copy data between stores
 - `rfs flist tree` - Display flist contents as a tree structure
@@ -228,8 +228,8 @@ Comprehensive documentation is available in the [docs](./docs) directory:
 
 ### User Guides
 
-- [RFS Command Reference](./docs/user-guides/rfs-cli.md)
-- [RFS Server Setup and Usage](./docs/user-guides/fl-server.md)
+- [ZOS RFS Command Reference](./docs/user-guides/rfs-cli.md)
+- [ZOS RFS Server Setup and Usage](./docs/user-guides/fl-server.md)
 - [Web Interface Guide](./docs/user-guides/frontend.md)
 - [Performance Tuning](./docs/user-guides/performance-tuning.md)
 - [Troubleshooting](./docs/user-guides/troubleshooting.md)
