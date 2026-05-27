@@ -103,7 +103,7 @@ source $HOME/.cargo/env
 
 # Clone the repository
 git clone https://github.com/threefoldtech/rfs.git
-cd rfs
+cd zos_rfs
 
 # Build ZOS RFS
 rustup target add x86_64-unknown-linux-musl
