@@ -1,6 +1,6 @@
 # ZOS RFS - Remote File System
 
-[![Test](https://github.com/threefoldtech/rfs/actions/workflows/tests.yaml/badge.svg?branch=master)](https://github.com/threefoldtech/rfs/actions/workflows/tests.yaml)
+[![Test](https://github.com/threefoldtech/zos_rfs/actions/workflows/tests.yaml/badge.svg?branch=master)](https://github.com/threefoldtech/zos_rfs/actions/workflows/tests.yaml)
 
 ZOS RFS (Remote File System) is a command-line tool written in Rust that enables efficient storage, distribution, and mounting of filesystems across different storage backends. It separates filesystem metadata from content, allowing files to be downloaded on demand rather than up front. ZOS RFS is particularly useful for distributing container images, large datasets, and web content with minimal bandwidth and storage overhead.
 
@@ -102,7 +102,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source $HOME/.cargo/env
 
 # Clone the repository
-git clone https://github.com/threefoldtech/rfs.git
+git clone https://github.com/threefoldtech/zos_rfs.git
 cd zos_rfs
 
 # Build ZOS RFS
@@ -244,7 +244,7 @@ Comprehensive documentation is available in the [docs](./docs) directory:
 
 ## Community and Support
 
-- **GitHub Issues**: Report bugs or request features on the [GitHub repository](https://github.com/threefoldtech/rfs/issues)
+- **GitHub Issues**: Report bugs or request features on the [GitHub repository](https://github.com/threefoldtech/zos_rfs/issues)
 - **Documentation**: Comprehensive documentation is available in the [docs](./docs) directory
 
 ## License
